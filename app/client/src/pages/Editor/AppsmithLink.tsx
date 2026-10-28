@@ -8,6 +8,8 @@ import history from "utils/history";
 import { useSelector } from "react-redux";
 import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
 import { getCurrentWorkspaceId } from "ee/selectors/selectedWorkspaceSelectors";
+import { getAssetUrl } from "ee/utils/airgapHelpers";
+import { APPSMITH_BRAND_FAVICON_URL } from "utils/BrandingUtils";
 
 export const StyledLink = styled((props) => {
   // we are removing non input related props before passing them in the components
@@ -55,8 +57,8 @@ export const AppsmithLink = () => {
           className="t--appsmith-logo"
           src={
             organizationConfig.brandFaviconUrl &&
-            organizationConfig.brandFaviconUrl !==
-              "https://assets.appsmith.com/appsmith-favicon-orange.ico"
+            getAssetUrl(organizationConfig.brandFaviconUrl) !==
+              APPSMITH_BRAND_FAVICON_URL
               ? organizationConfig.brandFaviconUrl
               : AppsmithLogo
           }

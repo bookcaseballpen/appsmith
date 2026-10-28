@@ -1,26 +1,17 @@
-import { getAssetUrl } from "ee/utils/airgapHelpers";
-import { ASSETS_CDN_URL } from "constants/ThirdPartyConstants";
-
 export const GIT_CONNECT_STEPS = {
   CHOOSE_PROVIDER: "choose-provider",
   GENERATE_SSH_KEY: "generate-ssh-key",
   ADD_DEPLOY_KEY: "add-deploy-key",
 };
 
-export const GIT_DEMO_GIF = {
-  create_repo: {
-    github: getAssetUrl(`${ASSETS_CDN_URL}/Github_create_empty_repo.gif`),
-    gitlab: getAssetUrl(`${ASSETS_CDN_URL}/Gitlab_create_a_repo.gif`),
-    bitbucket: getAssetUrl(`${ASSETS_CDN_URL}/Bitbucket_create_a_repo.gif`),
-  },
-  copy_remoteurl: {
-    github: getAssetUrl(`${ASSETS_CDN_URL}/Github_SSHkey.gif`),
-    gitlab: getAssetUrl(`${ASSETS_CDN_URL}/Gitlab_SSHKey.gif`),
-    bitbucket: getAssetUrl(`${ASSETS_CDN_URL}/Bitbucket_Copy_SSHKey.gif`),
-  },
-  add_deploykey: {
-    github: getAssetUrl(`${ASSETS_CDN_URL}/Github_add_deploykey.gif`),
-    gitlab: getAssetUrl(`${ASSETS_CDN_URL}/Gitlab_add_deploy_key.gif`),
-    bitbucket: getAssetUrl(`${ASSETS_CDN_URL}/Bitbucket_add_a_deploykey.gif`),
-  },
+// Fork: the how-to GIFs lived on assets.appsmith.com (about 70 MB) and are not vendored, so the demos are hidden.
+const NO_DEMO_GIF = { github: "", gitlab: "", bitbucket: "" };
+
+export const GIT_DEMO_GIF: Record<
+  "create_repo" | "copy_remoteurl" | "add_deploykey",
+  Record<string, string>
+> = {
+  create_repo: NO_DEMO_GIF,
+  copy_remoteurl: NO_DEMO_GIF,
+  add_deploykey: NO_DEMO_GIF,
 };

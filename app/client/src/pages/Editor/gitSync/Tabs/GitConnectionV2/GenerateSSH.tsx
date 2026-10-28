@@ -104,22 +104,23 @@ function GenerateSSH({
             value={value?.remoteUrl}
           />
         </FieldContainer>
-        {value?.gitProvider !== "others" && (
-          <Collapsible isOpen>
-            <CollapsibleHeader arrowPosition="end">
-              <Icon name="play-circle-line" size="md" />
-              <Text>{createMessage(HOW_TO_COPY_REMOTE_URL)}</Text>
-            </CollapsibleHeader>
-            <CollapsibleContent>
-              <DemoImage
-                alt={`Copy and paste remote url from ${value?.gitProvider}`}
-                src={
-                  GIT_DEMO_GIF.copy_remoteurl[value?.gitProvider || "github"]
-                }
-              />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+        {value?.gitProvider !== "others" &&
+          GIT_DEMO_GIF.copy_remoteurl[value?.gitProvider || "github"] && (
+            <Collapsible isOpen>
+              <CollapsibleHeader arrowPosition="end">
+                <Icon name="play-circle-line" size="md" />
+                <Text>{createMessage(HOW_TO_COPY_REMOTE_URL)}</Text>
+              </CollapsibleHeader>
+              <CollapsibleContent>
+                <DemoImage
+                  alt={`Copy and paste remote url from ${value?.gitProvider}`}
+                  src={
+                    GIT_DEMO_GIF.copy_remoteurl[value?.gitProvider || "github"]
+                  }
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          )}
       </WellContainer>
     </>
   );

@@ -94,7 +94,8 @@ describe("ChooseGitProvider", () => {
     });
   });
 
-  it("shows demo gif when non-empty repo is selected for supported providers", () => {
+  // Fork: the demo GIFs were on assets.appsmith.com and are not vendored, so the demo is hidden.
+  it("does not show a demo gif when non-empty repo is selected for supported providers", () => {
     renderWithRouter(
       <ChooseGitProvider
         {...defaultProps}
@@ -103,11 +104,11 @@ describe("ChooseGitProvider", () => {
     );
 
     expect(
-      screen.getByText(/How to create a new repository/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/How to create a new repository/i),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByAltText("Create an empty repo in github"),
-    ).toBeInTheDocument();
+      screen.queryByAltText("Create an empty repo in github"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows warning for non-empty repo with 'others' provider", () => {

@@ -109,14 +109,15 @@ describe("GenerateSSH Component", () => {
     });
   });
 
-  it("renders the collapsible section if gitProvider is not 'others'", () => {
+  // Fork: the demo GIFs were on assets.appsmith.com and are not vendored, so the demo is hidden.
+  it("does not render the demo section if gitProvider is not 'others'", () => {
     render(<GenerateSSH {...defaultProps} />);
     expect(
-      screen.getByText("How to copy & paste SSH remote URL"),
-    ).toBeInTheDocument();
+      screen.queryByText("How to copy & paste SSH remote URL"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByAltText("Copy and paste remote url from github"),
-    ).toBeInTheDocument();
+      screen.queryByAltText("Copy and paste remote url from github"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not render the collapsible section if gitProvider is 'others'", () => {
