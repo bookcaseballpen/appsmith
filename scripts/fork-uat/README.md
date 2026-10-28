@@ -156,5 +156,5 @@ The PC's default Java can stay on another version; `up.ps1` finds the JDK 25 its
   database has no users. On an empty database `up.ps1` creates the dev admin through the
   same endpoint (`/api/v1/users/super`), so the setup page doesn't appear. Use `-NoSeed` to
   keep it. On a database that already has users, nothing is changed.
-- **Memory:** the webpack dev server gets an 8 GB Node heap and uses about 3–5 GB; the
-  server about 1.5 GB.
+- **Memory:** the webpack dev server gets an 8 GB Node heap and used about 3 GB here; the
+  server about 0.6 GB after start; RTS about 0.1 GB.
