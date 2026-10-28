@@ -52,14 +52,29 @@ public class AppsmithAiPlugin extends BasePlugin {
     }
 
     public static class AppsmithAiPluginExecutor extends BaseRestApiPluginExecutor {
-        private final AiServerService aiServerService =
-                new AiServerServiceImpl(this.sharedConfig.getAIProxyBasePathUrl());
+        // Fork: built on first use instead of at plugin load. With cloud services disabled the AI proxy URL lookup
+        // fails, and that must fail the AI action, not the server start-up.
+        private AiServerService aiServerService;
 
-        private final TriggerService triggerService = new TriggerServiceImpl(aiServerService, objectMapper);
+        private TriggerService triggerService;
         private static final Gson gson = new GsonBuilder().create();
 
         public AppsmithAiPluginExecutor(SharedConfig config) {
             super(config);
+        }
+
+        private AiServerService aiServerService() {
+            if (aiServerService == null) {
+                aiServerService = new AiServerServiceImpl(this.sharedConfig.getAIProxyBasePathUrl());
+            }
+            return aiServerService;
+        }
+
+        private TriggerService triggerService() {
+            if (triggerService == null) {
+                triggerService = new TriggerServiceImpl(aiServerService(), objectMapper);
+            }
+            return triggerService;
         }
 
         @Override
@@ -79,7 +94,7 @@ public class AppsmithAiPlugin extends BasePlugin {
         public Mono<TriggerResultDTO> trigger(
                 APIConnection connection, DatasourceConfiguration datasourceConfiguration, TriggerRequestDTO request) {
             log.debug(Thread.currentThread().getName() + ": trigger() called for AppsmithAI plugin.");
-            return triggerService.executeTrigger(connection, datasourceConfiguration, request);
+            return triggerService().executeTrigger(connection, datasourceConfiguration, request);
         }
 
         private Mono<TriggerResultDTO> handleError(String message, Throwable error) {
@@ -150,7 +165,7 @@ public class AppsmithAiPlugin extends BasePlugin {
                 AiServerRequestDTO aiServerRequestDTO,
                 SourceDetails sourceDetails,
                 ActionExecutionRequest actionExecutionRequest) {
-            return aiServerService
+            return aiServerService()
                     .executeQuery(aiServerRequestDTO, sourceDetails)
                     .map(response -> {
                         ActionExecutionResult actionExecutionResult = new ActionExecutionResult();
@@ -182,7 +197,7 @@ public class AppsmithAiPlugin extends BasePlugin {
         @Override
         public Mono<DatasourceStorage> preSaveHook(DatasourceStorage datasourceStorage) {
             log.debug(Thread.currentThread().getName() + ": preSaveHook() called for AppsmithAI plugin.");
-            return aiServerService
+            return aiServerService()
                     .associateDatasource(createAssociateDTO(datasourceStorage))
                     .thenReturn(datasourceStorage);
         }
@@ -192,7 +207,7 @@ public class AppsmithAiPlugin extends BasePlugin {
             log.debug(Thread.currentThread().getName() + ": preDeleteHook() called for AppsmithAI plugin.");
             DatasourceConfiguration datasourceConfiguration = datasourceStorage.getDatasourceConfiguration();
             if (hasFiles(datasourceConfiguration)) {
-                return aiServerService
+                return aiServerService()
                         .disassociateDatasource(createAssociateDTO(datasourceStorage))
                         .thenReturn(datasourceStorage);
             }
