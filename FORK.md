@@ -38,10 +38,13 @@ Appsmith hosts (no cloud services, no telemetry, no Appsmith CDN), and Git sync 
 | `APPSMITH_DISABLE_TELEMETRY` | `true` | Kept for compatibility; telemetry code is removed regardless. `docker.env.sh` now writes `true`. |
 
 The upstream integration tests run with `appsmith.cloud_services.enabled=true`
-(`app/server/appsmith-server/src/test/resources/application-test.properties`), because they mock cloud responses.
-The fork's disabled default is covered by unit tests of the `*Impl` classes. Note that with the switch on, the test
-Spring context registers the test instance with the real `https://cs.appsmith.com` at start-up (upstream behaviour,
-seen in the logs); run them offline or point `APPSMITH_CLOUD_SERVICES_BASE_URL` elsewhere if that matters.
+(`app/server/appsmith-server/src/test/resources/application-test.properties`), because they expect cloud services.
+The fork's disabled default is covered by unit tests of the `*Impl` classes. Test runs never reach Appsmith's cloud:
+the same file sets `appsmith.cloud_services.base_url` and `signature_base_url` to `http://127.0.0.1:1`, a closed
+loopback port. Unmocked calls, such as instance registration at start-up, fail locally (the log shows
+"Instance registration failed ... Connection refused: /127.0.0.1:1", never "Registration successful"). Suites that need
+cloud responses set their own MockWebServer URL (`ApplicationTemplateServiceTest`,
+`ApplicationTemplateServicePublishTemplateTest`).
 
 ## Feature flags (local defaults)
 
