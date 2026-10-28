@@ -29,6 +29,10 @@ public class GitCloudServicesUtils {
     private static final Map<String, GitConnectionLimitDTO> gitLimitCache = new HashMap<>();
 
     public Mono<Integer> getPrivateRepoLimitForOrg(String workspaceId, boolean isClearCache) {
+        // Fork: -1 means "no limit"; nothing is asked of cloud services when they are disabled.
+        if (!cloudServicesConfig.isEnabled()) {
+            return Mono.just(-1);
+        }
         final String baseUrl = cloudServicesConfig.getBaseUrl();
         return configService
                 .getInstanceId()

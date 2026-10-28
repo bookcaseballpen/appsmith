@@ -1,5 +1,5 @@
 import { Button, Flex } from "@appsmith/ads";
-import { ErrorBoundary } from "@sentry/react";
+import ErrorBoundary from "components/editorComponents/ErrorBoundry";
 import { type VisualizationElements } from "entities/Action";
 import React, { useState } from "react";
 import { EmptyVisualization } from "./components/EmptyVisualization";

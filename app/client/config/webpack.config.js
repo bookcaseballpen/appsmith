@@ -369,8 +369,7 @@ module.exports = function (webpackEnv) {
         fs: false,
         os: false,
         path: false,
-        // Referenced by a Node-only code path in @betterbugs/web-sdk; never
-        // executed in the browser.
+        // Node-only module; never executed in the browser.
         worker_threads: false,
         "react/jsx-runtime": require.resolve("react/jsx-runtime"),
       },

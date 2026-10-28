@@ -3,7 +3,8 @@ export type ENVIRONMENT = "PRODUCTION" | "STAGING" | "LOCAL";
 export const DOCS_BASE_URL = "https://docs.appsmith.com/";
 export const DOCS_AI_BASE_URL = "https://docs.appsmithai.com/";
 export const TELEMETRY_URL = `${DOCS_BASE_URL}telemetry`;
-export const ASSETS_CDN_URL = "https://assets.appsmith.com";
+// Fork: assets are served from the client build (public/assets-cdn), not assets.appsmith.com. See FORK.md.
+export const ASSETS_CDN_URL = "/assets-cdn";
 export const GITHUB_RELEASE_URL =
   "https://github.com/appsmithorg/appsmith/releases/tag";
 export const GET_RELEASE_NOTES_URL = (tagName: string) =>
@@ -39,6 +40,8 @@ export const DOCS_DEFAULT_BRANCH_URL =
 export const PACKAGES_OVERVIEW_DOC =
   "https://docs.appsmith.com/packages/overview";
 
+// Fork: the pricing and customer portal URLs have no default (they pointed at appsmith.com). When unset, return ""
+// instead of a relative "?source=..." link on this host.
 export const PRICING_PAGE_URL = (
   URL: string,
   source: string,
@@ -46,9 +49,11 @@ export const PRICING_PAGE_URL = (
   feature?: string,
   section?: string,
 ) =>
-  `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
-    feature ? `&feature=${feature}` : ""
-  }${section ? `&section=${section}` : ""}`;
+  URL
+    ? `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
+        feature ? `&feature=${feature}` : ""
+      }${section ? `&section=${section}` : ""}`
+    : "";
 
 export const CUSTOMER_PORTAL_URL_WITH_PARAMS = (
   URL: string,
@@ -57,6 +62,8 @@ export const CUSTOMER_PORTAL_URL_WITH_PARAMS = (
   feature?: string,
   section?: string,
 ) =>
-  `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
-    feature ? `&feature=${feature}` : ""
-  }${section ? `&section=${section}` : ""}`;
+  URL
+    ? `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
+        feature ? `&feature=${feature}` : ""
+      }${section ? `&section=${section}` : ""}`
+    : "";

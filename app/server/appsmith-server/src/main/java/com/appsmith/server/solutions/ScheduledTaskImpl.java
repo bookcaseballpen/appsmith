@@ -63,4 +63,16 @@ public class ScheduledTaskImpl extends ScheduledTaskCEImpl implements ScheduledT
                 organizationService,
                 featureFlagService);
     }
+
+    /**
+     * Fork: telemetry is removed, so the daily "Instance Active" ping to Segment never runs.
+     */
+    @Override
+    public void pingSchedule() {}
+
+    /**
+     * Fork: telemetry is removed, so the daily instance statistics are never sent to Segment.
+     */
+    @Override
+    public void pingStats() {}
 }

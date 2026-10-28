@@ -185,7 +185,8 @@ function ChooseGitProvider({
           )}
           {!isImport &&
             value?.gitProvider !== "others" &&
-            value?.gitEmptyRepoExists === "no" && (
+            value?.gitEmptyRepoExists === "no" &&
+            GIT_DEMO_GIF.create_repo[value?.gitProvider || "github"] && (
               <Collapsible isOpen>
                 <CollapsibleHeader arrowPosition="end">
                   <Icon name="play-circle-line" size="md" />

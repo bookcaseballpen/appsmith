@@ -1,242 +1,33 @@
-import type { User } from "constants/userConstants";
-import { APP_MODE } from "entities/App";
-import type * as AnalyticsUtilModule from "./AnalyticsUtil";
+import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 
-const mockSegment = {
-  init: jest.fn().mockResolvedValue(true),
-  track: jest.fn(),
-  identify: jest.fn().mockResolvedValue(undefined),
-  reset: jest.fn(),
-  getUser: jest.fn(),
-  avoidTracking: jest.fn(),
-};
+describe("AnalyticsUtil (fork shim)", () => {
+  const originalFetch = window.fetch;
+  const fetchMock = jest.fn();
 
-jest.mock("utils/Analytics/segment", () => ({
-  __esModule: true,
-  default: { getInstance: () => mockSegment },
-}));
-jest.mock("utils/Analytics/mixpanel", () => ({
-  __esModule: true,
-  default: { getInstance: () => ({ init: jest.fn().mockResolvedValue(true) }) },
-}));
-jest.mock("utils/Analytics/smartlook", () => ({
-  __esModule: true,
-  default: {
-    init: jest.fn().mockResolvedValue(undefined),
-    identify: jest.fn(),
-  },
-}));
-jest.mock("instrumentation", () => ({
-  appsmithTelemetry: { identifyUser: jest.fn() },
-}));
-jest.mock("ee/configs", () => ({
-  getAppsmithConfigs: () => ({
-    appVersion: { edition: "Community", id: "test" },
-    cloudHosting: true,
-    segment: { enabled: true, apiKey: "test-key" },
-  }),
-}));
-
-const builder = {
-  username: "builder@example.com",
-  email: "builder@example.com",
-  isAnonymous: false,
-} as User;
-
-const sessionRecordingConfig = { enabled: false, mask: false };
-
-// AnalyticsUtil keeps per-session state at module level, so every test gets a fresh copy.
-function loadAnalyticsUtil(): typeof AnalyticsUtilModule {
-  let analyticsUtil: typeof AnalyticsUtilModule | undefined;
-
-  jest.isolateModules(() => {
-    analyticsUtil = jest.requireActual(
-      "./AnalyticsUtil",
-    ) as typeof AnalyticsUtilModule;
-  });
-
-  return analyticsUtil as typeof AnalyticsUtilModule;
-}
-
-describe("AnalyticsUtil.logEvent", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    window.fetch = fetchMock;
+    fetchMock.mockReset();
   });
 
-  it("does not identify while initializing", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-
-    expect(mockSegment.identify).not.toHaveBeenCalled();
+  afterAll(() => {
+    window.fetch = originalFetch;
   });
 
-  it("never sends a blocked event to Segment", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
+  it("does not load any analytics script or send requests", async () => {
+    const scriptsBefore = document.querySelectorAll("script").length;
 
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("PAGE_LOAD");
-
-    expect(mockSegment.track).not.toHaveBeenCalled();
-  });
-
-  it("identifies once, on the first allowed event, before tracking it", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(1);
-    expect(mockSegment.identify).toHaveBeenCalledWith(
-      builder.username,
-      expect.objectContaining({ email: builder.email }),
-    );
-    expect(mockSegment.track).toHaveBeenCalledTimes(1);
-    expect(mockSegment.track).toHaveBeenCalledWith(
-      "WIDGET_PROPERTY_UPDATE",
-      expect.any(Object),
-    );
-    expect(mockSegment.identify.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSegment.track.mock.invocationCallOrder[0],
-    );
-
-    AnalyticsUtil.logEvent("CREATE_APP");
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(1);
-    expect(mockSegment.track).toHaveBeenCalledTimes(2);
-  });
-
-  it("retries the identify on the next allowed event after a failed one", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    mockSegment.identify.mockRejectedValueOnce(new Error("network"));
-
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-    await new Promise(process.nextTick);
-    AnalyticsUtil.logEvent("CREATE_APP");
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(2);
-  });
-
-  it("identifies nobody when every event in the session is blocked", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.PUBLISHED);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-    AnalyticsUtil.logEvent("APP_VIEWED_WITH_NAVBAR");
-
-    expect(mockSegment.identify).not.toHaveBeenCalled();
-    expect(mockSegment.track).not.toHaveBeenCalled();
-  });
-
-  it("identifies an allowed event that arrived while Segment was still loading once loading ends", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-    let finishSegmentInit: (value: boolean) => void = () => {};
-
-    mockSegment.init.mockReturnValueOnce(
-      new Promise<boolean>((resolve) => {
-        finishSegmentInit = resolve;
-      }),
-    );
-
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    const initializing = AnalyticsUtil.initialize(
-      builder,
-      sessionRecordingConfig,
-      true,
-    );
-
-    await Promise.resolve();
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-
-    expect(mockSegment.track).toHaveBeenCalledTimes(1);
-    expect(mockSegment.identify).not.toHaveBeenCalled();
-
-    finishSegmentInit(true);
-    await initializing;
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops events for an anonymous user", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    await AnalyticsUtil.initialize(
-      { ...builder, username: "anonymousUser", isAnonymous: true },
-      sessionRecordingConfig,
-      false,
-    );
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-
-    expect(mockSegment.track).not.toHaveBeenCalled();
-    expect(mockSegment.identify).not.toHaveBeenCalled();
-  });
-
-  it("resumes builder telemetry after the published viewer clears the app mode", async () => {
-    // Regression for: published app → "All apps" → create app. The viewer sets PUBLISHED, which
-    // suppresses events; leaving the viewer clears the mode so CREATE_APP tracks on the apps page.
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.PUBLISHED);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-
-    // While viewing the published app, a builder event is dropped and nobody is identified.
-    AnalyticsUtil.logEvent("CREATE_APP");
-
-    expect(mockSegment.track).not.toHaveBeenCalled();
-    expect(mockSegment.identify).not.toHaveBeenCalled();
-
-    // Leaving the viewer clears the mode (AppViewer unmount calls setAppMode(undefined)).
-    AnalyticsUtil.setAppMode(undefined);
-    AnalyticsUtil.logEvent("CREATE_APP");
-
-    expect(mockSegment.track).toHaveBeenCalledTimes(1);
-    expect(mockSegment.track).toHaveBeenCalledWith(
-      "CREATE_APP",
-      expect.any(Object),
-    );
-    expect(mockSegment.identify).toHaveBeenCalledTimes(1);
-  });
-
-  it("clears the app mode on reset so a new session does not inherit PUBLISHED", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.PUBLISHED);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
+    await AnalyticsUtil.initialize({ username: "user@example.com" } as never);
+    await AnalyticsUtil.identifyUser({
+      username: "user@example.com",
+    } as never);
+    AnalyticsUtil.logEvent("APP_CRASH", { reason: "test" });
     AnalyticsUtil.reset();
 
-    // A new sign-in landing on the applications page (no engine setup yet) must track builder events.
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("CREATE_APP");
-
-    expect(mockSegment.track).toHaveBeenCalledTimes(1);
-    expect(mockSegment.track).toHaveBeenCalledWith(
-      "CREATE_APP",
-      expect.any(Object),
-    );
+    expect(document.querySelectorAll("script").length).toBe(scriptsBefore);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("identifies again after reset when the next user signs in", async () => {
-    const AnalyticsUtil = loadAnalyticsUtil();
-
-    AnalyticsUtil.setAppMode(APP_MODE.EDIT);
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-    AnalyticsUtil.reset();
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(1);
-    expect(mockSegment.track).toHaveBeenCalledTimes(1);
-
-    await AnalyticsUtil.initialize(builder, sessionRecordingConfig, true);
-    AnalyticsUtil.logEvent("WIDGET_PROPERTY_UPDATE");
-
-    expect(mockSegment.identify).toHaveBeenCalledTimes(2);
+  it("has no anonymous id", () => {
+    expect(AnalyticsUtil.getAnonymousId()).toBeUndefined();
   });
 });

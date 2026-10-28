@@ -143,26 +143,7 @@ init_env_file() {
 init_env_file
 setup_proxy_variables
 
-# ip is a reserved keyword for tracking events in Mixpanel. Instead of showing the ip as is Mixpanel provides derived properties.
-# As we want derived props alongwith the ip address we are sharing the ip address in separate keys
-# https://help.mixpanel.com/hc/en-us/articles/360001355266-Event-Properties
-if [[ -n "${APPSMITH_SEGMENT_CE_KEY-}" ]] && [[ "${APPSMITH_DISABLE_TELEMETRY-}" != "true" ]]; then
-  ip="$(set -o pipefail; curl --connect-timeout 5 -sS https://cs.appsmith.com/api/v1/ip | grep -Eo '\d+(\.\d+){3}' || echo "unknown")"
-  curl \
-    --connect-timeout 5 \
-    --user "$APPSMITH_SEGMENT_CE_KEY:" \
-    --header 'Content-Type: application/json' \
-    --data '{
-      "userId":"instance-start",
-      "event":"Instance Start",
-      "properties": {
-        "ip": "'"$ip"'",
-        "ipAddress": "'"$ip"'"
-      }
-    }' \
-    https://api.segment.io/v1/track \
-    || true
-fi
+# Fork: the "Instance Start" ping to cs.appsmith.com and Segment is removed. See FORK.md.
 
 if [[ -n "${FILESTORE_IP_ADDRESS-}" ]]; then
 

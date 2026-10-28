@@ -51,10 +51,6 @@ jest.mock("utils/bootPylon", () => ({
   isPylonChatAvailable: () => false,
 }));
 
-jest.mock("ee/hooks/useBetterbugsMetadata", () => ({
-  useBetterbugsMetadata: () => ({}),
-}));
-
 const mockGetAppsmithConfigs = getAppsmithConfigs as jest.Mock;
 const { getAppsmithConfigs: getActualAppsmithConfigs } =
   jest.requireActual("ee/configs");
