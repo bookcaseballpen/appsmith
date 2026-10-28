@@ -49,11 +49,15 @@ public class GitPrivateRepoCEImplTest {
     @MockBean
     FeatureFlagService featureFlagService;
 
+    // Fork: the GitPrivateRepoHelper bean has no repo limit, so the CE limit logic is tested on a CE instance.
+    GitPrivateRepoHelperCE gitPrivateRepoHelperCE;
+
     @BeforeEach
     void setup() {
         Mockito.when(gitCloudServicesUtils.getPrivateRepoLimitForOrg(anyString(), anyBoolean()))
                 .thenReturn(Mono.just(3));
         Mockito.when(featureFlagService.check(any())).thenReturn(Mono.just(Boolean.FALSE));
+        gitPrivateRepoHelperCE = new GitPrivateRepoHelperCEImpl(gitCloudServicesUtils, applicationService);
     }
 
     @Test
@@ -63,7 +67,7 @@ public class GitPrivateRepoCEImplTest {
         Mockito.when(applicationService.getGitConnectedApplicationsCountWithPrivateRepoByWorkspaceId(anyString()))
                 .thenReturn(Mono.just(1L));
 
-        StepVerifier.create(gitPrivateRepoHelper.isRepoLimitReached("workspaceId", false))
+        StepVerifier.create(gitPrivateRepoHelperCE.isRepoLimitReached("workspaceId", false))
                 .assertNext(aBoolean -> assertEquals(false, aBoolean))
                 .verifyComplete();
     }
@@ -75,7 +79,7 @@ public class GitPrivateRepoCEImplTest {
         Mockito.when(applicationService.getGitConnectedApplicationsCountWithPrivateRepoByWorkspaceId(anyString()))
                 .thenReturn(Mono.just(3L));
 
-        StepVerifier.create(gitPrivateRepoHelper.isRepoLimitReached("workspaceId", true))
+        StepVerifier.create(gitPrivateRepoHelperCE.isRepoLimitReached("workspaceId", true))
                 .assertNext(aBoolean -> assertEquals(true, aBoolean))
                 .verifyComplete();
     }
@@ -89,7 +93,7 @@ public class GitPrivateRepoCEImplTest {
         Mockito.when(applicationService.getGitConnectedApplicationsCountWithPrivateRepoByWorkspaceId(anyString()))
                 .thenReturn(Mono.just(4L));
 
-        StepVerifier.create(gitPrivateRepoHelper.isRepoLimitReached("workspaceId", false))
+        StepVerifier.create(gitPrivateRepoHelperCE.isRepoLimitReached("workspaceId", false))
                 .assertNext(aBoolean -> assertEquals(true, aBoolean))
                 .verifyComplete();
     }
