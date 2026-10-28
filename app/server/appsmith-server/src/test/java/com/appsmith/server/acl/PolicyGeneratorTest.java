@@ -14,6 +14,7 @@ import static com.appsmith.server.acl.AclPermission.MANAGE_DATASOURCES;
 import static com.appsmith.server.acl.AclPermission.MANAGE_WORKSPACES;
 import static com.appsmith.server.acl.AclPermission.READ_DATASOURCES;
 import static com.appsmith.server.acl.AclPermission.WORKSPACE_CREATE_APPLICATION;
+import static com.appsmith.server.acl.AclPermission.WORKSPACE_DELETE_APPLICATIONS;
 import static com.appsmith.server.acl.AclPermission.WORKSPACE_MANAGE_APPLICATIONS;
 import static com.appsmith.server.acl.AclPermission.WORKSPACE_MANAGE_DATASOURCES;
 import static com.appsmith.server.acl.AclPermission.WORKSPACE_PUBLISH_APPLICATIONS;
@@ -49,7 +50,21 @@ class PolicyGeneratorTest {
         Set<AclPermission> permissions = policyGenerator.getChildPermissions(MANAGE_WORKSPACES, Workspace.class);
 
         // Then
-        assertThat(permissions).contains(WORKSPACE_PUBLISH_APPLICATIONS, WORKSPACE_MANAGE_DATASOURCES);
+        assertThat(permissions)
+                .contains(WORKSPACE_PUBLISH_APPLICATIONS, WORKSPACE_MANAGE_DATASOURCES, WORKSPACE_DELETE_APPLICATIONS);
+    }
+
+    @Test
+    void should_notImplyDelete_when_workspaceAppsAreCreatedOrManaged() {
+        // When
+        Set<AclPermission> creatorPermissions =
+                policyGenerator.getChildPermissions(WORKSPACE_CREATE_APPLICATION, Workspace.class);
+        Set<AclPermission> managerPermissions =
+                policyGenerator.getChildPermissions(WORKSPACE_MANAGE_APPLICATIONS, Workspace.class);
+
+        // Then
+        assertThat(creatorPermissions).doesNotContain(WORKSPACE_DELETE_APPLICATIONS);
+        assertThat(managerPermissions).doesNotContain(WORKSPACE_DELETE_APPLICATIONS);
     }
 
     @Test

@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.minidev.json.JSONObject;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
@@ -31,6 +32,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -42,6 +44,14 @@ import static com.appsmith.server.helpers.TextUtils.generateDefaultRoleNameForRe
  *
  * <p>On a fresh instance the workspace and the groups are created on first start; their ids are stored in the
  * {@value #CONFIG_NAME} config document, so a restart finds and reuses them instead of creating new ones.
+ *
+ * <p>Fresh installs only: workspaces that exist before the first start are not migrated. They keep their CE groups and
+ * members, nobody gets a role from them, and their apps are re-imported one by one into the default workspace.
+ *
+ * <p>Several server instances may start on the same empty database at once. Each may create a workspace, but the
+ * config name is unique, so only one set of ids is stored; the others discard what they created and use the stored
+ * ids. Once resolved, the ids are cached for the life of the process; the default workspace cannot be deleted (see
+ * {@link com.appsmith.server.services.WorkspaceServiceImpl}), so they do not go stale.
  */
 @Slf4j
 @Component
@@ -61,6 +71,9 @@ public class DefaultWorkspaceService {
     // The bootstrap result, shared by concurrent callers so the workspace is created at most once per process.
     private final AtomicReference<Mono<DefaultWorkspaceIds>> idsMono = new AtomicReference<>();
 
+    // The same ids once resolved, for callers that cannot wait (query building).
+    private volatile DefaultWorkspaceIds resolvedIds;
+
     public DefaultWorkspaceService(
             ConfigRepository configRepository,
             WorkspaceRepository workspaceRepository,
@@ -78,6 +91,10 @@ public class DefaultWorkspaceService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrapOnStartup() {
+        log.info(
+                "Roles: this fork supports fresh installs only. Workspaces created before its first start are not"
+                        + " migrated; re-import their apps one by one into the \"{}\" workspace.",
+                DEFAULT_WORKSPACE_NAME);
         try {
             DefaultWorkspaceIds ids = getIds().block();
             log.info("Default workspace is {}", ids == null ? null : ids.workspaceId());
@@ -87,16 +104,26 @@ public class DefaultWorkspaceService {
     }
 
     /**
-     * The default workspace and its role groups, created on the first call of a fresh instance.
+     * The default workspace and its role groups, created on the first call of a fresh instance. A failed bootstrap is
+     * not cached: the next call tries again.
      */
     public Mono<DefaultWorkspaceIds> getIds() {
         Mono<DefaultWorkspaceIds> cached = idsMono.get();
         if (cached != null) {
             return cached;
         }
-        Mono<DefaultWorkspaceIds> created =
-                ensureDefaultWorkspace().doOnError(error -> idsMono.set(null)).cache();
+        Mono<DefaultWorkspaceIds> created = ensureDefaultWorkspace()
+                .doOnNext(ids -> resolvedIds = ids)
+                .doOnError(error -> idsMono.set(null))
+                .cache();
         return idsMono.compareAndSet(null, created) ? created : idsMono.get();
+    }
+
+    /**
+     * The ids if the bootstrap has already completed in this process (it runs at startup), without waiting.
+     */
+    public Optional<DefaultWorkspaceIds> getResolvedIds() {
+        return Optional.ofNullable(resolvedIds);
     }
 
     /**
@@ -106,12 +133,18 @@ public class DefaultWorkspaceService {
     Mono<DefaultWorkspaceIds> ensureDefaultWorkspace() {
         return configRepository
                 .findByName(CONFIG_NAME)
-                .flatMap(config -> Mono.justOrEmpty(fromConfig(config)))
-                .filterWhen(ids -> workspaceRepository
-                        .findById(ids.workspaceId())
-                        .map(workspace -> workspace.getDeletedAt() == null)
-                        .defaultIfEmpty(false))
+                .flatMap(this::storedIdsInUse)
                 .switchIfEmpty(Mono.defer(this::createDefaultWorkspace));
+    }
+
+    /**
+     * The ids in the config document, unless they are incomplete or their workspace was deleted.
+     */
+    private Mono<DefaultWorkspaceIds> storedIdsInUse(Config config) {
+        return Mono.justOrEmpty(fromConfig(config)).filterWhen(ids -> workspaceRepository
+                .findById(ids.workspaceId())
+                .map(workspace -> workspace.getDeletedAt() == null)
+                .defaultIfEmpty(false));
     }
 
     /**
@@ -148,8 +181,8 @@ public class DefaultWorkspaceService {
 
     private Mono<DefaultWorkspaceIds> createDefaultWorkspace() {
         log.info("Creating the default workspace and its role groups");
-        return cacheableRepositoryHelper
-                .getCurrentUserOrganizationId()
+        return warnAboutExistingWorkspaces()
+                .then(cacheableRepositoryHelper.getCurrentUserOrganizationId())
                 .zipWith(pluginRepository
                         .findByDefaultInstall(true)
                         .filter(plugin -> plugin.getId() != null)
@@ -166,6 +199,27 @@ public class DefaultWorkspaceService {
                 .flatMap(workspace -> createRoleGroups(workspace)
                         .flatMap(groups -> applyPolicies(workspace, groups))
                         .flatMap(groups -> saveIds(workspace, groups)));
+    }
+
+    /**
+     * A database that already has workspaces is not a fresh install. The default workspace is still created next to
+     * them, but nothing is moved into it and their members get no role.
+     */
+    private Mono<Void> warnAboutExistingWorkspaces() {
+        return workspaceRepository
+                .retrieveAll()
+                .count()
+                .doOnNext(existing -> {
+                    if (existing > 0) {
+                        log.warn(
+                                "Roles: {} workspace(s) already exist and are not migrated. This fork supports fresh"
+                                        + " installs only; their members get no role, and their apps must be"
+                                        + " re-imported one by one into the new \"{}\" workspace.",
+                                existing,
+                                DEFAULT_WORKSPACE_NAME);
+                    }
+                })
+                .then();
     }
 
     private Mono<Map<InstanceRole, PermissionGroup>> createRoleGroups(Workspace workspace) {
@@ -231,15 +285,51 @@ public class DefaultWorkspaceService {
             values.put(role.name(), group.getId());
             groupIds.put(role, group.getId());
         });
-        // Replaces a stale entry (its workspace was deleted) rather than adding a second one.
+        DefaultWorkspaceIds ours = new DefaultWorkspaceIds(workspace.getId(), groupIds);
         return configRepository
                 .findByName(CONFIG_NAME)
-                .defaultIfEmpty(new Config())
-                .flatMap(config -> {
+                .flatMap(config -> storedIdsInUse(config)
+                        // Another instance stored valid ids while this one was creating: keep theirs.
+                        .flatMap(stored -> discard(ours).thenReturn(stored))
+                        // A stale entry (its workspace was deleted): replace it rather than adding a second one.
+                        .switchIfEmpty(Mono.defer(() -> {
+                            config.setConfig(new JSONObject(values));
+                            return configRepository.save(config).then(Mono.defer(() -> confirm(ours)));
+                        })))
+                .switchIfEmpty(Mono.defer(() -> {
+                    Config config = new Config();
                     config.setName(CONFIG_NAME);
                     config.setConfig(new JSONObject(values));
-                    return configRepository.save(config);
-                })
-                .thenReturn(new DefaultWorkspaceIds(workspace.getId(), groupIds));
+                    return configRepository
+                            .save(config)
+                            // Another instance stored its ids first; the config name is unique.
+                            .onErrorResume(DuplicateKeyException.class, error -> Mono.empty())
+                            .then(Mono.defer(() -> confirm(ours)));
+                }));
+    }
+
+    /**
+     * The ids stored after this instance tried to store its own. If another instance's ids won, this instance's
+     * workspace and groups are discarded and the stored ids are used.
+     */
+    private Mono<DefaultWorkspaceIds> confirm(DefaultWorkspaceIds ours) {
+        return configRepository
+                .findByName(CONFIG_NAME)
+                .flatMap(config -> Mono.justOrEmpty(fromConfig(config)))
+                .defaultIfEmpty(ours)
+                .flatMap(stored ->
+                        stored.equals(ours) ? Mono.just(ours) : discard(ours).thenReturn(stored));
+    }
+
+    /**
+     * Removes a workspace and groups this instance created but lost to another instance's stored ids.
+     */
+    private Mono<Void> discard(DefaultWorkspaceIds ids) {
+        log.info("Another instance created the default workspace first; discarding {}", ids.workspaceId());
+        return workspaceRepository
+                .archiveById(ids.workspaceId())
+                .then(permissionGroupRepository.archiveAllById(
+                        List.copyOf(ids.groupIds().values())))
+                .then();
     }
 }

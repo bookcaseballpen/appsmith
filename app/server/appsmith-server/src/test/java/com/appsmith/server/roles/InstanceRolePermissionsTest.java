@@ -6,14 +6,20 @@ import com.appsmith.external.models.Datasource;
 import com.appsmith.external.models.DatasourceConfiguration;
 import com.appsmith.external.models.DatasourceStorageDTO;
 import com.appsmith.external.models.Property;
+import com.appsmith.server.acl.AclPermission;
+import com.appsmith.server.applications.base.ApplicationService;
 import com.appsmith.server.datasources.base.DatasourceService;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.Plugin;
 import com.appsmith.server.domains.User;
+import com.appsmith.server.domains.Workspace;
+import com.appsmith.server.dtos.ApplicationJson;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.fork.internal.ApplicationForkingService;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
+import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.plugins.base.PluginService;
 import com.appsmith.server.ratelimiting.RateLimitService;
 import com.appsmith.server.repositories.ApplicationRepository;
@@ -106,6 +112,15 @@ class InstanceRolePermissionsTest {
 
     @Autowired
     McpTokenService mcpTokenService;
+
+    @Autowired
+    ApplicationService applicationService;
+
+    @Autowired
+    ApplicationForkingService applicationForkingService;
+
+    @Autowired
+    ImportService importService;
 
     @MockBean
     PluginExecutorHelper pluginExecutorHelper;
@@ -320,6 +335,151 @@ class InstanceRolePermissionsTest {
     }
 
     @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_duplicateAppWithoutMakingItLive_when_builderDuplicatesLiveApp(InstanceRole role) {
+        // Given
+        makeLive(application.getId());
+
+        // When
+        Application copy = runAs(applicationPageService.cloneApplication(application.getId()), users.get(role))
+                .block();
+
+        // Then
+        Application stored = applicationRepository.findById(copy.getId()).block();
+        assertThat(stored.getPublishedPages()).isNotEmpty();
+        assertThat(stored.getLastDeployedAt()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_forkAppOnlyAsAdmin_when_builderForksApp(InstanceRole role) {
+        // When
+        // Forking may copy datasources into the target workspace, so it needs the datasource create permission.
+        Optional<String> forkedId = runAs(
+                        applicationForkingService
+                                .forkApplicationToWorkspace(application.getId(), workspaceId)
+                                .map(imported -> Optional.of(imported.getApplication().getId())),
+                        users.get(role))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.empty()))
+                .block();
+
+        // Then
+        assertThat(forkedId.isPresent()).isEqualTo(role == InstanceRole.ADMIN);
+        forkedId.ifPresent(id -> assertThat(
+                        applicationRepository.findById(id).block().getLastDeployedAt())
+                .isNull());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_publishInternallyOnLiveAppOnlyAsAdmin_when_serverRepublishesForRole(InstanceRole role) {
+        // Given
+        makeLive(application.getId());
+        Application stored = applicationRepository.findById(application.getId()).block();
+        stored.setUnpublishedAppLayout(new Application.AppLayout(Application.AppLayout.Type.MOBILE));
+        applicationRepository.save(stored).block();
+
+        // When
+        runAs(applicationPageService.publishWithoutPermissionChecks(application.getId(), false), users.get(role))
+                .block();
+
+        // Then
+        Application.AppLayout publishedLayout =
+                applicationRepository.findById(application.getId()).block().getPublishedAppLayout();
+        boolean republished = publishedLayout != null && publishedLayout.getType() == Application.AppLayout.Type.MOBILE;
+        assertThat(republished).isEqualTo(role == InstanceRole.ADMIN);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_makeAppLiveOnlyAsAdmin_when_gitCommitPublishesManually(InstanceRole role) {
+        // When
+        // Git commit-and-deploy reaches the publish this way; it must not fail for a developer after the commit.
+        runAs(applicationPageService.publishWithoutPermissionChecks(application.getId(), true), users.get(role))
+                .block();
+
+        // Then
+        Application stored = applicationRepository.findById(application.getId()).block();
+        assertThat(stored.getLastDeployedAt() != null).isEqualTo(role == InstanceRole.ADMIN);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_refuseImportOverLiveAppOnlyForDev_when_roleImportsOverIt(InstanceRole role) {
+        // Given
+        makeLive(application.getId());
+
+        // When
+        // An empty export is enough: the role check comes before the import reads it.
+        Optional<AppsmithError> error = runAs(
+                        importService
+                                .updateNonGitConnectedArtifactFromJson(
+                                        workspaceId, application.getId(), new ApplicationJson())
+                                .map(imported -> Optional.<AppsmithError>empty()),
+                        users.get(role))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .onErrorResume(exception -> Mono.just(Optional.empty()))
+                .block();
+
+        // Then
+        assertThat(error.filter(AppsmithError.ACTION_IS_NOT_AUTHORIZED::equals).isPresent())
+                .isEqualTo(role == InstanceRole.DEV);
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_hideNeverPublishedAppOnlyFromUser_when_roleOpensOrListsIt(InstanceRole role) {
+        // When
+        boolean opens = canOpenInViewMode(role);
+        boolean lists = listsApplication(role);
+
+        // Then
+        assertThat(opens).isEqualTo(role != InstanceRole.USER);
+        assertThat(lists).isEqualTo(role != InstanceRole.USER);
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_showAppToEveryRole_when_approverHasPublishedIt(InstanceRole role) {
+        // Given
+        runAs(applicationPageService.publish(application.getId(), true), users.get(InstanceRole.APPROVER))
+                .block();
+
+        // When
+        boolean opens = canOpenInViewMode(role);
+        boolean lists = listsApplication(role);
+
+        // Then
+        assertThat(opens).isTrue();
+        assertThat(lists).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_deleteAppOnlyAsAdmin_when_roleDeletesApp(InstanceRole role) {
+        // When
+        Boolean deleted = runAs(applicationPageService.deleteApplication(application.getId()), users.get(role))
+                .map(archived -> true)
+                .onErrorResume(AppsmithException.class, error -> Mono.just(false))
+                .block();
+
+        // Then
+        assertThat(deleted).isEqualTo(role == InstanceRole.ADMIN);
+        assertThat(applicationRepository.findById(application.getId()).block() == null)
+                .isEqualTo(role == InstanceRole.ADMIN);
+    }
+
+    @ParameterizedTest
     @EnumSource(InstanceRole.class)
     void should_passAiGateOnlyForDevOrAdmin_when_roleCallsAiAssistant(InstanceRole role) {
         // When
@@ -338,6 +498,43 @@ class InstanceRolePermissionsTest {
 
         // Then
         assertThat(denied).isEqualTo(!role.canEdit());
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_createWorkspaceOnlyAsAdmin_when_roleCreatesWorkspace(InstanceRole role) {
+        // Given
+        Workspace unsaved = new Workspace();
+        unsaved.setName(unique("roles-workspace"));
+
+        // When
+        Optional<AppsmithError> error = runAs(workspaceService.create(unsaved), users.get(role))
+                .map(created -> Optional.<AppsmithError>empty())
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .block();
+
+        // Then
+        if (role == InstanceRole.ADMIN) {
+            assertThat(error).isEmpty();
+        } else {
+            assertThat(error).contains(AppsmithError.ACTION_IS_NOT_AUTHORIZED);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_neverCreatePersonalWorkspace_when_anyRoleAsksForOne(InstanceRole role) {
+        // Given
+        User user = users.get(role);
+
+        // When
+        Optional<AppsmithError> error = runAs(workspaceService.createDefault(new Workspace(), user), user)
+                .map(created -> Optional.<AppsmithError>empty())
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .block();
+
+        // Then
+        assertThat(error).contains(AppsmithError.ACTION_IS_NOT_AUTHORIZED);
     }
 
     @ParameterizedTest
@@ -382,6 +579,34 @@ class InstanceRolePermissionsTest {
                         .getRole(userRepository.findById(target.getId()).block())
                         .block())
                 .isEqualTo(newRole);
+    }
+
+    private void makeLive(String applicationId) {
+        runAs(applicationPageService.publish(applicationId, true), users.get(InstanceRole.ADMIN))
+                .block();
+    }
+
+    private boolean canOpenInViewMode(InstanceRole role) {
+        // CE answers 200 with an empty body when the app cannot be read, so look for the app in the body.
+        String body = clientFor(role)
+                .get()
+                .uri("/api/v1/applications/view/{id}", application.getId())
+                .exchange()
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+        return body != null && body.contains(application.getId());
+    }
+
+    private boolean listsApplication(InstanceRole role) {
+        List<String> ids = runAs(
+                        applicationService
+                                .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                                .map(Application::getId)
+                                .collectList(),
+                        users.get(role))
+                .block();
+        return ids.contains(application.getId());
     }
 
     private static boolean isDeniedByRoleGate(Mono<?> call) {

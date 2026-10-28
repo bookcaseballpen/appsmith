@@ -41,6 +41,19 @@ class ApproverReadOnlyWebFilterTest {
         "POST, /api/v1/users/ai-assistant/request",
         "POST, /api/v1/users/mcp-tokens",
         "POST, /api/v1/git/applications/appId/commit",
+        "POST, /api/v1/git/applications/appId/create-ref",
+        "POST, /api/v1/git/applications/appId/checkout-ref",
+        "POST, /api/v1/git/applications/appId/merge",
+        "DELETE, /api/v1/git/applications/appId/ref",
+        "PUT, /api/v1/git/applications/appId/discard",
+        "POST, /api/v1/git/applications/appId/auto-commit",
+        "GET, /api/v1/git/applications/appId/pull",
+        "GET, /api/v1/git/applications/appId/status",
+        "GET, /api/v1/git/applications/appId/fetch/remote",
+        "GET, /api/v1/git/applications/appId/refs?pruneRefs=true",
+        "GET, /api/v1/git/artifacts/appId/commits",
+        "GET, /api/v1/git/artifacts/import/keys",
+        "GET, /api/v1/datasources/authorize",
     })
     void should_refuseWithForbidden_when_approverChangesSomething(String method, String path) {
         // Given
@@ -65,6 +78,8 @@ class ApproverReadOnlyWebFilterTest {
         "POST, /api/v1/logout",
         "GET, /api/v1/pages/pageId",
         "GET, /api/v1/datasources",
+        "GET, /api/v1/git/applications/appId/refs",
+        "GET, /api/v1/git/applications/appId/metadata",
     })
     void should_passThrough_when_approverReadsPublishesOrRunsQueries(String method, String path) {
         // Given
@@ -98,6 +113,23 @@ class ApproverReadOnlyWebFilterTest {
 
         // Then
         assertThat(passed).isTrue();
+    }
+
+    @Test
+    void should_refuseWithForbidden_when_roleCannotBeResolved() {
+        // Given
+        when(instanceRoleService.getRole(any())).thenReturn(Mono.error(new IllegalStateException("database down")));
+        MockServerWebExchange exchange = exchange("PUT", "/api/v1/applications/appId");
+        AtomicBoolean passed = new AtomicBoolean();
+
+        // When
+        StepVerifier.create(
+                        runAsUser(new ApproverReadOnlyWebFilter(instanceRoleService).filter(exchange, chain(passed))))
+                .verifyComplete();
+
+        // Then
+        assertThat(passed).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

@@ -90,8 +90,11 @@ public class DatasourceStorageServiceTest {
     @BeforeEach
     public void setup() {
         Mono<User> userMono = userRepository.findByEmail("api_user").cache();
-        workspace = userMono.flatMap(user -> workspaceService.createDefault(new Workspace(), user))
-                .switchIfEmpty(Mono.error(new Exception("createDefault is returning empty!!")))
+        // No personal workspaces in this fork, so a plain one stands in for the user's default workspace.
+        Workspace toCreate = new Workspace();
+        toCreate.setName("DatasourceStorageServiceTest workspace");
+        workspace = userMono.flatMap(user -> workspaceService.create(toCreate, user, Boolean.FALSE))
+                .switchIfEmpty(Mono.error(new Exception("create is returning empty!!")))
                 .block();
     }
 

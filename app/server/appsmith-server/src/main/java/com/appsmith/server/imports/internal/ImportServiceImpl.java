@@ -3,22 +3,37 @@ package com.appsmith.server.imports.internal;
 import com.appsmith.external.models.Datasource;
 import com.appsmith.server.converters.ArtifactExchangeJsonAdapter;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.domains.Artifact;
 import com.appsmith.server.domains.Plugin;
 import com.appsmith.server.dtos.ApplicationImportDTO;
 import com.appsmith.server.dtos.ApplicationJson;
+import com.appsmith.server.dtos.ArtifactExchangeJson;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.imports.importable.ImportableService;
 import com.appsmith.server.imports.internal.artifactbased.ArtifactBasedImportService;
 import com.appsmith.server.migrations.JsonSchemaMigration;
 import com.appsmith.server.repositories.PermissionGroupRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.SessionUserService;
 import com.appsmith.server.services.WorkspaceService;
 import com.google.gson.GsonBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.util.StringUtils;
+import reactor.core.publisher.Mono;
 
+/**
+ * An exported app carries its view mode with it, so importing over an app replaces what its users see. Over a live app
+ * (see {@link PublishApproval}) that needs the publish permission, which DEV lacks. Importing a new app stays open: it
+ * is not live until an approver publishes it.
+ */
 @Service
 public class ImportServiceImpl extends ImportServiceCEImpl implements ImportService {
+
+    private final PublishApproval publishApproval;
+
     public ImportServiceImpl(
             ArtifactBasedImportService<Application, ApplicationImportDTO, ApplicationJson> applicationImportService,
             SessionUserService sessionUserService,
@@ -30,7 +45,8 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
             ImportableService<Datasource> datasourceImportableService,
             GsonBuilder gsonBuilder,
             ArtifactExchangeJsonAdapter artifactExchangeJsonAdapter,
-            JsonSchemaMigration jsonSchemaMigration) {
+            JsonSchemaMigration jsonSchemaMigration,
+            PublishApproval publishApproval) {
         super(
                 applicationImportService,
                 sessionUserService,
@@ -43,5 +59,33 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
                 gsonBuilder,
                 artifactExchangeJsonAdapter,
                 jsonSchemaMigration);
+        this.publishApproval = publishApproval;
+    }
+
+    @Override
+    public Mono<? extends Artifact> updateNonGitConnectedArtifactFromJson(
+            String workspaceId, String artifactId, ArtifactExchangeJson artifactExchangeJson) {
+        return requirePublishIfLive(artifactId, "Import over a published application")
+                .then(Mono.defer(() ->
+                        super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson)));
+    }
+
+    @Override
+    public Mono<? extends Artifact> restoreSnapshot(
+            String workspaceId, String branchedArtifactId, ArtifactExchangeJson artifactExchangeJson) {
+        return requirePublishIfLive(branchedArtifactId, "Restore a published application")
+                .then(Mono.defer(() -> super.restoreSnapshot(workspaceId, branchedArtifactId, artifactExchangeJson)));
+    }
+
+    private Mono<Void> requirePublishIfLive(String applicationId, String action) {
+        if (!StringUtils.hasText(applicationId)) {
+            return Mono.empty();
+        }
+        return publishApproval
+                .isLive(applicationId)
+                .flatMap(isLive -> isLive ? publishApproval.canPublish(applicationId) : Mono.just(true))
+                .flatMap(allowed -> allowed
+                        ? Mono.<Void>empty()
+                        : Mono.error(new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, action)));
     }
 }

@@ -18,6 +18,8 @@ import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.roles.DefaultWorkspaceService;
+import com.appsmith.server.roles.InstanceRole;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.PolicySolution;
 import com.appsmith.server.solutions.UserAndAccessManagementService;
@@ -94,6 +96,9 @@ public class UserWorkspaceServiceTest {
 
     @Autowired
     UserAndAccessManagementService userAndAccessManagementService;
+
+    @Autowired
+    DefaultWorkspaceService defaultWorkspaceService;
 
     @Test
     @WithUserDetails(value = "api_user")
@@ -330,6 +335,10 @@ public class UserWorkspaceServiceTest {
         User api_user = userRepository.findByEmail("api_user").block();
         User test_user = userRepository.findByEmail("usertest@usertest.com").block();
         userUtils.removeInstanceAdmin(List.of(api_user, test_user)).block();
+        // In this fork that also drops their default workspace role to USER; give back the ADMIN role they need to
+        // create workspaces (see SeedTestUserRoles), which is not instance administration.
+        defaultWorkspaceService.assignRole(api_user, InstanceRole.ADMIN).block();
+        defaultWorkspaceService.assignRole(test_user, InstanceRole.ADMIN).block();
         Workspace workspace = new Workspace();
         workspace.setName("Test org");
         Workspace createdWorkspace = workspaceService.create(workspace).block();
@@ -456,7 +465,7 @@ public class UserWorkspaceServiceTest {
     @WithUserDetails(value = "api_user")
     public void getUserWorkspacesInAlphabeticalOrder_WhenUserHasWorkspaces_ReturnsWorkspacesSortedAlphabetically() {
 
-        // Only workspaces the user can read: the fork's default workspace exists but api_user is not a member.
+        // Only workspaces the user can read, which include the fork's default workspace (see SeedTestUserRoles).
         List<String> existingWorkspaceNames = workspaceService
                 .getAll(AclPermission.READ_WORKSPACES)
                 .map(Workspace::getName)
