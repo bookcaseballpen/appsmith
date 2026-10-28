@@ -4,7 +4,6 @@ import com.appsmith.external.models.Datasource;
 import com.appsmith.external.models.DatasourceStorageDTO;
 import com.appsmith.external.models.DatasourceTestResult;
 import com.appsmith.server.acl.PolicyGenerator;
-import com.appsmith.server.constants.FieldName;
 import com.appsmith.server.datasourcestorages.base.DatasourceStorageService;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
@@ -102,8 +101,7 @@ public class DatasourceServiceImpl extends DatasourceServiceCEImpl implements Da
         }
         return datasourceRepository
                 .findById(datasourceId, datasourcePermission.getEditPermission())
-                .switchIfEmpty(Mono.error(
-                        new AppsmithException(AppsmithError.NO_RESOURCE_FOUND, FieldName.DATASOURCE, datasourceId)))
+                .switchIfEmpty(Mono.error(new AppsmithException(AppsmithError.UNAUTHORIZED_ACCESS)))
                 .then(Mono.defer(() -> super.testDatasource(datasourceStorageDTO, activeEnvironmentId)));
     }
 

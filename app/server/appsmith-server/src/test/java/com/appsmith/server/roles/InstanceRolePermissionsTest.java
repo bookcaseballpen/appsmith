@@ -46,6 +46,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -211,6 +212,29 @@ class InstanceRolePermissionsTest {
             // A developer still sees the datasource itself, to pick it in a query.
             assertThat(body).contains(datasource.getId()).contains(datasource.getName());
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(InstanceRole.class)
+    void should_testSavedDatasourceOnlyAsAdmin_when_roleTestsItWithOwnSettings(InstanceRole role) {
+        // Given
+        // A test with a saved id merges the stored credentials into the settings sent, so a non-admin could send
+        // them to a host of their choice.
+        DatasourceConfiguration configuration = new DatasourceConfiguration();
+        configuration.setUrl("https://attacker.example.com");
+        DatasourceStorageDTO storage = new DatasourceStorageDTO(datasource.getId(), environmentId, configuration);
+        storage.setWorkspaceId(workspaceId);
+        storage.setPluginId(plugin.getId());
+
+        // When
+        Optional<AppsmithError> error = runAs(datasourceService.testDatasource(storage, environmentId), users.get(role))
+                .map(result -> Optional.<AppsmithError>empty())
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .block();
+
+        // Then
+        assertThat(error.filter(AppsmithError.UNAUTHORIZED_ACCESS::equals).isPresent())
+                .isEqualTo(role != InstanceRole.ADMIN);
     }
 
     @ParameterizedTest
