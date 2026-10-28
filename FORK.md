@@ -92,9 +92,9 @@ Off by default through `APPSMITH_CLOUD_SERVICES_ENABLED`; no request is made and
 | Upcoming integrations list | Empty | `PluginServiceImpl` |
 | Git private-repo limit | No limit (see Git) | `GitPrivateRepoHelperImpl`, `GitCloudServicesUtils` |
 | Pylon email hash | Never requested | `CacheablePylonHelperImpl` |
-| SaaS plugin OAuth (Google Sheets and other proxied OAuth) | Authorizing fails with a cloud-services error. Token refresh for those plugins fails locally on the empty URL; generic OAuth2 for REST APIs is unaffected. | `AuthenticationServiceImpl` |
-| SaaS plugin remote execution (`/api/v1/actions/execute`) | Empty URL, fails locally when used | `SharedConfigImpl` (unchanged) |
-| Appsmith AI plugin (Appsmith-hosted AI proxy) | Empty proxy URL, fails locally when used. Upstream already blocks creating new Appsmith AI datasources; the OpenAI, Anthropic and Google AI plugins call the provider configured locally. | `SharedConfigImpl` (unchanged) |
+| SaaS plugin OAuth (Google Sheets and other proxied OAuth) | Authorizing fails with a cloud-services error, and so does the `/api/v1/saas/authorize` redirect. Token refresh for those plugins fails locally on the empty URL; generic OAuth2 for REST APIs is unaffected. | `AuthenticationServiceImpl`, `SaasController` |
+| SaaS plugin remote execution (`/api/v1/actions/execute`) | Cloud-services error when used (the URL getter throws instead of returning a relative path) | `SharedConfigImpl` |
+| Appsmith AI plugin (Appsmith-hosted AI proxy) | Cloud-services error when used. The plugin now reads the proxy URL on first use, not at load, so start-up is unaffected. Upstream already blocks creating new Appsmith AI datasources; the OpenAI, Anthropic and Google AI plugins call the provider configured locally. | `SharedConfigImpl`, `AppsmithAiPlugin` |
 
 **Proxied OAuth is disabled.** Google Sheets (and any SaaS plugin that authorizes through Appsmith's cloud)
 cannot be connected. Use a REST API datasource with your own OAuth2 app instead.
@@ -130,7 +130,10 @@ widget defaults, login and onboarding images). They are now committed under `app
   `CRUD-DB-Table-Template-Application.json`) load the local copy.
 - `loading.html` and the MCP builder's default image point at `/assets-cdn`.
 - Email templates no longer show the Appsmith logo (it was an image on the CDN; mail clients would fetch it).
-- Not vendored: the nine Git "how to" GIFs (about 70 MB). Their demo sections in the Git connect flow are hidden.
+- Not vendored: the nine Git "how to" GIFs (about 70 MB). Their demo sections in the Git connect flow are hidden:
+  `GIT_DEMO_GIF` holds empty strings, and all six render sites (three in `src/git/components`, three in the older
+  `pages/Editor/gitSync/Tabs/GitConnectionV2`) render the section only when the GIF URL is truthy, so no
+  `<img src="">` is produced. Tests cover `AddDeployKey`, `ChooseGitProvider` and `GenerateSSH`.
 
 After a cherry-pick that adds an asset, run `node app/client/scripts/fork-vendor-assets.js --dry` from the repo
 root; without `--dry` it downloads what is missing into `public/assets-cdn`. Commit the new files.
@@ -148,9 +151,13 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
 
 - **Static links** (opened by the user, nothing loads them at runtime): about 290 `docs.appsmith.com` links in
   the client and server error messages, `docs.appsmithai.com`, `community.appsmith.com`,
-  `www.appsmith.com/enterprise`, `www.appsmith.com/pricing` and `customer.appsmith.com` (upgrade links, set in
-  `index.html`), the "Built on Appsmith" badge link (`appsmith.com`), Discord and GitHub release links.
-  To be replaced or removed in a later task.
+  `www.appsmith.com/enterprise`, the "Built on Appsmith" badge link (`appsmith.com`), Discord and GitHub release
+  links. To be replaced or removed in a later task.
+- **Upgrade links:** `index.html` no longer defaults `customerPortalUrl` to `customer.appsmith.com` or `pricingUrl`
+  to `www.appsmith.com/pricing`; both are empty unless `APPSMITH_CUSTOMER_PORTAL_URL` / `APPSMITH_PRICING_URL` are
+  set. `PRICING_PAGE_URL` and `CUSTOMER_PORTAL_URL_WITH_PARAMS` then return `""` instead of a relative
+  `?source=...` link, and `useOnUpgrade` opens nothing. The upgrade buttons and ramps themselves are still shown;
+  hiding them is left for a later task.
 - **Placeholders and hints, never fetched:** `mock-api.appsmith.com/users` as an input placeholder, the
   `example` URLs in `packages/dsl/.../widget-configs.json`, the `release.app.appsmith.com` strings inside
   `CRUD-DB-Table-Template-Application.json`, `DEFAULT_ORIGIN_HEADER` (`app.appsmith.com`, a redirect fallback
@@ -182,8 +189,11 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
 - `app/client/download-assets.js` (airgap builds) downloads from `assets.appsmith.com`; not used by the fork's
   build, since the assets are committed.
 - `@grafana/faro-webpack-plugin` uploads source maps when `REACT_APP_FARO_*` variables are set.
-- `deploy/docker/tests/composes.sh` sets `APPSMITH_CLOUD_SERVICES_BASE_URL=https://release-cs.appsmith.com`.
 - Cypress scripts in `app/client/package.json` use `CYPRESS_BASE_URL=https://dev.appsmith.com`.
+- `release-cs.appsmith.com` / `release-customer.appsmith.com` in `scripts/local_testing.sh`,
+  `scripts/deploy_preview.sh`, a commented example in `.env.example` and several `.github/workflows` files
+  (`server-build.yml`, `server-integration-tests.yml`, `test-build-docker-image.yml`, the deploy-preview and Cypress
+  workflows).
 - Docker base images, registries, Helm chart repository and the GitHub Actions workflows under `.github/`.
 
 ## Skipped upstream patches
@@ -203,6 +213,7 @@ Repo root and deploy:
 - `deploy/docker/fs/opt/appsmith/entrypoint.sh`
 - `deploy/docker/fs/opt/appsmith/templates/docker.env.sh`
 - `deploy/docker/fs/opt/appsmith/templates/loading.html`
+- `deploy/docker/tests/composes.sh`
 
 Client (`app/client/`):
 
@@ -229,7 +240,7 @@ Client (`app/client/`):
   `constants.ts`
 - `src/pages/common/SearchBar/HomepageHeaderAction.tsx` (and `__tests__/HomepageHeaderAction.test.tsx`)
 - `src/store.ts`
-- `src/utils/bootPylon.ts`
+- `src/utils/bootPylon.ts`, `src/utils/hooks/useOnUpgrade.ts`
 - `src/widgets/AudioWidget/widget/index.tsx`, `src/widgets/ImageWidget/widget/index.tsx`,
   `src/widgets/VideoWidget/widget/index.tsx`
 - `src/workers/Evaluation/ReplayDSL.ts`, `src/workers/Evaluation/fns/overrides/console.ts`
@@ -237,7 +248,9 @@ Client (`app/client/`):
 Server (`app/server/appsmith-server/`):
 
 - `pom.xml`
-- `src/main/java/com/appsmith/server/configurations/CloudServicesConfig.java`, `SegmentConfig.java`
+- `src/main/java/com/appsmith/server/configurations/CloudServicesConfig.java`, `SegmentConfig.java`,
+  `SharedConfigImpl.java`
+- `src/main/java/com/appsmith/server/controllers/SaasController.java`
 - `src/main/java/com/appsmith/server/helpers/GitCloudServicesUtils.java`, `GitPrivateRepoHelperImpl.java`,
   `InstanceConfigHelperImpl.java`, `NetworkUtils.java`
 - `src/main/java/com/appsmith/server/plugins/base/PluginServiceImpl.java`
@@ -255,6 +268,10 @@ Server (`app/server/appsmith-server/`):
 - `src/test/java/com/appsmith/server/helpers/ce/GitPrivateRepoCEImplTest.java`
 - `src/test/resources/application-test.properties`
 
+Server plugins (`app/server/appsmith-plugins/`):
+
+- `appsmithAiPlugin/src/main/java/com/external/plugins/AppsmithAiPlugin.java`
+
 ### Deleted upstream files (`D`)
 
 - Client: `src/ce/constants/UsagePulse.ts`, `src/ee/constants/UsagePulse.ts`, `src/ce/hooks/useBetterbugsMetadata.ts`,
@@ -269,9 +286,12 @@ Server (`app/server/appsmith-server/`):
 - `FORK.md`
 - `app/client/public/assets-cdn/` (vendored assets)
 - `app/client/scripts/fork-vendor-assets.js`
-- `app/client/src/ce/utils/airgapHelpers.test.ts`
+- `app/client/src/ce/utils/airgapHelpers.test.ts`, `app/client/src/constants/ThirdPartyConstants.test.ts`,
+  `app/client/src/git/components/common/AddDeployKey.test.tsx`
 - `app/server/appsmith-server/src/main/java/com/appsmith/server/featureflags/ForkFeatureFlagDefaults.java`
-- Server unit tests: `configurations/CloudServicesConfigTest`, `helpers/GitCloudServicesUtilsTest`,
+- `app/server/appsmith-plugins/appsmithAiPlugin/src/test/java/com/external/plugins/AppsmithAiPluginExecutorTest.java`
+- Server unit tests: `configurations/CloudServicesConfigTest`, `configurations/SharedConfigImplTest`,
+  `controllers/SaasControllerTest`, `helpers/GitCloudServicesUtilsTest`,
   `helpers/GitPrivateRepoHelperImplTest`, `helpers/InstanceConfigHelperImplTest`, `helpers/NetworkUtilsTest`,
   `services/AnalyticsServiceImplTest`, `services/ApplicationTemplateServiceImplTest`,
   `services/CacheableFeatureFlagHelperImplTest`, `services/CacheablePylonHelperImplTest`,
