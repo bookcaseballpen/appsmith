@@ -1,5 +1,6 @@
 package com.appsmith.server.services;
 
+import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.applications.base.ApplicationService;
 import com.appsmith.server.constants.FieldName;
 import com.appsmith.server.domains.Application;
@@ -455,8 +456,12 @@ public class UserWorkspaceServiceTest {
     @WithUserDetails(value = "api_user")
     public void getUserWorkspacesInAlphabeticalOrder_WhenUserHasWorkspaces_ReturnsWorkspacesSortedAlphabetically() {
 
-        List<String> existingWorkspaceNames =
-                workspaceService.getAll().map(Workspace::getName).collectList().block();
+        // Only workspaces the user can read: the fork's default workspace exists but api_user is not a member.
+        List<String> existingWorkspaceNames = workspaceService
+                .getAll(AclPermission.READ_WORKSPACES)
+                .map(Workspace::getName)
+                .collectList()
+                .block();
 
         // Arrange: Create multiple workspaces with different names
         List<String> workspaceNames =
