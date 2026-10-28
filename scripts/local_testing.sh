@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 set -o errexit
 
+# Fork: builds through scripts/fork-build/build-image.sh (everything is compiled inside Docker, on a base image
+# built locally), so neither an Appsmith base image nor a cloud-services URL is involved. See FORK.md.
+
 display_help()
 {
   echo "---------------------------------------------------------------------------------------"
-  echo "Use this script to run a local instance of Appsmith on port 80."
+  echo "Use this script to run a local instance on http://127.0.0.1:80."
   echo "The script will build all the artefacts required for a fat Docker container to come up."
   echo "If no argument is given, the build defaults to release branch."
   echo "If --local or -l is passed, it will build with local changes"
   echo "---------------------------------------------------------------------------------------"
   echo
-  echo "Syntax: $0 [-h] [-l] [-r [remote_url]] [branch_name] [tag] [cs_url]"
+  echo "Syntax: $0 [-h] [-l] [-r [remote_url]] [branch_name] [tag]"
   echo "options:"
   echo "-h     			Print this help"
   echo "-l or --local    	Use the local codebase and not git"
   echo "-r or --remote    	Use the branch from a remote repository"
-  echo "For more info please check: https://www.notion.so/appsmith/Test-an-Appsmith-branch-locally-c39ad68aea0d42bf94a149ea22e86820#9cee16c7e2054b5980513ec6f351ace2"
   echo
 }
 
@@ -51,7 +53,6 @@ then
   pretty_print "Setting up instance with local changes"
   BRANCH=release
   tag=$2
-  cs_url=$3
 elif [[ ($REMOTE == true) ]]
 then
   pretty_print "Setting up instance with remote repository branch ..."
@@ -66,67 +67,25 @@ then
 else
   BRANCH=$1
   tag=$2
-  cs_url=$3
   pretty_print "Setting up instance to run on branch: $BRANCH"
   cd "$(dirname "$0")"/..
   git fetch origin $BRANCH
   git checkout $BRANCH
   git pull origin $BRANCH
-  pretty_print "Local branch is now up to date. Starting server build ..."
+  pretty_print "Local branch is now up to date. Starting build ..."
 fi
 
 if [[ -z "$tag" ]]; then
   tag=latest
 fi
-pretty_print "Building Appsmith with tag: $tag"
-edition=ce
-if [[ "$(git remote get-url origin)" == *"/appsmith-ee"* ]]; then
-  edition=ee
-fi
+image="creative-app-builder:$tag"
+pretty_print "Building $image ..."
 
-pretty_print "Starting server build ..."
-
-pushd app/server > /dev/null
-if ! ./build.sh -DskipTests > /dev/null; then
-  echo Server build failed >&2
+if ! "$(dirname "$0")/fork-build/build-image.sh" "$image"; then
+  echo Docker image build failed >&2
   exit 1
 fi
-popd
-./scripts/prepare_server_artifacts.sh
-pretty_print "Server build successful. Starting client build ..."
-
-pushd app/client > /dev/null
-yarn > /dev/null
-if ! yarn build > /dev/null; then
-  echo Client build failed >&2
-  exit 1
-fi
-pretty_print "Client build successful. Starting RTS build ..."
-
-popd
-pushd app/client/packages/rts/ > /dev/null
-if ! ./build.sh > /dev/null; then
-  echo RTS build failed >&2
-  exit 1
-fi
-pretty_print "RTS build successful. Starting MCP build ..."
-
-popd
-pushd app/client/packages/mcp/ > /dev/null
-if ! ./build.sh > /dev/null; then
-  echo MCP build failed >&2
-  exit 1
-fi
-pretty_print "MCP build successful. Starting Docker build ..."
-
-popd
-bash "$(dirname "$0")/generate_info_json.sh"
-docker build -t appsmith/appsmith-local-$edition:$tag \
-  --build-arg BASE="appsmith/base-$edition:release" \
-  --build-arg APPSMITH_CLOUD_SERVICES_BASE_URL="${cs_url:-https://release-cs.appsmith.com}" \
-  . \
-  > /dev/null
 pretty_print "Docker image build successful. Triggering run now ..."
 
 (docker stop appsmith || true) && (docker rm appsmith || true)
-docker run -d --name appsmith -p 80:80 -v "$PWD/stacks:/appsmith-stacks" -e APPSMITH_BASE_URL=http://localhost appsmith/appsmith-local-$edition:$tag && sleep 15 && pretty_print "Local instance is up! Open Appsmith at http://localhost! "
+docker run -d --name appsmith -p 127.0.0.1:80:80 -v "$PWD/stacks:/appsmith-stacks" -e APPSMITH_BASE_URL=http://localhost "$image" && sleep 15 && pretty_print "Local instance is up! Open it at http://localhost! "
