@@ -40,6 +40,8 @@ export const DOCS_DEFAULT_BRANCH_URL =
 export const PACKAGES_OVERVIEW_DOC =
   "https://docs.appsmith.com/packages/overview";
 
+// Fork: the pricing and customer portal URLs have no default (they pointed at appsmith.com). When unset, return ""
+// instead of a relative "?source=..." link on this host.
 export const PRICING_PAGE_URL = (
   URL: string,
   source: string,
@@ -47,9 +49,11 @@ export const PRICING_PAGE_URL = (
   feature?: string,
   section?: string,
 ) =>
-  `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
-    feature ? `&feature=${feature}` : ""
-  }${section ? `&section=${section}` : ""}`;
+  URL
+    ? `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
+        feature ? `&feature=${feature}` : ""
+      }${section ? `&section=${section}` : ""}`
+    : "";
 
 export const CUSTOMER_PORTAL_URL_WITH_PARAMS = (
   URL: string,
@@ -58,6 +62,8 @@ export const CUSTOMER_PORTAL_URL_WITH_PARAMS = (
   feature?: string,
   section?: string,
 ) =>
-  `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
-    feature ? `&feature=${feature}` : ""
-  }${section ? `&section=${section}` : ""}`;
+  URL
+    ? `${URL}?source=${source}${instanceId ? `&instance=${instanceId}` : ``}${
+        feature ? `&feature=${feature}` : ""
+      }${section ? `&section=${section}` : ""}`
+    : "";

@@ -177,12 +177,10 @@
         disableHelpIcon: parseConfig('{{env "APPSMITH_DISABLE_HELP_ICON"}}'),
         defaultHtmlLang:
           parseConfig('{{env "APPSMITH_DEFAULT_HTML_LANG"}}') || "en",
-        customerPortalUrl:
-          parseConfig('{{env "APPSMITH_CUSTOMER_PORTAL_URL"}}') ||
-          "https://customer.appsmith.com",
-        pricingUrl:
-          parseConfig('{{env "APPSMITH_PRICING_URL"}}') ||
-          "https://www.appsmith.com/pricing",
+        customerPortalUrl: parseConfig(
+          '{{env "APPSMITH_CUSTOMER_PORTAL_URL"}}',
+        ),
+        pricingUrl: parseConfig('{{env "APPSMITH_PRICING_URL"}}'),
       };
     </script>
   </body>
