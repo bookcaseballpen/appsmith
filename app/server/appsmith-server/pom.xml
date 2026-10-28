@@ -326,17 +326,7 @@
             <version>${reactor-test.version}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.segment.analytics.java</groupId>
-            <artifactId>analytics</artifactId>
-            <version>3.3.1</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp3</groupId>
-                    <artifactId>okhttp</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
+        <!-- Fork: the Segment (analytics) and Sentry dependencies are removed. See FORK.md. -->
         <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio-jvm -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
@@ -345,11 +335,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <dependency>
-            <groupId>io.sentry</groupId>
-            <artifactId>sentry-spring-boot-starter-jakarta</artifactId>
-            <version>6.23.0</version>
-        </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-inline</artifactId>
