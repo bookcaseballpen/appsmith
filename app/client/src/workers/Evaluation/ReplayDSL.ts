@@ -1,5 +1,5 @@
 import { Doc, Map, UndoManager } from "yjs";
-import { captureException } from "@sentry/react";
+import log from "loglevel";
 import { diff as deepDiff, applyChange, revertChange } from "deep-diff";
 
 import type { DSLDiff } from "./replayUtils";
@@ -151,11 +151,9 @@ export default class ReplayDSL {
         processDiff(this.dsl, diff, replay, isUndo);
         applyDiff(this.dsl, true, diff);
       } catch (e) {
-        captureException(e, {
-          extra: {
-            diff,
-            updateLength: diffs.length,
-          },
+        log.error("Failed to apply replay diff", e, {
+          diff,
+          updateLength: diffs.length,
         });
       }
     }

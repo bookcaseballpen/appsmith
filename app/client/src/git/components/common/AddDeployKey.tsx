@@ -497,22 +497,24 @@ function AddDeployKey({
               </FieldContainer>
             </>
           )}
-          {value?.gitProvider !== "others" && sshKeySource === "generate" && (
-            <Collapsible isOpen>
-              <CollapsibleHeader arrowPosition="end">
-                <Icon name="play-circle-line" size="md" />
-                <Text>{createMessage(HOW_TO_ADD_DEPLOY_KEY)}</Text>
-              </CollapsibleHeader>
-              <CollapsibleContent>
-                <DemoImage
-                  alt={`Add deploy key in ${value?.gitProvider}`}
-                  src={
-                    GIT_DEMO_GIF.add_deploykey[value?.gitProvider || "github"]
-                  }
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          )}
+          {value?.gitProvider !== "others" &&
+            sshKeySource === "generate" &&
+            GIT_DEMO_GIF.add_deploykey[value?.gitProvider || "github"] && (
+              <Collapsible isOpen>
+                <CollapsibleHeader arrowPosition="end">
+                  <Icon name="play-circle-line" size="md" />
+                  <Text>{createMessage(HOW_TO_ADD_DEPLOY_KEY)}</Text>
+                </CollapsibleHeader>
+                <CollapsibleContent>
+                  <DemoImage
+                    alt={`Add deploy key in ${value?.gitProvider}`}
+                    src={
+                      GIT_DEMO_GIF.add_deploykey[value?.gitProvider || "github"]
+                    }
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
         </Flex>
       </WellContainer>
       <Checkbox

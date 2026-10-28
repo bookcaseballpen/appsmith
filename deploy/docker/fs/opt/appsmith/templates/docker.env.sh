@@ -8,12 +8,6 @@ ENCRYPTION_SALT="$4"
 REDIS_PASSWORD="${5:-}"
 
 cat <<EOF
-# Sentry
-APPSMITH_SENTRY_DSN=
-
-# Smart look
-APPSMITH_SMART_LOOK_ID=
-
 # Google OAuth
 APPSMITH_OAUTH2_GOOGLE_CLIENT_ID=
 APPSMITH_OAUTH2_GOOGLE_CLIENT_SECRET=
@@ -25,9 +19,6 @@ APPSMITH_OAUTH2_GITHUB_CLIENT_SECRET=
 # Form Login/Signup
 APPSMITH_FORM_LOGIN_DISABLED=
 APPSMITH_SIGNUP_DISABLED=
-
-# Segment
-APPSMITH_SEGMENT_KEY=
 
 #Client log level (debug | error)
 APPSMITH_CLIENT_LOG_LEVEL=
@@ -46,12 +37,12 @@ APPSMITH_REPLY_TO=
 APPSMITH_MAIL_SMTP_AUTH=
 APPSMITH_MAIL_SMTP_TLS_ENABLED=
 
-# Disable all telemetry
-# Note: This only takes effect in self-hosted scenarios.
-# Please visit: https://docs.appsmith.com/telemetry to read more about anonymized data collected by Appsmith
-APPSMITH_DISABLE_TELEMETRY=false
-#APPSMITH_SENTRY_DSN=
-#APPSMITH_SENTRY_ENVIRONMENT=
+# Fork: telemetry (Segment, Mixpanel, Sentry, Smartlook, BetterBugs, Pylon) is removed from the code.
+# This stays true so any remaining check reads telemetry as off.
+APPSMITH_DISABLE_TELEMETRY=true
+
+# Fork: Appsmith cloud services (cs.appsmith.com) stay off unless this is set to true.
+APPSMITH_CLOUD_SERVICES_ENABLED=false
 
 # Google Recaptcha Config
 APPSMITH_RECAPTCHA_SITE_KEY=

@@ -330,7 +330,8 @@ class AudioWidget extends BaseWidget<AudioWidgetProps, WidgetState> {
           }}
           player={this._player}
           playing={playing}
-          url={url}
+          // Fork: saved apps can hold assets.appsmith.com URLs; serve them locally.
+          url={getAssetUrl(url)}
         />
       </Suspense>
     );
