@@ -7,6 +7,8 @@ import com.appsmith.server.clonepage.ClonePageService;
 import com.appsmith.server.domains.ActionCollection;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.NewAction;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.CommonGitFileUtils;
 import com.appsmith.server.helpers.DSLMigrationUtils;
 import com.appsmith.server.layouts.UpdateLayoutService;
@@ -32,10 +34,15 @@ import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import reactor.core.publisher.Mono;
 
 @Service
 @Slf4j
 public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl implements ApplicationPageService {
+
+    private final ApplicationRepository applicationRepository;
+    private final ApplicationPermission applicationPermission;
+
     public ApplicationPageServiceImpl(
             WorkspaceService workspaceService,
             ApplicationService applicationService,
@@ -102,5 +109,20 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
                 cacheableRepositoryHelper,
                 postApplicationPublishHookCoordinatorService,
                 userDataService);
+        this.applicationRepository = applicationRepository;
+        this.applicationPermission = applicationPermission;
+    }
+
+    /**
+     * CE deploys with edit permission alone. Here deploying also needs the publish permission, which the developer
+     * role lacks (see {@link com.appsmith.server.roles.InstanceRole}), so only approvers and administrators deploy.
+     */
+    @Override
+    public Mono<Application> publish(String branchedApplicationId, boolean isPublishedManually) {
+        return applicationRepository
+                .findById(branchedApplicationId, applicationPermission.getPublishPermission())
+                .switchIfEmpty(Mono.error(
+                        new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, "Publish application")))
+                .then(Mono.defer(() -> super.publish(branchedApplicationId, isPublishedManually)));
     }
 }
