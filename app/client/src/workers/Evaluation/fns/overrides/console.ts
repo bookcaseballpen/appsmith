@@ -1,4 +1,4 @@
-import { uuid4 } from "@sentry/utils";
+import { nanoid } from "nanoid";
 import type {
   LogObject,
   Methods,
@@ -138,7 +138,7 @@ class UserLog {
   // parses the incoming log and converts it to the log object
   private parseLogs(method: Methods, data: unknown[]): LogObject {
     // Create an ID
-    const id = uuid4();
+    const id = nanoid();
     const timestamp = Date.now().toString();
     // Parse the methods
     let output = data;

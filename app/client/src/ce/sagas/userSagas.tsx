@@ -1,13 +1,4 @@
-import {
-  all,
-  call,
-  fork,
-  put,
-  select,
-  take,
-  type TakeEffect,
-} from "redux-saga/effects";
-import type { SagaIterator } from "redux-saga";
+import { call, put, select, take } from "redux-saga/effects";
 import type {
   ReduxAction,
   ReduxActionWithPromise,
@@ -45,12 +36,10 @@ import {
   fetchFeatureFlagsError,
   fetchProductAlertSuccess,
   fetchProductAlertFailure,
-  fetchFeatureFlagsInit,
 } from "actions/userActions";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { INVITE_USERS_TO_WORKSPACE_FORM } from "ee/constants/forms";
 import type { User } from "constants/userConstants";
-import { ANONYMOUS_USERNAME } from "constants/userConstants";
 import {
   flushErrorsAndRedirect,
   safeCrashAppRequest,
@@ -58,10 +47,7 @@ import {
 import localStorage from "utils/localStorage";
 import log from "loglevel";
 
-import {
-  getCurrentUser,
-  getFeatureFlagsFetched,
-} from "selectors/usersSelectors";
+import { getCurrentUser } from "selectors/usersSelectors";
 import {
   getEnableStartSignposting,
   getFirstTimeUserOnboardingApplicationIds,
@@ -71,9 +57,7 @@ import { disableStartSignpostingAction } from "actions/onboardingActions";
 import { getAppsmithConfigs } from "ee/configs";
 import type { FeatureFlags } from "ee/entities/FeatureFlag";
 import { DEFAULT_FEATURE_FLAG_VALUE } from "ee/entities/FeatureFlag";
-import UsagePulse from "usagePulse";
 import { toast } from "@appsmith/ads";
-import { isAirgapped } from "ee/utils/airgapHelpers";
 import {
   USER_PROFILE_PICTURE_UPLOAD_FAILED,
   UPDATE_USER_DETAILS_FAILED,
@@ -83,14 +67,8 @@ import type {
   ProductAlert,
   ProductAlertConfig,
 } from "reducers/uiReducers/usersReducer";
-import { selectFeatureFlags } from "ee/selectors/featureFlagsSelectors";
 import { getFromServerWhenNoPrefetchedResult } from "sagas/helper";
-import type { SessionRecordingConfig } from "utils/Analytics/mixpanel";
-import {
-  segmentInitSuccess,
-  segmentInitUncertain,
-} from "actions/analyticsActions";
-import { getSegmentState } from "selectors/analyticsSelectors";
+import { segmentInitSuccess } from "actions/analyticsActions";
 
 export function* getCurrentUserSaga(action?: {
   payload?: { userProfile?: ApiResponse };
@@ -124,153 +102,11 @@ export function* getCurrentUserSaga(action?: {
   }
 }
 
-function* getSessionRecordingConfig() {
-  const featureFlags: FeatureFlags = yield select(selectFeatureFlags);
-
-  // This is a organization level flag to kill session recordings
-  // If this is true, we do not do any session recordings
-  if (featureFlags.kill_session_recordings_enabled) {
-    return {
-      enabled: false,
-      mask: false,
-    };
-  }
-
-  // This is a user level flag to control session recordings for a user
-  // If this is false, we do not do any session recordings
-  if (!featureFlags.config_user_session_recordings_enabled) {
-    return {
-      enabled: false,
-      mask: false,
-    };
-  }
-
-  // Now we know that both organization and user level flags are not blocking session recordings
-  return {
-    enabled: true,
-    // Check if we need to mask the session recordings from feature flags
-    mask: featureFlags.config_mask_session_recordings_enabled,
-  };
-}
-
-export function shouldTrackUser(currentUser: User): boolean {
-  try {
-    const isAnonymous =
-      currentUser?.isAnonymous || currentUser?.username === ANONYMOUS_USERNAME;
-
-    return !isAnonymous;
-  } catch (error) {
-    return true;
-  }
-}
-
-function* initTrackers(currentUser: User): SagaIterator {
-  try {
-    const isFFFetched: boolean = yield select(getFeatureFlagsFetched);
-
-    if (!isFFFetched) {
-      yield take(ReduxActionTypes.FETCH_FEATURE_FLAGS_SUCCESS);
-    }
-
-    const sessionRecordingConfig: SessionRecordingConfig = yield call(
-      getSessionRecordingConfig,
-    );
-
-    const shouldTrack = shouldTrackUser(currentUser);
-
-    yield call(
-      AnalyticsUtil.initialize,
-      currentUser,
-      sessionRecordingConfig,
-      shouldTrack,
-    );
-    yield put(segmentInitSuccess());
-  } catch (e) {
-    log.error(e);
-    yield put(segmentInitUncertain());
-  }
-}
-
-function* waitForInitialization() {
-  const currentUser: User = yield select(getCurrentUser);
-  // Dependents for starting tracking
-  const isFFFetched: boolean = yield select(getFeatureFlagsFetched);
-  const isSegmentInitialized: string | undefined =
-    yield select(getSegmentState);
-
-  const waits: TakeEffect[] = [];
-
-  // FF is required to know if GAC is enabled for the user
-  if (!isFFFetched) {
-    yield fork(fetchFeatureFlagsInit);
-    waits.push(take(ReduxActionTypes.FETCH_FEATURE_FLAGS_SUCCESS));
-  }
-
-  // If the user is anonymous, we need to wait for the editor or viewer to initialize
-  if (currentUser?.isAnonymous) {
-    waits.push(
-      take([
-        ReduxActionTypes.INITIALIZE_EDITOR_SUCCESS,
-        ReduxActionTypes.INITIALIZE_PAGE_VIEWER_SUCCESS,
-      ]),
-    );
-
-    // If the user is anonymous, we need to wait for the segment to initialize
-    // As it will provide the anonymous id
-    if (isSegmentInitialized === undefined) {
-      waits.push(
-        take([
-          ReduxActionTypes.SEGMENT_INITIALIZED,
-          ReduxActionTypes.SEGMENT_INIT_UNCERTAIN,
-        ]),
-      );
-    }
-  }
-
-  // Only wait for actions that are still pending
-  yield all(waits);
-}
-
-function* restartUserTracking() {
-  const currentUser: User = yield select(getCurrentUser);
-  const { enableTelemetry } = currentUser;
-  const isAirgappedInstance = isAirgapped();
-
-  if (!isAirgappedInstance) {
-    // We need to stop and start tracking activity to ensure that the tracking
-    // from previous session is not carried forward
-    yield call(UsagePulse.stopTrackingActivity);
-
-    // Wait for any items that are required for tracking
-    yield call(waitForInitialization);
-
-    const featureFlags: FeatureFlags = yield select(selectFeatureFlags);
-
-    const isGACEnabled = featureFlags?.license_gac_enabled;
-
-    const isFreeLicense = !isGACEnabled;
-
-    yield call(
-      UsagePulse.startTrackingActivity,
-      enableTelemetry && getAppsmithConfigs().segment.enabled,
-      currentUser?.isAnonymous ?? false,
-      isFreeLicense,
-    );
-  }
-}
-
 export function* runUserSideEffectsSaga() {
   const currentUser: User = yield select(getCurrentUser);
-  const { enableTelemetry } = currentUser;
 
-  yield fork(restartUserTracking);
-
-  if (enableTelemetry) {
-    yield fork(initTrackers, currentUser);
-  } else {
-    yield call(AnalyticsUtil.avoidTracking);
-    yield put(segmentInitSuccess());
-  }
+  // Fork: telemetry and usage pulses are removed. Mark analytics as ready, because other sagas wait for it.
+  yield put(segmentInitSuccess());
 
   if (currentUser.isEmptyInstance) {
     history.replace(SETUP);
@@ -537,7 +373,6 @@ export function* logoutSaga(action: ReduxAction<{ redirectURL: string }>) {
     const isValidResponse: boolean = yield validateResponse(response);
 
     if (isValidResponse) {
-      UsagePulse.stopTrackingActivity();
       AnalyticsUtil.reset();
       const currentUser: User | undefined = yield select(getCurrentUser);
 

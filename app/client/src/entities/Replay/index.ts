@@ -1,5 +1,5 @@
 import { Doc, Map, UndoManager } from "yjs";
-import { captureException } from "@sentry/react";
+import log from "loglevel";
 import type { Diff } from "deep-diff";
 import { diff as deepDiff, applyChange, revertChange } from "deep-diff";
 
@@ -163,11 +163,9 @@ export default abstract class ReplayEntity<T> {
         this.processDiff(diff, replay, isUndo);
         applyDiff(this.entity, true, diff);
       } catch (e) {
-        captureException(e, {
-          extra: {
-            diff,
-            updateLength: diffs.length,
-          },
+        log.error("Failed to apply replay diff", e, {
+          diff,
+          updateLength: diffs.length,
         });
       }
     }

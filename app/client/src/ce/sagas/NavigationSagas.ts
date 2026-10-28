@@ -1,8 +1,7 @@
-import { fork, put, select, call, take } from "redux-saga/effects";
+import { fork, put, select } from "redux-saga/effects";
 import type { RouteChangeActionPayload } from "actions/focusHistoryActions";
 import { FocusEntity, identifyEntityFromPath } from "navigation/FocusEntity";
 import log from "loglevel";
-import { ReduxActionTypes } from "ee/constants/ReduxActionConstants";
 import { type ReduxAction } from "actions/ReduxActionTypes";
 import { getCurrentThemeDetails } from "selectors/themeSelectors";
 import type { BackgroundTheme } from "sagas/ThemeSaga";
@@ -17,7 +16,6 @@ import FocusRetention from "sagas/FocusRetentionSaga";
 import { getSafeCrash } from "selectors/errorSelectors";
 import { flushErrors } from "actions/errorActions";
 import type { NavigationMethod } from "utils/history";
-import UsagePulse from "usagePulse";
 import { getIDETypeByUrl } from "ee/entities/IDE/utils";
 import { IDE_TYPE } from "ee/IDE/Interfaces/IDETypes";
 import { updateIDETabsOnRouteChangeSaga } from "sagas/IDESaga";
@@ -31,7 +29,6 @@ export function* handleRouteChange(
 
   try {
     yield fork(clearErrors);
-    yield fork(watchForTrackableUrl, action.payload);
     const IDEType = getIDETypeByUrl(pathname);
 
     if (previousPath) {
@@ -76,32 +73,6 @@ function* clearErrors() {
 
   if (isCrashed) {
     yield put(flushErrors());
-  }
-}
-
-function* watchForTrackableUrl(payload: RouteChangeActionPayload) {
-  yield take([
-    ReduxActionTypes.INITIALIZE_EDITOR_SUCCESS,
-    ReduxActionTypes.INITIALIZE_PAGE_VIEWER_SUCCESS,
-  ]);
-  const oldPathname = payload.prevLocation.pathname;
-  const newPathname = payload.location.pathname;
-  const isOldPathTrackable: boolean = yield call(
-    UsagePulse.isTrackableUrl,
-    oldPathname,
-  );
-  const isNewPathTrackable: boolean = yield call(
-    UsagePulse.isTrackableUrl,
-    newPathname,
-  );
-
-  // Trackable to Trackable URL -> No pulse
-  // Non-Trackable to Non-Trackable URL -> No pulse
-  // Trackable to Non-Trackable -> No Pulse
-  // Non-Trackable to Trackable URL -> Send Pulse
-
-  if (!isOldPathTrackable && isNewPathTrackable) {
-    yield call(UsagePulse.sendPulseAndScheduleNext);
   }
 }
 

@@ -40,9 +40,6 @@
           return result;
         };
         const CLOUD_HOSTING = parseConfig('{{env "APPSMITH_CLOUD_HOSTING"}}');
-        const AIRGAPPED = parseConfig('{{env "APPSMITH_AIRGAP_ENABLED"}}');
-        const REO_CLIENT_ID = parseConfig('{{env "APPSMITH_REO_CLIENT_ID"}}');
-        const DISABLE_BETTERBUGS = parseConfig('{{env "APPSMITH_DISABLE_BETTERBUGS"}}');
       </script>
     <script>
         window.__APPSMITH_CHUNKS_TO_PRELOAD =
@@ -65,34 +62,7 @@
         })()
           %>
     </script>
-
-    <!-- Start of Reo Javascript -->
-    <script type="text/javascript">
-      if (CLOUD_HOSTING && REO_CLIENT_ID) {
-        !function(){var e,t,n;e=REO_CLIENT_ID,t=function(){Reo.init({clientID:REO_CLIENT_ID})},(n=document.createElement("script")).src="https://static.reo.dev/"+e+"/reo.js",n.async=!0,n.onload=t,document.head.appendChild(n)}();
-      }
-    </script>
-    <!-- End of Reo Javascript -->
-
-    <!-- Start of BetterBugs Recording Links — https://docs.betterbugs.io/dashboard/workspace-settings/recording-links -->
-    <script type="text/javascript">
-      if (!DISABLE_BETTERBUGS && !AIRGAPPED) {
-        window.__BetterbugsRecordingLinkConfig = {
-          styles: { theme: "light", primaryColor: "#E15615", primaryTextColor: "#ffffff" },
-          successMessageHeaderText: "Information received",
-          successMessageSubHeaderText: "Our support team will use it to review the issue",
-        };
-        const s1 = document.createElement("script");
-        s1.src = "https://pkg.betterbugs.io/scripts/latest/logs-capture.js";
-        s1.async = false;
-        document.head.appendChild(s1);
-        const s2 = document.createElement("script");
-        s2.src = "https://pkg.betterbugs.io/scripts/latest/recorder.js";
-        s2.async = false;
-        document.head.appendChild(s2);
-      }
-    </script>
-    <!-- End of BetterBugs Recording Links -->
+    <!-- Fork: the Reo tracker and BetterBugs recording-link scripts are removed. See FORK.md. -->
   </head>
 
   <body class="appsmith-light-theme">
@@ -178,61 +148,8 @@
         parseConfig('{{env "APPSMITH_CLIENT_LOG_LEVEL"}}'),
       );
 
-      const PYLON_APP_ID_RAW =
-        parseConfig("%REACT_APP_PYLON_APP_ID%") ||
-        parseConfig("%REACT_APP_INTERCOM_APP_ID%") ||
-        parseConfig('{{env "APPSMITH_PYLON_APP_ID"}}') ||
-        parseConfig('{{env "APPSMITH_INTERCOM_APP_ID"}}');
-      const DISABLE_PYLON =
-        parseConfig('{{env "APPSMITH_DISABLE_PYLON"}}') ||
-        parseConfig('{{env "APPSMITH_DISABLE_INTERCOM"}}');
-      // No third-party chat widget on airgapped deployments (same as BetterBugs / legacy Intercom)
-      const PYLON_APP_ID =
-        AIRGAPPED || typeof PYLON_APP_ID_RAW !== "string"
-          ? ""
-          : PYLON_APP_ID_RAW;
-
-      // Pylon chat widget (https://docs.usepylon.com/pylon-docs/chat-widget/chat-setup)
-      // Install a stub Pylon() queue so early window.Pylon(...) calls don't error.
-      // The actual SDK script is loaded from bootPylon() in React, AFTER the user's
-      // email_hash has been set on window.pylon.chat_settings — Pylon exposes no API
-      // to update identity post-init, so the SDK must initialize with the full
-      // identity already present on window.pylon.
-      if (PYLON_APP_ID && !DISABLE_PYLON) {
-        window.pylon = {
-          chat_settings: {
-            app_id: PYLON_APP_ID,
-          },
-        };
-        (function () {
-          var n = function () {
-            n.e(arguments);
-          };
-          n.q = [];
-          n.e = function (e) {
-            n.q.push(e);
-          };
-          window.Pylon = n;
-        })();
-      }
-
-      window.SENTRY_CONFIG = parseConfig('{{env "APPSMITH_SENTRY_DSN"}}');
+      // Fork: no Pylon chat, Sentry, Smartlook, BetterBugs, Segment or Mixpanel settings. See FORK.md.
       window.APPSMITH_FEATURE_CONFIGS = {
-        sentry: {
-          dsn: parseConfig('{{env "APPSMITH_SENTRY_DSN"}}'),
-          release: parseConfig('{{env "APPSMITH_SENTRY_RELEASE"}}'),
-          environment: parseConfig('{{env "APPSMITH_SENTRY_ENVIRONMENT"}}'),
-        },
-        smartLook: {
-          id: parseConfig('{{env "APPSMITH_SMART_LOOK_ID"}}'),
-        },
-        betterbugs: {
-          apiKey: DISABLE_BETTERBUGS ? '' : parseConfig('{{env "APPSMITH_BETTERBUGS_API_KEY"}}'),
-        },
-        segment: {
-          apiKey: parseConfig('{{env "APPSMITH_SEGMENT_KEY"}}'),
-          ceKey: parseConfig('{{env "APPSMITH_SEGMENT_CE_KEY"}}'),
-        },
         observability: {
           deploymentName: parseConfig('{{env "APPSMITH_DEPLOYMENT_NAME"}}'),
           serviceInstanceId: parseConfig('{{env "APPSMITH_HOSTNAME"}}'),
@@ -240,10 +157,6 @@
         },
         fusioncharts: {
           licenseKey: parseConfig('{{env "APPSMITH_FUSIONCHARTS_LICENSE_KEY"}}'),
-        },
-        mixpanel: {
-          enabled: parseConfig('{{env "APPSMITH_SEGMENT_KEY"}}'),
-          apiKey: parseConfig('{{env "APPSMITH_MIXPANEL_KEY"}}'),
         },
         logLevel:
           CONFIG_LOG_LEVEL_INDEX > -1
@@ -255,7 +168,6 @@
           sha: parseConfig('{{env "APPSMITH_VERSION_SHA"}}'),
           releaseDate: parseConfig('{{env "APPSMITH_VERSION_RELEASE_DATE"}}'),
         },
-        pylonAppID: PYLON_APP_ID,
         mailEnabled: parseConfig('{{env "APPSMITH_MAIL_ENABLED"}}'),
         googleRecaptchaSiteKey: parseConfig('{{env "APPSMITH_RECAPTCHA_SITE_KEY"}}'),
         hideWatermark: parseConfig('{{env "APPSMITH_HIDE_WATERMARK"}}'),

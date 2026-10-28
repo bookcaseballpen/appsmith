@@ -1,7 +1,6 @@
 import store from "store";
 import { compose } from "@appsmith/utils";
 import { getAppsmithConfigs } from "ee/configs";
-import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { isAirgapped } from "ee/utils/airgapHelpers";
 import type { InternalAxiosRequestConfig } from "axios";
 
@@ -14,7 +13,6 @@ import { addGitBranchHeader as _addGitBranchHeader } from "./addGitBranchHeader"
 import { addPerformanceMonitoringHeaders } from "./addPerformanceMonitoringHeaders";
 import { addEnvironmentHeader as _addEnvironmentHeader } from "./addEnvironmentHeader";
 import { blockAirgappedRoutes as _blockAirgappedRoutes } from "./blockAirgappedRoutes";
-import { addAnonymousUserIdHeader as _addAnonymousUserIdHeader } from "./addAnonymousUserIdHeader";
 
 /**
  * Note: Why can't we use store.getState() or isGapgapped() directly in the interceptor?
@@ -42,14 +40,6 @@ const addEnvironmentHeader = (config: InternalAxiosRequestConfig) => {
   return _addEnvironmentHeader(config, { env: activeEnv });
 };
 
-const addAnonymousUserIdHeader = (config: InternalAxiosRequestConfig) => {
-  const appsmithConfig = getAppsmithConfigs();
-  const anonymousId = AnalyticsUtil.getAnonymousId();
-  const segmentEnabled = appsmithConfig.segment.enabled;
-
-  return _addAnonymousUserIdHeader(config, { anonymousId, segmentEnabled });
-};
-
 const addVersionHeader = (config: InternalAxiosRequestConfig) => {
   const appsmithConfig = getAppsmithConfigs();
   const version = appsmithConfig.appVersion.id;
@@ -64,7 +54,7 @@ export const apiRequestInterceptor = (config: InternalAxiosRequestConfig) => {
     addGitBranchHeader,
     increaseGitApiTimeout,
     addEnvironmentHeader,
-    addAnonymousUserIdHeader,
+    // Fork: no anonymous-id header; it came from Segment, which is removed.
     addPerformanceMonitoringHeaders,
   );
 
