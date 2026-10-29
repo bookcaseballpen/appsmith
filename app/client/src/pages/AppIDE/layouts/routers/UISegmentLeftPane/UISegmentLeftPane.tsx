@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex } from "@appsmith/ads";
+import { Flex, Text } from "@appsmith/ads";
 import { Switch, useRouteMatch } from "react-router";
 import {
   ADD_PATH,
@@ -19,6 +19,10 @@ import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import { getHasManagePagePermission } from "ee/utils/BusinessFeatures/permissionPageHelpers";
 import { DEFAULT_EXPLORER_PANE_WIDTH } from "constants/AppConstants";
 import { SentryRoute } from "components/SentryRoute";
+import {
+  EDITOR_READ_ONLY_WIDGETS_NOTE,
+  selectIsEditorReadOnly,
+} from "ee/utils/editorReadOnly";
 
 const UISegment = () => {
   const { path } = useRouteMatch();
@@ -31,6 +35,21 @@ const UISegment = () => {
     isFeatureEnabled,
     pagePermissions,
   );
+  const isEditorReadOnly = useSelector(selectIsEditorReadOnly);
+
+  // Fork: the read-only editor shows no widget list or widget explorer, only what the canvas is for.
+  if (isEditorReadOnly) {
+    return (
+      <Flex
+        className="ide-editor-left-pane__content-widgets"
+        data-testid="t--editor-read-only-widgets-note"
+        padding="spaces-4"
+        width={DEFAULT_EXPLORER_PANE_WIDTH - 1 + "px"}
+      >
+        <Text kind="body-s">{EDITOR_READ_ONLY_WIDGETS_NOTE}</Text>
+      </Flex>
+    );
+  }
 
   if (!canManagePages) {
     return <ListWidgets setFocusSearchInput={setFocusSearchInput} />;

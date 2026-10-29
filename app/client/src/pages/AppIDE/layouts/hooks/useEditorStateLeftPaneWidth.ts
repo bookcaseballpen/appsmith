@@ -10,7 +10,7 @@ import { getIDEViewMode } from "selectors/ideSelectors";
 import { getPropertyPaneWidth } from "selectors/propertyPaneSelectors";
 import { EditorEntityTab, EditorViewMode } from "IDE/Interfaces/EditorTypes";
 import { useCurrentEditorState } from "../../hooks/useCurrentEditorState";
-import { selectCombinedPreviewMode } from "selectors/gitModSelectors";
+import { selectCanvasOnlyMode } from "selectors/gitModSelectors";
 import { useGitProtectedMode } from "pages/Editor/gitSync/hooks/modHooks";
 
 export const useEditorStateLeftPaneWidth = (): number => {
@@ -19,8 +19,9 @@ export const useEditorStateLeftPaneWidth = (): number => {
   const editorMode = useSelector(getIDEViewMode);
   const { segment } = useCurrentEditorState();
   const propertyPaneWidth = useSelector(getPropertyPaneWidth);
-  // Fork: the combined mode also covers Approvers, so their editor shows only the canvas.
-  const isPreviewMode = useSelector(selectCombinedPreviewMode);
+  // Fork: the canvas-only mode also covers Approvers, so their editor shows only the canvas. The read-only editor is
+  // not canvas-only: it keeps the query and JS panes (in split screen, see getIDEViewMode).
+  const isPreviewMode = useSelector(selectCanvasOnlyMode);
   const isProtectedMode = useGitProtectedMode();
 
   useEffect(

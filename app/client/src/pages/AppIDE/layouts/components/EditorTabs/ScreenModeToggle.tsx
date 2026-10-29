@@ -15,6 +15,7 @@ import type { DefaultRootState } from "react-redux";
 import { selectFeatureFlagCheck } from "ee/selectors/featureFlagsSelectors";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import { Nudge } from "IDE/Components/Nudge";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 
 interface Props {
   showNudge?: boolean;
@@ -25,6 +26,7 @@ export const ScreenModeToggle = (props: Props) => {
   const { dismissNudge, showNudge = false } = props;
   const dispatch = useDispatch();
   const ideViewMode = useSelector(getIDEViewMode);
+  const isEditorReadOnly = useSelector(selectIsEditorReadOnly);
   const isAnimatedIDEEnabled = useSelector((state: DefaultRootState) => {
     return selectFeatureFlagCheck(
       state,
@@ -80,6 +82,11 @@ export const ScreenModeToggle = (props: Props) => {
     ),
     [switchToSplitScreen],
   );
+
+  // Fork: the read-only editor stays in split screen (see getIDEViewMode), so there is nothing to toggle.
+  if (isEditorReadOnly) {
+    return null;
+  }
 
   if (ideViewMode === EditorViewMode.SplitScreen) {
     return (

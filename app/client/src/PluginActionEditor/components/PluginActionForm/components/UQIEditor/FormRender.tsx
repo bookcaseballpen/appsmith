@@ -1,4 +1,6 @@
 import React from "react";
+import { useSelector } from "react-redux";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 import {
   ACTION_EDITOR_REFRESH,
   createMessage,
@@ -76,6 +78,8 @@ const FieldWrapper = styled.div`
 const FormRender = (props: Props) => {
   const { editorConfig, formData, formEvaluationState, formName, uiComponent } =
     props;
+  // Fork: upstream never disables this form by permission; the read-only editor disables every control.
+  const isEditorReadOnly = useSelector(selectIsEditorReadOnly);
   // function to handle the render of the configs
   const renderConfig = () => {
     try {
@@ -176,7 +180,10 @@ const FormRender = (props: Props) => {
 
       try {
         const { configProperty } = section;
-        const modifiedSection = modifySectionConfig(section, enabled);
+        const modifiedSection = modifySectionConfig(
+          section,
+          enabled && !isEditorReadOnly,
+        );
 
         return (
           // TODO: Remove classname once DB configs are migrated
@@ -259,7 +266,11 @@ const FormRender = (props: Props) => {
                   key={`${configProperty}_${idx}`}
                 >
                   <FormControl
-                    config={formControlOrSection}
+                    config={
+                      isEditorReadOnly
+                        ? { ...formControlOrSection, disabled: true }
+                        : formControlOrSection
+                    }
                     formName={formName}
                   />
                 </FieldWrapper>

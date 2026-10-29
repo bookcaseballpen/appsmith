@@ -19,6 +19,7 @@ jest.mock("./EntityBottomTabs", () => ({
 
 jest.mock("selectors/gitModSelectors", () => ({
   selectCombinedPreviewMode: jest.fn(() => false),
+  selectCanvasOnlyMode: jest.fn(() => false),
 }));
 
 const mockStore = configureStore([]);

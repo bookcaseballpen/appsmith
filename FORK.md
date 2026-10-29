@@ -70,6 +70,54 @@ It also refuses the GET endpoints that change state: git pull, git status, git f
 `pruneRefs=true`, git commit history (it checks out a branch), deploy key generation, and the datasource OAuth
 callback. It fails closed when the caller's role cannot be resolved.
 
+## Read-only editor
+
+Apps are designed and built in the separate projects repo; the AI exports and imports app JSON through the API and
+MCP. The editor is for running, testing and debugging only, for every role, Admin included. Switch:
+`APPSMITH_EDITOR_READ_ONLY` (default `true`; set `false` only in an emergency, then restart the server).
+
+Server: `EditorReadOnlyWebFilter` (`app/server/appsmith-server/src/main/java/com/appsmith/server/editorlock/`) refuses
+the editor's app-changing endpoints with a 403 and "This app is edited through the projects repo (MCP/import); the
+editor is read-only.":
+
+- every POST, PUT, PATCH and DELETE under `/api/v1/actions` (except `POST /api/v1/actions/execute`),
+  `/api/v1/collections`, `/api/v1/layouts`, `/api/v1/pages`, `/api/v1/themes`, `/api/v1/libraries` and
+  `POST /api/v1/import` (curl import): queries, APIs, JS objects, widgets and layouts, pages, themes, JS libraries;
+- app settings: `PUT /api/v1/applications/{id}`, page order and default page (`PUT .../{id}/page/**`), the app theme
+  (`PATCH .../{id}/themes/{themeId}`), navigation logo, static URL, building blocks
+  (`POST /api/v1/applications/import/partial/block`) and template merge.
+
+Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
+import), export, publish, git, datasources, app create, clone, fork, delete and snapshots, and user and admin
+settings. The Approver filter still applies on top.
+
+How MCP is told apart: the MCP service (`app/client/packages/mcp`) calls the server with `Authorization: Bearer mcp_...`
+and the `X-Appsmith-Mcp-Internal` header carrying `APPSMITH_MCP_INTERNAL_SECRET`. Only then does
+`McpTokenAuthenticationManager` authenticate the request, and it adds the `MCP_TOKEN` authority. The filter lets a
+request through when its authentication has that authority. A browser session never has it, and a raw `mcp_` token
+without the internal secret is not accepted at all, so no browser header can unlock the editor. MCP requests stay
+confined to their allowlist (`McpAllowlistWebFilter`).
+
+The server sends the switch to the client as the `fork_editor_read_only` feature flag (`FeatureFlagServiceImpl`,
+added after the cached and remote flags). Client switch: `src/ee/utils/editorReadOnly.ts`
+(`selectIsEditorReadOnly`, and a copy for the plain permission helpers kept in step by
+`src/ee/sagas/editorReadOnlySagas.ts`). When it is on:
+
+- the canvas runs as in preview (`selectCombinedPreviewMode`): no drag, drop, resize, selection, widget names or
+  layout saves; the canvas-editing shortcuts (paste, delete, cut, group, undo, redo, select all) are off;
+- the property pane is hidden (not read-only: the canvas has no selection to show one for);
+- the UI tab and the widget explorer are hidden (`SegmentSwitcher`, `UISegmentLeftPane`); the queries and JS panes
+  always open in split screen beside the running canvas (`getIDEViewMode`), and the debugger stays usable
+  (`showDebuggerFlag` reads `selectCanvasOnlyMode`, which still covers preview, protected branches and Approvers);
+- `ee/utils/BusinessFeatures/permissionPageHelpers.tsx` denies creating, changing and deleting pages, queries and JS
+  objects, so upstream's permission UI hides "new page", "new query", "new JS" and the datasource "new query" entry
+  points and makes the API, GraphQL and JS editors read-only; the DB query form (`UQIEditor/FormRender.tsx`) is
+  disabled; Run buttons keep working;
+- a banner says "Read-only: edit this app through the projects repo (MCP)." (`EditorReadOnlyBanner`).
+
+The upstream integration tests run with `appsmith.editor.read-only=false` (`application-test.properties`), because
+they change apps over HTTP as session users; `EditorReadOnlyWebFilterTest` and `EditorReadOnlyHttpTest` cover it on.
+
 ## Cherry-picking upstream fixes
 
 1. Enable conflict-resolution reuse once per clone: `git config rerere.enabled true`.
@@ -102,6 +150,7 @@ callback. It fails closed when the caller's role cannot be resolved.
 |---|---|---|
 | `APPSMITH_CLOUD_SERVICES_ENABLED` | `false` | Kill switch for cs.appsmith.com. When false, `CloudServicesConfig` returns empty base URLs and every consumer skips its call (see below). Set `true` only to restore upstream behaviour. |
 | `APPSMITH_DISABLE_TELEMETRY` | `true` | Kept for compatibility; telemetry code is removed regardless. `docker.env.sh` now writes `true`. |
+| `APPSMITH_EDITOR_READ_ONLY` | `true` | The read-only editor (see above): the server refuses the editor's app changes unless they come through MCP or import, and the client hides the editing UI. `false` turns both off. |
 | `APPSMITH_AI_ENABLED` | `false` | Switch for the built-in AI (see "Built-in AI switch" below). MCP is not affected. Read at start-up: restart the server after changing it. |
 | `APPSMITH_GIT_ENABLED` | `false` | Switch for Appsmith's built-in Git (see "Hidden features" below). Read at start-up: restart the server after changing it. |
 
@@ -303,7 +352,9 @@ To change a flag, edit `ForkFeatureFlagDefaults` and this table together.
 
 `fork_builtin_ai_enabled` is not in `ForkFeatureFlagDefaults`: its value is `APPSMITH_AI_ENABLED`, added by
 `FeatureFlagServiceImpl` (see "Built-in AI switch"). The same goes for `fork_builtin_git_enabled`
-(`APPSMITH_GIT_ENABLED`, see "Hidden features"); the Git flags above only matter when it is on.
+(`APPSMITH_GIT_ENABLED`, see "Hidden features"); the Git flags above only matter when it is on. And for
+`fork_editor_read_only`: `FeatureFlagServiceImpl` sets it from `APPSMITH_EDITOR_READ_ONLY` on every request, whatever
+the cache or the cloud says (see "Read-only editor").
 
 ## What the fork turns off, removes or stubs
 
@@ -627,6 +678,31 @@ Server plugins (`app/server/appsmith-plugins/`):
 - Server tests (`src/test/java/com/appsmith/server/`): `searchentities/SearchEntitySolutionCETest.java`,
   `services/DatasourceStorageServiceTest.java`, `services/McpTokenServiceImplTest.java`,
   `services/UserWorkspaceServiceTest.java`, `services/WorkspaceServiceTest.java`
+
+### Read-only editor files
+
+- New, server: `editorlock/EditorReadOnlySetting.java`, `editorlock/EditorReadOnlyWebFilter.java` and the tests
+  `editorlock/EditorReadOnlyWebFilterTest`, `editorlock/EditorReadOnlyHttpTest`.
+- New, client: `src/ee/utils/editorReadOnly.ts` (and `.test.ts`), `src/ee/sagas/editorReadOnlySagas.ts`,
+  `src/pages/AppIDE/components/EditorReadOnlyBanner/` (and test),
+  `src/pages/AppIDE/layouts/components/SegmentSwitcher/SegmentSwitcher.test.tsx`.
+- Edited, server: `services/FeatureFlagServiceImpl.java` (and `FeatureFlagServiceImplTest`),
+  `src/main/resources/application-ce.properties`, `src/test/resources/application-test.properties`.
+- Edited, client: `src/ce/entities/FeatureFlag.ts`, `src/ee/sagas/index.tsx`,
+  `src/ee/utils/BusinessFeatures/permissionPageHelpers.tsx` (and `.test.ts`), `src/selectors/gitModSelectors.ts`,
+  `src/selectors/debuggerSelectors.tsx`, `src/selectors/ideSelectors.tsx`,
+  `src/pages/AppIDE/layouts/hooks/useEditorStateLeftPaneWidth.ts` and `useGridLayoutTemplate.ts`,
+  `src/pages/AppIDE/layouts/AnimatedLayout.tsx` and `StaticLayout.tsx`,
+  `src/pages/AppIDE/layouts/components/SegmentSwitcher/SegmentSwitcher.tsx`,
+  `src/pages/AppIDE/layouts/components/EditorTabs/ScreenModeToggle.tsx`,
+  `src/pages/AppIDE/layouts/routers/UISegmentLeftPane/UISegmentLeftPane.tsx`,
+  `src/pages/Editor/commons/EditorWrapperContainer.tsx`, `src/pages/Editor/GlobalHotKeys/GlobalHotKeys.tsx`,
+  `src/PluginActionEditor/components/PluginActionForm/components/UQIEditor/FormRender.tsx`,
+  `src/ee/sagas/ApiCallerSagas.ts` (and `.test.ts`: when read-only, the JS-object and action syncs the
+  client sends on load stay in the client instead of hitting the server guard; until the feature flags have
+  loaded they wait for them, so an early sync is never sent),
+  `CommonEditorForm/InfoFields.tsx` and `components/EmbeddedDatasourcePathField.tsx` (the API URL field
+  follows the action's edit permission and hides "Save URL" when disabled)
 
 ### Built-in AI switch
 
