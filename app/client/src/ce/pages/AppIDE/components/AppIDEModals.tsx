@@ -9,15 +9,20 @@ import { PartialImportModal } from "components/editorComponents/PartialImportExp
 import { AppCURLImportModal } from "ee/pages/Editor/CurlImport";
 import GeneratePageModal from "pages/Editor/GeneratePage";
 import CopyEntityToAppModal from "pages/Editor/Explorer/CopyToApp/CopyEntityToAppModal";
+import {
+  areTemplatesHidden,
+  isOnboardingHidden,
+} from "ee/utils/forkHiddenFeatures";
 
 export function AppIDEModals() {
   return (
     <>
       <GitModals />
-      <TemplatesModal />
+      {/* Fork: the templates modal fetched the template list on every editor load. */}
+      {!areTemplatesHidden() && <TemplatesModal />}
       <ImportedApplicationSuccessModal />
       <ReconnectDatasourceModal />
-      <SignpostingOverlay />
+      {!isOnboardingHidden() && <SignpostingOverlay />}
       <PartialExportModal />
       <PartialImportModal />
       <AppCURLImportModal />

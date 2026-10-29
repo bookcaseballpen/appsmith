@@ -48,6 +48,10 @@ APPSMITH_CLOUD_SERVICES_ENABLED=false
 # MCP works either way.
 APPSMITH_AI_ENABLED=false
 
+# Fork: Appsmith's built-in Git (connect, branches, commit, pull, deploy keys, import from Git) stays off unless this
+# is set to true; apps are versioned by export and import instead.
+APPSMITH_GIT_ENABLED=false
+
 # Google Recaptcha Config
 APPSMITH_RECAPTCHA_SITE_KEY=
 APPSMITH_RECAPTCHA_SECRET_KEY=

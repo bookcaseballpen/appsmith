@@ -13,6 +13,7 @@ import { KBEditorMenuItem } from "ee/pages/Editor/KnowledgeBase/KBEditorMenuItem
 import { getIsAnvilEnabledInCurrentApplication } from "layoutSystems/anvil/integrations/selectors";
 import { useGitModEnabled } from "pages/Editor/gitSync/hooks/modHooks";
 import { GitDeployMenuItems as GitDeployMenuItemsNew } from "git";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 
 function GitDeployMenuItems() {
   const isGitModEnabled = useGitModEnabled();
@@ -53,6 +54,8 @@ export const ChevronMenu = ({ deployLink }: ChevronMenuProps) => {
   // If it is an Anvil application, we remove the Git features from the deploy button
   // as they donot yet work correctly with Anvil.
   const isAnvilEnabled = useSelector(getIsAnvilEnabledInCurrentApplication);
+  // Fork: no "Connect to Git" while built-in Git is off (APPSMITH_GIT_ENABLED).
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
 
   const handleClickOnLatestDeployed = useCallback(() => {
     if (window) {
@@ -72,7 +75,7 @@ export const ChevronMenu = ({ deployLink }: ChevronMenuProps) => {
         />
       </MenuTrigger>
       <MenuContent>
-        {!isAnvilEnabled && <GitDeployMenuItems />}
+        {isBuiltInGitEnabled && !isAnvilEnabled && <GitDeployMenuItems />}
         <MenuItem
           className="t--current-deployed-preview-btn"
           onClick={handleClickOnLatestDeployed}

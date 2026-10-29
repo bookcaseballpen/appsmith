@@ -1,4 +1,6 @@
 import React from "react";
+import { useSelector } from "react-redux";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 
 import { GitModals as NewGitModals } from "git";
 
@@ -13,6 +15,10 @@ import RepoLimitExceededErrorModal from "pages/Editor/gitSync/RepoLimitExceededE
 
 export function GitModals() {
   const isGitModEnabled = useGitModEnabled();
+  // Fork: no Git modals while built-in Git is off (APPSMITH_GIT_ENABLED).
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
+
+  if (!isBuiltInGitEnabled) return null;
 
   return isGitModEnabled ? (
     <NewGitModals />
