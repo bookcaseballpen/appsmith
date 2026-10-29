@@ -1,13 +1,18 @@
 package com.appsmith.server.domains;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.server.approvals.ApprovalEvent;
 import com.appsmith.server.approvals.ApprovalStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.hibernate.annotations.Type;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,7 +26,7 @@ import java.util.List;
 @Getter
 @Setter
 @ToString
-@Document
+@Entity
 @FieldNameConstants
 public class ApplicationApproval extends BaseDomain {
 
@@ -29,6 +34,7 @@ public class ApplicationApproval extends BaseDomain {
 
     private String workspaceId;
 
+    @Enumerated(EnumType.STRING)
     private ApprovalStatus status;
 
     // Fingerprint of the edit-mode version that was submitted (SUBMITTED, REJECTED) or approved (APPROVED).
@@ -49,5 +55,7 @@ public class ApplicationApproval extends BaseDomain {
     private Integer revision;
 
     // Newest last, at most ApplicationApprovalService.HISTORY_LIMIT entries.
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     private List<ApprovalEvent> history = new ArrayList<>();
 }
