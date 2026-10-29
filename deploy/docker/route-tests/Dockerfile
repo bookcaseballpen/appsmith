@@ -1,4 +1,6 @@
-FROM appsmith/base-ce:release
+# Fork: the base is built locally by scripts/fork-build/build-image.sh, not pulled from Appsmith's registry.
+ARG BASE=creative-app-builder-base:local
+FROM ${BASE}
 
 SHELL ["bash", "-eux", "-c"]
 

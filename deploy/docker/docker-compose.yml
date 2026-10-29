@@ -1,13 +1,16 @@
 # Use for running an Appsmith, during development.
+# Fork: runs the locally built image (scripts/fork-build/build-image.sh), never Appsmith's published one.
+# For deployment use deploy/fork/docker-compose.yml.
 
 version: "3"
 
 services:
   appsmith:
-    image: index.docker.io/appsmith/appsmith-ce:release
+    image: creative-app-builder:local
+    pull_policy: never
     container_name: appsmith
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     environment:
       APPSMITH_ENCRYPTION_PASSWORD: abcd
       APPSMITH_ENCRYPTION_SALT: abcd

@@ -1,0 +1,7 @@
+# Fork: files that run inside Linux containers keep LF endings in every checkout, including Windows clones with
+# core.autocrlf=true (bash and Dockerfile heredocs fail on CRLF). See FORK.md "Build and deploy".
+*.sh text eol=lf
+*.dockerfile text eol=lf
+Dockerfile text eol=lf
+deploy/fork/** text eol=lf
+deploy/docker/fs/** text=auto eol=lf
