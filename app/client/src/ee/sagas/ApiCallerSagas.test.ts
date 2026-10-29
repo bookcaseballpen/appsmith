@@ -1,8 +1,14 @@
 import JSActionAPI from "ee/api/JSActionAPI";
 import ActionAPI from "api/ActionAPI";
+import { select, take } from "redux-saga/effects";
 import type { Action } from "entities/Action";
 import type { JSCollection } from "entities/JSCollection";
-import { setEditorReadOnly } from "ee/utils/editorReadOnly";
+import {
+  ReduxActionErrorTypes,
+  ReduxActionTypes,
+} from "ee/constants/ReduxActionConstants";
+import { getFeatureFlagsFetched } from "selectors/usersSelectors";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 import {
   updateActionAPICall,
   updateJSCollectionAPICall,
@@ -19,41 +25,68 @@ jest.mock("api/ActionAPI", () => ({
 
 const collection = { id: "js1", name: "Utils" } as JSCollection;
 const action = { id: "a1", name: "GetUsers" } as Action;
+// The sagas are stepped by hand, feeding each effect's result, so loosen what next() takes.
+const jsSync = () => updateJSCollectionAPICall(collection) as Generator;
+const actionSync = () => updateActionAPICall(action) as Generator;
+const kept = <T>(data: T) => ({
+  done: true,
+  value: { responseMeta: { status: 200, success: true }, data },
+});
 
 describe("fork read-only editor API caller sagas", () => {
   afterEach(() => {
-    setEditorReadOnly(false);
     jest.clearAllMocks();
   });
 
   it("keep JS object and action syncs in the client when read-only", () => {
-    setEditorReadOnly(true);
+    const jsSaga = jsSync();
 
-    expect(updateJSCollectionAPICall(collection).next()).toEqual({
-      done: true,
-      value: { responseMeta: { status: 200, success: true }, data: collection },
-    });
-    expect(updateActionAPICall(action).next()).toEqual({
-      done: true,
-      value: { responseMeta: { status: 200, success: true }, data: action },
-    });
+    expect(jsSaga.next().value).toEqual(select(getFeatureFlagsFetched));
+    expect(jsSaga.next(true).value).toEqual(select(selectIsEditorReadOnly));
+    expect(jsSaga.next(true)).toEqual(kept(collection));
+
+    const actionSaga = actionSync();
+
+    actionSaga.next();
+    actionSaga.next(true);
+    expect(actionSaga.next(true)).toEqual(kept(action));
     expect(JSActionAPI.updateJSCollection).not.toHaveBeenCalled();
     expect(ActionAPI.updateAction).not.toHaveBeenCalled();
   });
 
+  it("wait for the feature flags before deciding, so no early sync reaches the server", () => {
+    const jsSaga = jsSync();
+
+    jsSaga.next();
+    expect(jsSaga.next(false).value).toEqual(
+      take([
+        ReduxActionTypes.FETCH_FEATURE_FLAGS_SUCCESS,
+        ReduxActionErrorTypes.FETCH_FEATURE_FLAGS_ERROR,
+      ]),
+    );
+    expect(JSActionAPI.updateJSCollection).not.toHaveBeenCalled();
+    expect(jsSaga.next().value).toEqual(select(selectIsEditorReadOnly));
+    expect(jsSaga.next(true)).toEqual(kept(collection));
+    expect(JSActionAPI.updateJSCollection).not.toHaveBeenCalled();
+  });
+
   it("send them to the server otherwise", () => {
-    const jsSaga = updateJSCollectionAPICall(collection);
+    const jsSaga = jsSync();
     const jsResponse = {
       responseMeta: { status: 200, success: true },
       data: collection,
     };
 
-    expect(jsSaga.next().value).toBe("js-request");
+    jsSaga.next();
+    jsSaga.next(true);
+    expect(jsSaga.next(false).value).toBe("js-request");
     expect(jsSaga.next(jsResponse)).toEqual({ done: true, value: jsResponse });
 
-    const actionSaga = updateActionAPICall(action);
+    const actionSaga = actionSync();
 
-    expect(actionSaga.next().value).toBe("action-request");
+    actionSaga.next();
+    actionSaga.next(true);
+    expect(actionSaga.next(false).value).toBe("action-request");
     expect(JSActionAPI.updateJSCollection).toHaveBeenCalledWith(
       collection,
       undefined,
