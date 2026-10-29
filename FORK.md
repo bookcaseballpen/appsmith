@@ -86,7 +86,7 @@ package. Classes, not test methods:
 | Batch | Packages | Passed | Failed | Skipped |
 |---|---|---|---|---|
 | 1 | 27 small packages (acl … widgets, controllers, domains, imports, exports), `ServerApplicationTests` | 66 | 2 | 0 |
-| 2 | `repositories`, `configurations` | | | |
+| 2 | `repositories`, `configurations` | 31 | 0 | 1 |
 | 3 | `helpers` | | | |
 | 4 | `solutions` | | | |
 | 5 | `git` | | | |
@@ -95,6 +95,9 @@ package. Classes, not test methods:
 Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
 alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
 default-workspace config of another context).
+
+Skipped: `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
+endpoint).
 
 Test setup: every cached test context has its own connection pool, so the test container allows 400 connections and
 each pool holds at most 5 (`PostgresTestContainerInitializer`); with the defaults (100 and 10) the later contexts in a
