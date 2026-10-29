@@ -14,6 +14,8 @@ import { config as UserListing } from "ee/pages/AdminSettings/config//userlistin
 import { config as AuditLogsConfig } from "ee/pages/AdminSettings/config/auditlogs";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- Ask AI is CE-owned; CE cannot add an ee/ shim (pre-push architecture guard).
 import { config as AIConfig } from "ce/pages/AdminSettings/config/ai";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- fork-owned page, no ee/ variant.
+import { config as RolesConfig } from "ce/pages/AdminSettings/config/roles";
 
 import { selectFeatureFlags } from "ee/selectors/featureFlagsSelectors";
 import store from "store";
@@ -53,6 +55,8 @@ if (isSuperUser && isMultiOrgEnabled)
   ConfigFactory.register(getMcpServerConfig(isMultiOrgEnabled));
 
 // User management categories
+if (isSuperUser) ConfigFactory.register(RolesConfig);
+
 if (isSuperUser) ConfigFactory.register(UserSettings);
 
 if (isSuperUser) ConfigFactory.register(Authentication);
