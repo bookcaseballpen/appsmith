@@ -33,7 +33,8 @@ import {
 } from "constants/routes";
 import WorkspaceLoader from "pages/workspace/loader";
 import ApplicationListLoader from "pages/Applications/loader";
-import AppIDE from "pages/AppIDE/AppIDELoader";
+// Every builder route goes through the role guard: Users are sent to view mode.
+import AppIDE from "pages/AppIDE/RequireEditRole";
 import AppViewerLoader from "pages/AppViewer/loader";
 import LandingScreen from "../LandingScreen";
 import UserAuth from "pages/UserAuth";

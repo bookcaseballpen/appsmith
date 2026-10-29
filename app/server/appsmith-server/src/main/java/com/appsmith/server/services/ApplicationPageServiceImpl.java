@@ -7,6 +7,8 @@ import com.appsmith.server.clonepage.ClonePageService;
 import com.appsmith.server.domains.ActionCollection;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.NewAction;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.CommonGitFileUtils;
 import com.appsmith.server.helpers.DSLMigrationUtils;
 import com.appsmith.server.layouts.UpdateLayoutService;
@@ -20,6 +22,7 @@ import com.appsmith.server.repositories.DatasourceRepository;
 import com.appsmith.server.repositories.NewActionRepository;
 import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ce.ApplicationPageServiceCEImpl;
 import com.appsmith.server.solutions.ActionPermission;
 import com.appsmith.server.solutions.ApplicationPermission;
@@ -30,12 +33,19 @@ import com.appsmith.server.staticurl.StaticUrlService;
 import com.appsmith.server.themes.base.ThemeService;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import reactor.core.publisher.Mono;
 
 @Service
 @Slf4j
 public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl implements ApplicationPageService {
+
+    private final ApplicationRepository applicationRepository;
+    private final ApplicationPermission applicationPermission;
+    private final PublishApproval publishApproval;
+
     public ApplicationPageServiceImpl(
             WorkspaceService workspaceService,
             ApplicationService applicationService,
@@ -68,7 +78,8 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
             ObservationRegistry observationRegistry,
             CacheableRepositoryHelper cacheableRepositoryHelper,
             PostPublishHookCoordinatorService<Application> postApplicationPublishHookCoordinatorService,
-            UserDataService userDataService) {
+            UserDataService userDataService,
+            PublishApproval publishApproval) {
         super(
                 workspaceService,
                 applicationService,
@@ -102,5 +113,57 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
                 cacheableRepositoryHelper,
                 postApplicationPublishHookCoordinatorService,
                 userDataService);
+        this.applicationRepository = applicationRepository;
+        this.applicationPermission = applicationPermission;
+        this.publishApproval = publishApproval;
+    }
+
+    /**
+     * CE deploys with edit permission alone. Here a manual deploy also needs the publish permission, which the
+     * developer role lacks (see {@link com.appsmith.server.roles.InstanceRole}), so only approvers and administrators
+     * deploy. Internal publishes (fork) keep CE's edit check and are decided in {@link #publishWithoutPermissionChecks}.
+     */
+    @Override
+    public Mono<Application> publish(String branchedApplicationId, boolean isPublishedManually) {
+        if (!isPublishedManually) {
+            return super.publish(branchedApplicationId, false);
+        }
+        return applicationRepository
+                .findById(branchedApplicationId, applicationPermission.getPublishPermission())
+                .switchIfEmpty(Mono.error(
+                        new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, "Publish application")))
+                .then(Mono.defer(() -> super.publish(branchedApplicationId, true)));
+    }
+
+    /**
+     * Every publish ends here: the Deploy button, git commit-and-deploy, and the server's own publishes after creating,
+     * duplicating or forking an app and after a git pull, merge, discard or branch checkout. For a caller who cannot
+     * publish (DEV):
+     * <ul>
+     *   <li>on an app that is not live yet, the publish goes ahead, since users cannot see that app, but never as a
+     *       manual one, so the app does not become live;</li>
+     *   <li>on a live app, the publish is skipped: the change stays in edit mode until an approver publishes it.</li>
+     * </ul>
+     * Neither case fails, because git commit publishes after the commit is made (and before its lock is released). The
+     * Deploy button is refused earlier, in {@link #publish}. Calls without a signed-in user are the server's own and
+     * are not limited.
+     */
+    @Override
+    public Mono<Application> publishWithoutPermissionChecks(String applicationId, boolean isPublishedManually) {
+        return ReactiveSecurityContextHolder.getContext()
+                .hasElement()
+                .flatMap(signedIn -> signedIn ? publishApproval.canPublish(applicationId) : Mono.just(true))
+                .flatMap(canPublish -> {
+                    if (canPublish) {
+                        return super.publishWithoutPermissionChecks(applicationId, isPublishedManually);
+                    }
+                    return publishApproval.isLive(applicationId).flatMap(isLive -> {
+                        if (!isLive) {
+                            return super.publishWithoutPermissionChecks(applicationId, false);
+                        }
+                        log.debug("Not publishing live application {}: the caller cannot publish", applicationId);
+                        return applicationRepository.findById(applicationId);
+                    });
+                });
     }
 }

@@ -213,27 +213,30 @@ export const DSFormHeader = (props: DSFormHeaderProps) => {
               </StyledMenu>
             </MenuWrapper>
           )}
-          <Button
-            className="t--edit-datasource"
-            isDisabled={isEditDisabled}
-            kind="secondary"
-            onClick={() => {
-              if (isEditDisabled) return;
+          {/* Fork: only users who may change the datasource (Admins) get Edit. */}
+          {canManageDatasource && (
+            <Button
+              className="t--edit-datasource"
+              isDisabled={isEditDisabled}
+              kind="secondary"
+              onClick={() => {
+                if (isEditDisabled) return;
 
-              setDatasourceViewMode({
-                datasourceId: datasourceId,
-                viewMode: false,
-              });
-              AnalyticsUtil.logEvent("EDIT_DATASOURCE_CLICK", {
-                datasourceId: datasourceId,
-                pluginName,
-                entryPoint: DatasourceEditEntryPoints.DATASOURCE_FORM_EDIT,
-              });
-            }}
-            size="md"
-          >
-            {createMessage(EDIT)}
-          </Button>
+                setDatasourceViewMode({
+                  datasourceId: datasourceId,
+                  viewMode: false,
+                });
+                AnalyticsUtil.logEvent("EDIT_DATASOURCE_CLICK", {
+                  datasourceId: datasourceId,
+                  pluginName,
+                  entryPoint: DatasourceEditEntryPoints.DATASOURCE_FORM_EDIT,
+                });
+              }}
+              size="md"
+            >
+              {createMessage(EDIT)}
+            </Button>
+          )}
           {headerActions && headerActions.newActionButton
             ? headerActions.newActionButton
             : null}
