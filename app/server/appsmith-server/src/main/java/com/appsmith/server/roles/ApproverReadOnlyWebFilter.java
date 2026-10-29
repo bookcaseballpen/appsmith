@@ -28,7 +28,7 @@ import java.util.Set;
 /**
  * Keeps the APPROVER role read-only. An approver holds manage permission on apps so the editor can load the
  * unpublished version for review, but every API call that changes something is refused here, except publishing,
- * running queries and the user's own session housekeeping.
+ * approving or rejecting a release, running queries and the user's own session housekeeping.
  *
  * <p>Running queries ({@code POST /api/v1/actions/execute}) is allowed on purpose: an approver tests the unpublished
  * app in preview before publishing it, the same way users run the queries of published apps. It runs saved queries
@@ -56,6 +56,9 @@ public class ApproverReadOnlyWebFilter implements WebFilter {
 
     private static final List<Rule> APPROVER_WRITES = List.of(
             new Rule(HttpMethod.POST, PARSER.parse("/api/v1/applications/publish/{applicationId}")),
+            // Release approvals: approving publishes, rejecting only records the comment.
+            new Rule(HttpMethod.POST, PARSER.parse("/api/v1/approvals/applications/{applicationId}/approve")),
+            new Rule(HttpMethod.POST, PARSER.parse("/api/v1/approvals/applications/{applicationId}/reject")),
             // Preview: see the class comment.
             new Rule(HttpMethod.POST, PARSER.parse("/api/v1/actions/execute")),
             new Rule(HttpMethod.POST, PARSER.parse("/api/v1/logout")),

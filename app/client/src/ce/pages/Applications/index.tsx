@@ -95,6 +95,8 @@ import ApplicationCardList from "ee/pages/Applications/ApplicationCardList";
 import CreateNewAppsOption from "ee/pages/Applications/CreateNewAppsOption";
 import { usePackage } from "ee/pages/Applications/helpers";
 import PackageCardList from "ee/pages/Applications/PackageCardList";
+// Fork: releases waiting for approval, for Approvers and Admins.
+import PendingApprovals from "ee/pages/Applications/PendingApprovals";
 import ResourceListLoader from "ee/pages/Applications/ResourceListLoader";
 import WorkflowCardList from "ee/pages/Applications/WorkflowCardList";
 import WorkspaceAction from "ee/pages/Applications/WorkspaceAction";
@@ -1064,6 +1066,7 @@ export function ApplicationsSection(props: any) {
             <ResourceListLoader isMobile={isMobile} resources={applications} />
           ) : (
             <>
+              <PendingApprovals />
               {!isAiAgentInstanceEnabled && (
                 <ApplicationCardList
                   applications={nonAnvilApplications}

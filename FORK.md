@@ -68,6 +68,69 @@ It also refuses the GET endpoints that change state: git pull, git status, git f
 `pruneRefs=true`, git commit history (it checks out a branch), deploy key generation, and the datasource OAuth
 callback. It fails closed when the caller's role cannot be resolved.
 
+## Release approvals
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/approvals/` and the domain
+`domains/ApplicationApproval.java` (collection `applicationApproval`, one document per application or git branch, its
+id is the application id). Client: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/approvals.ts`,
+`src/ee/components/approvals/`, `src/ee/pages/AppIDE/layouts/components/Header/ReleaseControls.tsx` and
+`src/ee/pages/Applications/PendingApprovals.tsx`. Notifications are in-app only (no email).
+
+### The flow
+
+| Status | Means |
+| --- | --- |
+| Draft | Nothing submitted, a request was cancelled, or the approved version has changed since. |
+| Submitted ("Waiting for approval") | A Dev or Admin submitted the current edit-mode version. |
+| Approved | An Approver or Admin approved it; it is published and live. |
+| Rejected | An Approver or Admin rejected it with a comment; the Dev sees the comment until the next submit. |
+
+- **Dev:** the editor header shows "Submit for approval" where the others have Deploy, and a status chip. Clicking the
+  chip shows the reject comment, why a request was cancelled, and the last history entries.
+- **Approver / Admin:** the home page shows "Waiting for approval" with a count badge, and per app Preview (the editor,
+  which opens read-only for Approvers), Approve and Reject (a comment is required). Admins and Approvers still have
+  Deploy in the editor.
+- The app keeps a history of the last 20 events (submitted, approved, rejected, cancelled): who, when and the comment.
+
+| Endpoint | Who |
+| --- | --- |
+| `GET /api/v1/approvals/applications/{applicationId}` | Anyone who can open the app in the editor |
+| `POST /api/v1/approvals/applications/{applicationId}/submit` | Dev, Admin |
+| `POST /api/v1/approvals/applications/{applicationId}/approve` | Approver, Admin; never an MCP token |
+| `POST /api/v1/approvals/applications/{applicationId}/reject` (body `{"comment": "..."}`, required) | Approver, Admin; never an MCP token |
+| `GET /api/v1/approvals/pending` | Approver, Admin |
+
+`ApproverReadOnlyWebFilter` lets Approvers call approve and reject.
+
+### The frozen version and automatic cancellation
+
+Submitting stores a SHA-256 fingerprint (`ApprovalFingerprint`) of everything a publish copies from edit mode to view
+mode: the page list, every page with its layouts and DSL, every query and JS object, the app layout and settings, the
+custom JS libraries and the theme's content. Timestamps, permissions and "saved by" fields are left out and entries
+are sorted, so the same content always gives the same value. The first 12 characters are shown as the "version".
+
+- **Cancellation:** every read of the state (the editor chip, which refreshes every 15 s while a request is open, the
+  approvers' list, approve and reject) compares the stored fingerprint with the app as it is now. On a mismatch a
+  submitted request is cancelled (history: "The app changed after it was submitted") and the app is a draft again; an
+  approved app becomes a draft. Because it compares stored content rather than hooking write paths, it catches every
+  kind of change: the editor, import, git pull, AI and MCP.
+- **Approve publishes exactly the submitted version:** it refuses when the edit-mode fingerprint no longer matches,
+  then publishes through the normal publish path (`ApplicationPageService.publish(id, true)`, so `lastDeployedAt` is
+  set and Users see the app), then checks that the view-mode copy has the submitted fingerprint. If a change landed
+  while the publish ran, the app is taken offline (`PublishApproval.markNotLive`), the request is cancelled and
+  approve answers an error, so Users never see an unapproved version.
+- State changes are compare-and-set on a `revision` field, so two reviewers (or a review and a resubmit) cannot both
+  win.
+- A DSL migration on page load after a server upgrade changes the stored DSL, so it also cancels an open request (the
+  Dev submits again).
+
+### MCP
+
+`submit_for_approval` and `get_approval_status` are MCP tools (`app/client/packages/mcp/src/ee/extensions/`), so an AI
+can submit once the Dev has finished UAT. Approve and reject are not MCP tools, the MCP allowlist
+(`filters/McpAllowlistExtensions.java`) only lets an MCP token reach the status and submit routes, and the service
+refuses approve and reject for MCP tokens as well.
+
 ## Cherry-picking upstream fixes
 
 1. Enable conflict-resolution reuse once per clone: `git config rerere.enabled true`.
@@ -506,3 +569,20 @@ Server plugins (`app/server/appsmith-plugins/`):
 - Server tests (`src/test/java/com/appsmith/server/`): `searchentities/SearchEntitySolutionCETest.java`,
   `services/DatasourceStorageServiceTest.java`, `services/McpTokenServiceImplTest.java`,
   `services/UserWorkspaceServiceTest.java`, `services/WorkspaceServiceTest.java`
+
+### Release approvals
+
+- New server files: `approvals/` (controller, service, fingerprint, DTO, status, event),
+  `domains/ApplicationApproval.java`, `repositories/ApplicationApprovalRepository.java`,
+  `CustomApplicationApprovalRepository.java`, `CustomApplicationApprovalRepositoryImpl.java`, and the test
+  `approvals/ApplicationApprovalServiceTest`.
+- Edited server files: `constants/Url.java` (`APPROVAL_URL`), `filters/McpAllowlistExtensions.java` (the MCP rules;
+  an empty subclass upstream), `roles/ApproverReadOnlyWebFilter.java`.
+- New client files: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/approvals.ts` (and `.test.ts`),
+  `src/ee/components/approvals/ApprovalStatusChip.tsx`,
+  `src/ee/pages/AppIDE/layouts/components/Header/ReleaseControls.tsx` (and `.test.tsx`), `useApplicationApproval.ts`,
+  `src/ee/pages/Applications/PendingApprovals.tsx` (and `.test.tsx`).
+- Edited upstream client files: `src/pages/AppIDE/layouts/components/Header/index.tsx` (`ReleaseControls` in place of
+  `DeployButton`), `src/ce/pages/Applications/index.tsx` (`PendingApprovals` above the app list).
+- MCP: `packages/mcp/src/ee/extensions/api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts` (re-exports of `ce/`
+  upstream, now the fork's implementation), the test `approvals.test.ts`, and `packages/mcp/README.md`.
