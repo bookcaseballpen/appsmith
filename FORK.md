@@ -164,8 +164,10 @@ editor is read-only.":
   (`POST /api/v1/applications/import/partial/block`) and template merge.
 
 Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
-import), export, publish, git, datasources, app create, clone, fork, delete and snapshots, and user and admin
-settings. The Approver filter still applies on top.
+import), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
+app create, clone, fork, delete and snapshots, and user and admin settings. The Approver filter still applies on top.
+This filter does not refuse `POST /api/v1/applications/publish/{id}`, but the publish service does, for every role:
+an app is published only by approving a submitted release (Submit -> Approve, see "Publishing").
 
 How MCP is told apart: the MCP service (`app/client/packages/mcp`) calls the server with `Authorization: Bearer mcp_...`
 and the `X-Appsmith-Mcp-Internal` header carrying `APPSMITH_MCP_INTERNAL_SECRET`. Only then does
