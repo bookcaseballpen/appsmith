@@ -4,6 +4,7 @@ import com.appsmith.external.models.ActionConfiguration;
 import com.appsmith.external.models.ActionDTO;
 import com.appsmith.external.models.Datasource;
 import com.appsmith.external.models.DatasourceConfiguration;
+import com.appsmith.external.models.DatasourceStorage;
 import com.appsmith.external.models.DatasourceStorageDTO;
 import com.appsmith.external.models.Property;
 import com.appsmith.server.acl.AclPermission;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -444,6 +446,47 @@ class InstanceRolePermissionsTest {
         assertThat(error).isEmpty();
         assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
                 .isNotNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void should_letDevImportOnlyAppsUsingExistingDatasources_when_devImportsApp(boolean datasourceExists) {
+        // Given
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        DatasourceStorage reference = new DatasourceStorage();
+        reference.setName(datasourceExists ? datasource.getName() : unique("missing-datasource"));
+        reference.setPluginId("restapi-plugin");
+        export.setDatasourceList(List.of(reference));
+        export.getExportedApplication().setName(unique("imported-by-dev"));
+
+        // When
+        Optional<AppsmithError> error = runAs(
+                        importService
+                                .importNewArtifactInWorkspaceFromJson(workspaceId, export)
+                                .map(imported -> Optional.<AppsmithError>empty()),
+                        users.get(InstanceRole.DEV))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .block();
+
+        // Then
+        if (datasourceExists) {
+            assertThat(error).isEmpty();
+            String adminView = new String(clientFor(InstanceRole.ADMIN)
+                    .get()
+                    .uri("/api/v1/datasources?workspaceId={workspaceId}", workspaceId)
+                    .exchange()
+                    .expectBody()
+                    .returnResult()
+                    .getResponseBodyContent());
+            assertThat(adminView).contains(SECRET_HOST);
+        } else {
+            assertThat(error).isPresent();
+        }
     }
 
     @ParameterizedTest
