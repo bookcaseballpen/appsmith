@@ -14,12 +14,12 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -106,17 +106,18 @@ public class CustomApplicationRepositoryCEImpl extends BaseAppsmithRepositoryImp
         // Since this can only happen during edit, the page in question is unpublished page. Hence the update should
         // be to pages and not publishedPages
 
-        final Mono<Integer> setAllAsNonDefaultMono = queryBuilder()
-                .byId(applicationId)
-                .criteria(Bridge.isTrue("pages.isDefault"))
-                .updateFirst(Bridge.update().set("pages.$.isDefault", false));
-
-        final Mono<Integer> setDefaultMono = queryBuilder()
-                .byId(applicationId)
-                .criteria(Bridge.equal("pages._id", new ObjectId(pageId)))
-                .updateFirst(Bridge.update().set("pages.$.isDefault", true));
-
-        return setAllAsNonDefaultMono.then(setDefaultMono).then();
+        // Fork: one UPDATE that sets isDefault on every page, true only for pageId (Mongo used two positional
+        // updates, which PostgreSQL has no equivalent for). The order of the pages is kept.
+        return getPostgresOperations()
+                .write(em -> em.createNativeQuery("UPDATE application SET pages = (SELECT jsonb_agg(jsonb_set(e,"
+                                + " '{isDefault}', to_jsonb(COALESCE(e ->> 'id' = ?1, FALSE))) ORDER BY i)"
+                                + " FROM jsonb_array_elements(pages) WITH ORDINALITY AS p(e, i)), updated_at = ?2"
+                                + " WHERE id = ?3 AND deleted_at IS NULL AND jsonb_typeof(pages) = 'array'")
+                        .setParameter(1, pageId)
+                        .setParameter(2, Instant.now())
+                        .setParameter(3, applicationId)
+                        .executeUpdate())
+                .then();
     }
 
     @Override

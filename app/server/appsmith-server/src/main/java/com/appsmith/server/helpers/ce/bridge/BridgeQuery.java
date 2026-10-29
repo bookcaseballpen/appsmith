@@ -117,6 +117,13 @@ public final class BridgeQuery<T extends BaseDomain> {
     }
 
     /**
+     * Fork: the array at {@code key} has fewer than {@code size} elements (replaces Mongo's "key.N does not exist").
+     */
+    public BridgeQuery<T> sizeLessThan(@NonNull String key, int size) {
+        return add(Op.SIZE_LESS_THAN, key, size);
+    }
+
+    /**
      * Fork: a check with any operator and value, for the derived-query engine of the repositories.
      */
     public BridgeQuery<T> check(@NonNull Op op, @NonNull String key, Object value) {

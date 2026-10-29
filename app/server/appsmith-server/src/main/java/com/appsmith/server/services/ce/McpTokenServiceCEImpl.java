@@ -19,7 +19,8 @@ import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.OrganizationService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.mongodb.core.query.Update;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -218,8 +219,8 @@ public class McpTokenServiceCEImpl implements McpTokenServiceCE {
      */
     private Mono<IssuedToken> rotateInStore(McpKey key) {
         Instant now = Instant.now();
-        Update retireActive =
-                new Update().set(McpToken.Fields.status, McpTokenStatus.ROTATED).set(McpToken.Fields.actedAt, now);
+        BridgeUpdate retireActive =
+                Bridge.update().set(McpToken.Fields.status, McpTokenStatus.ROTATED).set(McpToken.Fields.actedAt, now);
         return mcpTokenRepository
                 .updateByMcpKeyIdAndStatus(key.getId(), McpTokenStatus.ACTIVE, retireActive)
                 .then(issueToken(key));

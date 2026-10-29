@@ -8,5 +8,5 @@ import lombok.Data;
 @AllArgsConstructor
 public class PluginTypeAndCountDTO {
     private PluginType pluginType;
-    private Long count;
+    private Integer count;
 }

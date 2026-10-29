@@ -13,32 +13,24 @@ import com.appsmith.server.repositories.BaseAppsmithRepositoryImpl;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
-import org.springframework.data.mongodb.core.aggregation.Fields;
-import org.springframework.data.mongodb.core.query.Criteria;
 import reactor.core.observability.micrometer.Micrometer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.appsmith.external.constants.spans.ce.PageSpanCE.FETCH_PAGES_WITH_BASE_ID;
 import static com.appsmith.external.constants.spans.ce.PageSpanCE.FETCH_PAGE_FROM_DB;
 import static com.appsmith.external.helpers.StringUtils.dotted;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 @Slf4j
 @RequiredArgsConstructor
 public class CustomNewPageRepositoryCEImpl extends BaseAppsmithRepositoryImpl<NewPage>
         implements CustomNewPageRepositoryCE {
 
-    private final MongoTemplate mongoTemplate;
     private final ObservationRegistry observationRegistry;
 
     @Override
@@ -247,33 +239,16 @@ public class CustomNewPageRepositoryCEImpl extends BaseAppsmithRepositoryImpl<Ne
 
     @Override
     public Mono<Void> publishPages(Collection<String> pageIds, AclPermission permission) {
-        Criteria applicationIdCriteria = where(NewPage.Fields.id).in(pageIds);
-
-        Mono<Set<String>> permissionGroupsMono = getCurrentUserPermissionGroupsIfRequired(permission);
-
-        return permissionGroupsMono.flatMap(permissionGroups -> {
-            return Mono.fromCallable(() -> {
-                        AggregationOperation matchAggregationWithPermission = null;
-                        if (permission == null) {
-                            matchAggregationWithPermission =
-                                    Aggregation.match(new Criteria().andOperator(notDeleted()));
-                        } else {
-                            matchAggregationWithPermission = Aggregation.match(
-                                    new Criteria().andOperator(notDeleted(), userAcl(permissionGroups, permission)));
-                        }
-                        AggregationOperation matchAggregation = Aggregation.match(applicationIdCriteria);
-                        AggregationOperation wholeProjection = Aggregation.project(NewPage.class);
-                        AggregationOperation addFieldsOperation = Aggregation.addFields()
-                                .addField(NewPage.Fields.publishedPage)
-                                .withValueOf(Fields.field(NewPage.Fields.unpublishedPage))
-                                .build();
-                        Aggregation combinedAggregation = Aggregation.newAggregation(
-                                matchAggregation, matchAggregationWithPermission, wholeProjection, addFieldsOperation);
-                        return mongoTemplate.aggregate(combinedAggregation, NewPage.class, NewPage.class);
-                    })
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(updatedResults -> bulkUpdate(updatedResults.getMappedResults()));
-        });
+        // Fork: one UPDATE that copies the unpublished page over the published one (Mongo used an aggregation and a
+        // bulk write).
+        final BridgeUpdate update = Bridge.update()
+                .setToValueFromField(NewPage.Fields.publishedPage, NewPage.Fields.unpublishedPage)
+                .set(NewPage.Fields.updatedAt, Instant.now());
+        return queryBuilder()
+                .criteria(Bridge.in(NewPage.Fields.id, pageIds))
+                .permission(permission)
+                .updateAll(update)
+                .then();
     }
 
     @Override

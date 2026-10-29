@@ -7,7 +7,9 @@ import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.helpers.ce.bridge.Check;
 import com.appsmith.server.helpers.ce.bridge.Op;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
@@ -253,6 +255,8 @@ public final class SqlRenderer {
             case GREATER_THAN_OR_EQUAL -> scalarCompare(path, ">=", value);
             case LESS_THAN -> scalarCompare(path, "<", value);
             case LESS_THAN_OR_EQUAL -> scalarCompare(path, "<=", value);
+            case SIZE_LESS_THAN -> "(CASE WHEN jsonb_typeof(" + nestedValue(path) + ") = 'array' THEN jsonb_array_length("
+                    + nestedValue(path) + ") ELSE 0 END) < " + param(value);
         };
     }
 
@@ -334,13 +338,31 @@ public final class SqlRenderer {
     }
 
     private String arrayChange(String array, BridgeUpdate.Kind kind, Object value) {
-        final String element = jsonParam(value);
         return switch (kind) {
-            case PUSH -> "(" + array + " || jsonb_build_array(" + element + "))";
-            case ADD_TO_SET -> "(CASE WHEN " + array + " @> jsonb_build_array(" + element + ") THEN " + array
-                    + " ELSE " + array + " || jsonb_build_array(" + element + ") END)";
-            case PULL -> "COALESCE((SELECT jsonb_agg(e) FROM jsonb_array_elements(" + array + ") AS e WHERE e <> "
-                    + element + "), '[]'::jsonb)";
+            case PUSH -> "(" + array + " || jsonb_build_array(" + jsonParam(value) + "))";
+            case ADD_TO_SET -> {
+                final String element = jsonParam(value);
+                yield "(CASE WHEN " + array + " @> jsonb_build_array(" + element + ") THEN " + array + " ELSE "
+                        + array + " || jsonb_build_array(" + element + ") END)";
+            }
+            case PULL -> {
+                // Like Mongo's $pull: an object value removes the elements that contain all its non-null fields.
+                final JsonNode node = JSON.valueToTree(value);
+                if (node instanceof ObjectNode object) {
+                    final List<String> nullFields = new ArrayList<>();
+                    object.fieldNames().forEachRemaining(name -> {
+                        if (object.get(name).isNull()) {
+                            nullFields.add(name);
+                        }
+                    });
+                    object.remove(nullFields);
+                    final String pattern = "CAST(" + param(object.toString()) + " AS jsonb)";
+                    yield "COALESCE((SELECT jsonb_agg(e) FROM jsonb_array_elements(" + array
+                            + ") AS e WHERE NOT (jsonb_typeof(e) = 'object' AND e @> " + pattern + ")), '[]'::jsonb)";
+                }
+                yield "COALESCE((SELECT jsonb_agg(e) FROM jsonb_array_elements(" + array + ") AS e WHERE e <> "
+                        + jsonParam(value) + "), '[]'::jsonb)";
+            }
             default -> throw new IllegalArgumentException(kind.name());
         };
     }

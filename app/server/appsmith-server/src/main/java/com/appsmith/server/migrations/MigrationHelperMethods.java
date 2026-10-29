@@ -25,9 +25,6 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.minidev.json.JSONObject;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.util.ObjectUtils;
 
 import java.time.Instant;
@@ -48,8 +45,6 @@ import static com.appsmith.external.constants.PluginConstants.PackageName.GRAPHQ
 import static com.appsmith.external.constants.PluginConstants.PackageName.REST_API_PLUGIN;
 import static com.appsmith.server.constants.ResourceModes.EDIT;
 import static com.appsmith.server.constants.ResourceModes.VIEW;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
-import static org.springframework.data.mongodb.core.query.Query.query;
 
 public class MigrationHelperMethods {
 
@@ -210,43 +205,8 @@ public class MigrationHelperMethods {
         }
     }
 
-    public static void evictPermissionCacheForUsers(
-            Set<String> userIds, MongoTemplate mongoTemplate, CacheableRepositoryHelper cacheableRepositoryHelper) {
-
-        if (userIds == null || userIds.isEmpty()) {
-            // Nothing to do here.
-            return;
-        }
-
-        userIds.forEach(userId -> {
-            Query query = new Query(new Criteria(User.Fields.id).is(userId));
-            User user = mongoTemplate.findOne(query, User.class);
-            if (user != null) {
-                // blocking call for cache eviction to ensure its subscribed immediately before proceeding further.
-                cacheableRepositoryHelper
-                        .evictPermissionGroupsUser(user.getEmail(), user.getOrganizationId())
-                        .block();
-            }
-        });
-    }
-
-    public static Query getQueryToFetchAllDomainObjectsWhichAreNotDeletedUsingPluginId(Plugin plugin) {
-        Criteria pluginIdMatchesSuppliedPluginId = where("pluginId").is(plugin.getId());
-        Criteria isNotDeleted = where("deleted").ne(true);
-        return query((new Criteria()).andOperator(pluginIdMatchesSuppliedPluginId, isNotDeleted));
-    }
-
-    /**
-     * Here 'id' refers to the ObjectId which is used to uniquely identify each Mongo document. 'path' refers to the
-     * path in the Query DSL object that indicates which field in a document should be matched against the `id`.
-     * `type` is a POJO class type that indicates which collection we are interested in. eg. path=QNewAction
-     * .newAction.id, type=NewAction.class
-     */
-    public static <T extends BaseDomain> List<T> fetchAllDomainObjectsUsingId(
-            String id, MongoTemplate mongoTemplate, String path, Class<T> type) {
-        final List<T> domainObject = mongoTemplate.find(query(where(path).is(id)), type);
-        return domainObject;
-    }
+    // Fork: the Mongo-only helpers of the old Mongock migrations (evictPermissionCacheForUsers and the plugin/id
+    // queries) are removed with them; see FORK.md, "PostgreSQL".
 
     /**
      * This method takes customJSLibList from application JSON, checks if an entry for XML parser exists,

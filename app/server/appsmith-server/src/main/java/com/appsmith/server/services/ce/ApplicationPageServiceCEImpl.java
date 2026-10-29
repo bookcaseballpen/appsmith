@@ -71,7 +71,7 @@ import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.minidev.json.JSONObject;
-import org.bson.types.ObjectId;
+import com.appsmith.external.helpers.ObjectIds;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.util.StringUtils;
@@ -166,7 +166,7 @@ public class ApplicationPageServiceCEImpl implements ApplicationPageServiceCE {
 
         for (final Layout layout : layoutList) {
             if (StringUtils.isEmpty(layout.getId())) {
-                layout.setId(new ObjectId().toString());
+                layout.setId(ObjectIds.newId());
             }
         }
 
@@ -649,7 +649,7 @@ public class ApplicationPageServiceCEImpl implements ApplicationPageServiceCE {
                 .flatMap(page -> Flux.fromIterable(page.getLayouts())
                         .map(layout -> {
                             Layout newLayout = new Layout();
-                            String id = new ObjectId().toString();
+                            String id = ObjectIds.newId();
                             newLayout.setId(id);
                             newLayout.setMongoEscapedWidgetNames(layout.getMongoEscapedWidgetNames());
                             // Regenerate widget ids so the cloned page does not collide with the

@@ -45,7 +45,9 @@ public class AppsmithRepositoryFactory extends ReactiveRepositoryFactorySupport 
     protected Optional<QueryLookupStrategy> getQueryLookupStrategy(
             QueryLookupStrategy.Key key, ValueExpressionDelegate valueExpressionDelegate) {
         return Optional.of((method, metadata, factory, namedQueries) -> new PartTreeAppsmithQuery(
-                new QueryMethod(method, metadata, factory), (Class<? extends BaseDomain>) metadata.getDomainType(),
+                new QueryMethod(method, metadata, factory),
+                method.getReturnType(),
+                (Class<? extends BaseDomain>) metadata.getDomainType(),
                 postgresOperations));
     }
 }

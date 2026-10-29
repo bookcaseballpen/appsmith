@@ -5,18 +5,11 @@ import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.projections.EmailOnly;
 import com.appsmith.server.projections.IdOnly;
 import com.appsmith.server.repositories.BaseAppsmithRepositoryImpl;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.Document;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.core.FindAndModifyOptions;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -27,11 +20,8 @@ import static com.appsmith.server.helpers.ce.bridge.Bridge.notExists;
 @Slf4j
 public class CustomUserRepositoryCEImpl extends BaseAppsmithRepositoryImpl<User> implements CustomUserRepositoryCE {
 
-    private static final String SUPER_USER_SETUP_COLLECTION = "superUserSetupLock";
+    private static final String SUPER_USER_SETUP_TABLE = "super_user_setup_lock";
     private static final String SUPER_USER_SETUP_LOCK_ID = "super-user-setup";
-
-    @Autowired
-    private ReactiveMongoOperations reactiveMongoOperations;
 
     @Override
     public Mono<User> findByEmailAndOrganizationId(String email, String organizationId) {
@@ -59,43 +49,28 @@ public class CustomUserRepositoryCEImpl extends BaseAppsmithRepositoryImpl<User>
     }
 
     /**
-     * Atomically claims the super user creation slot using MongoDB's findAndModify with upsert.
+     * Atomically claims the super user creation slot.
      *
-     * This uses a dedicated collection with a fixed _id. The findAndModify operation with upsert=true
-     * is atomic at the document level in MongoDB: only the first request to attempt the upsert will
-     * succeed (returning null, meaning no prior document existed). All subsequent requests will find
-     * the existing document and return it, indicating the slot is already claimed.
-     *
-     * This works on both standalone MongoDB and replica sets — no transaction support required.
+     * Fork: a row with a fixed id in the {@code super_user_setup_lock} table. The INSERT ... ON CONFLICT DO NOTHING
+     * is atomic: only the first request inserts the row (one row affected); all later requests insert nothing,
+     * which means the slot is already claimed.
      */
     @Override
     public Mono<Boolean> claimSuperUserCreationSlot() {
-        Query query = new Query(Criteria.where("_id").is(SUPER_USER_SETUP_LOCK_ID));
-        Update update = new Update()
-                .setOnInsert("_id", SUPER_USER_SETUP_LOCK_ID)
-                .setOnInsert("status", "CLAIMED")
-                .setOnInsert("claimedAt", Instant.now().toString());
-
-        FindAndModifyOptions options =
-                FindAndModifyOptions.options().upsert(true).returnNew(false);
-
-        return reactiveMongoOperations
-                .findAndModify(query, update, options, Document.class, SUPER_USER_SETUP_COLLECTION)
-                .hasElement()
-                .map(documentExisted -> !documentExisted)
-                .onErrorResume(e -> {
-                    if (e instanceof org.springframework.dao.DuplicateKeyException) {
-                        return Mono.just(false);
-                    }
-                    return Mono.error(e);
-                });
+        return getPostgresOperations().write(em -> em.createNativeQuery("INSERT INTO " + SUPER_USER_SETUP_TABLE
+                                + " (id, status, claimed_at) VALUES (?1, 'CLAIMED', ?2) ON CONFLICT (id) DO NOTHING")
+                        .setParameter(1, SUPER_USER_SETUP_LOCK_ID)
+                        .setParameter(2, Instant.now().toString())
+                        .executeUpdate()
+                == 1);
     }
 
     @Override
     public Mono<Void> releaseSuperUserCreationSlot() {
-        Query query = new Query(Criteria.where("_id").is(SUPER_USER_SETUP_LOCK_ID));
-        return reactiveMongoOperations
-                .remove(query, SUPER_USER_SETUP_COLLECTION)
+        return getPostgresOperations()
+                .write(em -> em.createNativeQuery("DELETE FROM " + SUPER_USER_SETUP_TABLE + " WHERE id = ?1")
+                        .setParameter(1, SUPER_USER_SETUP_LOCK_ID)
+                        .executeUpdate())
                 .then();
     }
 
@@ -109,7 +84,7 @@ public class CustomUserRepositoryCEImpl extends BaseAppsmithRepositoryImpl<User>
     }
 
     @Override
-    public Mono<Integer> updateById(String id, UpdateDefinition updateObj) {
+    public Mono<Integer> updateById(String id, BridgeUpdate updateObj) {
         if (id == null) {
             return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, FieldName.ID));
         }

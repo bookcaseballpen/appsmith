@@ -5,13 +5,13 @@ import com.appsmith.server.configurations.CloudServicesConfig;
 import com.appsmith.server.configurations.CommonConfig;
 import com.appsmith.server.domains.Config;
 import com.appsmith.server.helpers.ce.InstanceConfigHelperCEImpl;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.ConfigService;
 import com.appsmith.server.services.FeatureFlagService;
 import com.appsmith.server.services.OrganizationService;
 import com.appsmith.server.solutions.ReleaseNotesService;
 import org.springframework.context.ApplicationContext;
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -25,7 +25,7 @@ public class InstanceConfigHelperImpl extends InstanceConfigHelperCEImpl impleme
             CloudServicesConfig cloudServicesConfig,
             CommonConfig commonConfig,
             ApplicationContext applicationContext,
-            ReactiveMongoTemplate reactiveMongoTemplate,
+            PostgresOperations postgresOperations,
             FeatureFlagService featureFlagService,
             AnalyticsService analyticsService,
             NetworkUtils networkUtils,
@@ -37,7 +37,7 @@ public class InstanceConfigHelperImpl extends InstanceConfigHelperCEImpl impleme
                 cloudServicesConfig,
                 commonConfig,
                 applicationContext,
-                reactiveMongoTemplate,
+                postgresOperations,
                 featureFlagService,
                 analyticsService,
                 networkUtils,

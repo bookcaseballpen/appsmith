@@ -88,7 +88,14 @@ public class QueryAllParams<T extends BaseDomain> {
         return repo.updateExecute(this, update);
     }
 
-    public QueryAllParams<T> criteria(BridgeQuery<T> c) {
+    /**
+     * Fork: takes a query of any domain type, as the Mongo version took any {@code Criteria}; chained
+     * {@code Bridge.equal(..).equal(..)} calls infer {@code BridgeQuery<BaseDomain>}. The checks are field names, so
+     * they apply to {@code T} as they are.
+     */
+    @SuppressWarnings("unchecked")
+    public QueryAllParams<T> criteria(BridgeQuery<? extends BaseDomain> query) {
+        final BridgeQuery<T> c = (BridgeQuery<T>) query;
         if (c == null) {
             return this;
         }

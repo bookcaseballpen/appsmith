@@ -22,4 +22,6 @@ public enum Op {
     GREATER_THAN_OR_EQUAL,
     LESS_THAN,
     LESS_THAN_OR_EQUAL,
+    /** The array at the key has fewer elements than the value; a missing array counts as empty. */
+    SIZE_LESS_THAN,
 }

@@ -8,7 +8,6 @@ import com.appsmith.server.domains.Layout;
 import com.appsmith.server.domains.ce.LayoutContainer;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonView;
-import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

@@ -2,7 +2,7 @@ package com.appsmith.server.repositories.ce;
 
 import com.appsmith.server.domains.User;
 import com.appsmith.server.repositories.AppsmithRepository;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -13,7 +13,7 @@ public interface CustomUserRepositoryCE extends AppsmithRepository<User> {
     Mono<Boolean> isUsersEmpty();
 
     /**
-     * Atomically claims the super user creation slot using MongoDB's findAndModify with upsert.
+     * Atomically claims the super user creation slot (Fork: an INSERT ... ON CONFLICT DO NOTHING on PostgreSQL).
      * Only the first caller wins — subsequent callers see the existing sentinel document and are rejected.
      * This eliminates the TOCTOU race condition in the super user creation flow.
      *
@@ -30,5 +30,5 @@ public interface CustomUserRepositoryCE extends AppsmithRepository<User> {
 
     Flux<String> getSystemGeneratedUserEmails(String organizationId);
 
-    Mono<Integer> updateById(String id, UpdateDefinition updateObj);
+    Mono<Integer> updateById(String id, BridgeUpdate updateObj);
 }

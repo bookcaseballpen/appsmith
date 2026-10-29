@@ -29,22 +29,27 @@ import static com.appsmith.server.repositories.ce.BaseAppsmithRepositoryCEImpl.n
 public class PartTreeAppsmithQuery<T extends BaseDomain> implements RepositoryQuery {
 
     private final QueryMethod method;
+    private final Class<?> declaredReturnType;
     private final PartTree tree;
     private final Class<T> domainClass;
     private final Class<?> returnedType;
     private final PostgresOperations postgresOperations;
 
-    public PartTreeAppsmithQuery(QueryMethod method, Class<T> domainClass, PostgresOperations postgresOperations) {
+    public PartTreeAppsmithQuery(
+            QueryMethod method,
+            Class<?> declaredReturnType,
+            Class<T> domainClass,
+            PostgresOperations postgresOperations) {
         this.method = method;
+        this.declaredReturnType = declaredReturnType;
         this.domainClass = domainClass;
         this.postgresOperations = postgresOperations;
         this.tree = new PartTree(method.getName(), domainClass);
         this.returnedType = method.getResultProcessor().getReturnedType().getReturnedType();
 
-        final Class<?> wrapper = method.getReturnedObjectType();
-        if (!ReactiveWrappers.isAvailable() || !ReactiveWrappers.supports(method.getReturnType())) {
-            throw new IllegalStateException(
-                    "Derived query " + method + " must return Mono or Flux (got " + wrapper.getName() + ")");
+        if (!ReactiveWrappers.isAvailable() || !ReactiveWrappers.supports(declaredReturnType)) {
+            throw new IllegalStateException("Derived query " + method + " must return Mono or Flux (got "
+                    + declaredReturnType.getName() + ")");
         }
         for (PartTree.OrPart orPart : tree) {
             for (Part part : orPart) {
@@ -132,7 +137,7 @@ public class PartTreeAppsmithQuery<T extends BaseDomain> implements RepositoryQu
         }
 
         final Sort sort = tree.getSort();
-        final boolean single = !method.isCollectionQuery() && !Flux.class.isAssignableFrom(method.getReturnType());
+        final boolean single = !method.isCollectionQuery() && !Flux.class.isAssignableFrom(declaredReturnType);
         final int limit = tree.isLimiting() ? tree.getMaxResults() : 0;
 
         final Flux<?> rows = postgresOperations

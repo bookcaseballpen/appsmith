@@ -27,7 +27,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.bson.types.ObjectId;
+import com.appsmith.external.helpers.ObjectIds;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
@@ -344,7 +344,7 @@ public class NewPageImportableServiceCEImpl implements ImportableServiceCE<NewPa
                 applicationPageService.generateAndSetPagePolicies(importedApplication, newPage.getUnpublishedPage());
                 newPage.setPolicies(newPage.getUnpublishedPage().getPolicies());
                 newPage.getUnpublishedPage().getLayouts().forEach(layout -> {
-                    String layoutId = new ObjectId().toString();
+                    String layoutId = ObjectIds.newId();
                     layout.setId(layoutId);
                 });
             }
