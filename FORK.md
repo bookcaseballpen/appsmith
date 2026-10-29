@@ -148,6 +148,10 @@ refuses approve and reject for MCP tokens as well.
   `CacheableFeatureFlagHelperImpl`) or in new files. Upstream patches land in the `*CE*` classes, so they apply.
 - Where an upstream file must change, keep the edit small and mark it with a `Fork:` comment.
 - One logical change per commit, message prefix `fork(...)`. No repo-wide reformatting.
+- New server code uses only the database-neutral query API (the repositories' `queryBuilder()` / `BridgeQuery` /
+  `BridgeUpdate` and the `Custom*RepositoryImpl` helpers), never raw Mongo types (`org.bson.*`,
+  `org.springframework.data.mongodb.*`, `ReactiveMongoTemplate`, `Criteria`, `Query`, `Update`), because the fork is
+  moving to Postgres. Existing upstream code that uses them stays as it is.
 - Spotless: the pre-commit hook is off in this clone (`core.hooksPath` unset). Format changed server files with
   `mvn spotless:apply -DspotlessFiles=<comma-separated regexes>`, so untouched upstream files stay as they are.
 - `bunfig.toml` and `bun-tests/` exist only so CCPM's merge check (`bun test` at the repo root) passes: bun is
@@ -159,6 +163,38 @@ refuses approve and reject for MCP tokens as well.
 |---|---|---|
 | `APPSMITH_CLOUD_SERVICES_ENABLED` | `false` | Kill switch for cs.appsmith.com. When false, `CloudServicesConfig` returns empty base URLs and every consumer skips its call (see below). Set `true` only to restore upstream behaviour. |
 | `APPSMITH_DISABLE_TELEMETRY` | `true` | Kept for compatibility; telemetry code is removed regardless. `docker.env.sh` now writes `true`. |
+| `APPSMITH_AI_ENABLED` | `false` | Switch for the built-in AI (see "Built-in AI switch" below). MCP is not affected. Read at start-up: restart the server after changing it. |
+
+## Built-in AI switch
+
+The built-in AI features are **off by default**. `APPSMITH_AI_ENABLED=true` (Spring property `appsmith.ai.enabled`,
+`BuiltInAiConfig`) turns them on; they then behave as upstream, with the role gates (Dev and Admin only) still applying.
+
+While it is off:
+
+- The server refuses the built-in AI endpoints with `FEATURE_DISABLED` (HTTP 403, `AE-APP-4030`, "The built-in AI
+  is disabled on this instance."): `POST /api/v1/users/ai-assistant/request` (`AIAssistantServiceImpl`, checked before
+  the role gate) and every `/api/v1/tenants/ai-config` endpoint: get, update, test-connection, fetch-models and
+  test-api-key (`AIConfigServiceImpl`).
+- The server sends the switch to the client as the feature flag `fork_builtin_ai_enabled`
+  (`FeatureFlagServiceImpl.getAllFeatureFlagsForUser`). It is added after the cached flags, so a cached value never
+  wins.
+- The client (`ee/selectors/builtInAiSelectors.ts`, `getIsBuiltInAiEnabled`) hides:
+  - the Ask AI button and the "Ask AI" slash command in the query, JS and property code editors, and the AI side
+    panel (`ee/selectors/aiAssistantSelectors.ts` reports no API key, AI disabled and the panel closed);
+  - the "AI Assistant" admin settings page (`ce/pages/AdminSettings/config/index.ts`);
+  - the "AI Integrations" section of the create-datasource list, including OpenAI, Anthropic and Google AI
+    (`AIPlugins.tsx`; Appsmith AI was already hidden there upstream);
+  - the custom widget builder's AI tab (also behind the upstream flag `release_custom_widget_ai_builder`, false).
+  The client does not request the AI settings, and a prompt that still reaches the saga fails at once.
+- Not covered: datasources of the AI plugins that already exist stay usable in queries (a fresh install has none).
+- MCP (the `/mcp` endpoint, per-user `mcp_` tokens for Dev and Admin, and the "MCP keys" profile page) does not read
+  the switch and works either way.
+
+The upstream integration tests run with `appsmith.ai.enabled=true` (`application-test.properties`); the disabled
+default is covered by `BuiltInAiConfigTest`, `AIAssistantServiceImplTest`, `AIConfigServiceImplTest` and
+`FeatureFlagServiceImplTest`, and on the client by `ee/selectors/aiAssistantSelectors.test.ts`,
+`ce/sagas/AIAssistantSagas.test.ts` and `IntegrationEditor/__tests__/aiPlugins.test.tsx`.
 
 The upstream integration tests run with `appsmith.cloud_services.enabled=true`
 (`app/server/appsmith-server/src/test/resources/application-test.properties`), because they expect cloud services.
@@ -248,6 +284,9 @@ as upstream when the cloud is unreachable.
 | `config_user_session_recordings_enabled` | false | Same as above. |
 
 To change a flag, edit `ForkFeatureFlagDefaults` and this table together.
+
+`fork_builtin_ai_enabled` is not in `ForkFeatureFlagDefaults`: its value is `APPSMITH_AI_ENABLED`, added by
+`FeatureFlagServiceImpl` (see "Built-in AI switch").
 
 ## What the fork turns off, removes or stubs
 
@@ -569,6 +608,21 @@ Server plugins (`app/server/appsmith-plugins/`):
 - Server tests (`src/test/java/com/appsmith/server/`): `searchentities/SearchEntitySolutionCETest.java`,
   `services/DatasourceStorageServiceTest.java`, `services/McpTokenServiceImplTest.java`,
   `services/UserWorkspaceServiceTest.java`, `services/WorkspaceServiceTest.java`
+
+### Built-in AI switch
+
+- New: server `configurations/BuiltInAiConfig.java`, tests `configurations/BuiltInAiConfigTest`,
+  `services/AIAssistantServiceImplTest`, `services/AIConfigServiceImplTest`, `services/FeatureFlagServiceImplTest`;
+  client `src/ce/selectors/builtInAiSelectors.ts`, `src/ee/selectors/builtInAiSelectors.ts`,
+  `src/ee/selectors/aiAssistantSelectors.test.ts`.
+- Edited upstream files: `deploy/docker/fs/opt/appsmith/templates/docker.env.sh`; server
+  `exceptions/AppsmithError.java`, `exceptions/AppsmithErrorCode.java` (`FEATURE_DISABLED`),
+  `services/AIAssistantServiceImpl.java`, `services/AIConfigServiceImpl.java`, `services/FeatureFlagServiceImpl.java`,
+  `resources/application-ee.properties`, test `resources/application-test.properties`; client
+  `src/ce/entities/FeatureFlag.ts`, `src/ee/selectors/aiAssistantSelectors.ts` (was a plain re-export),
+  `src/ce/sagas/AIAssistantSagas.ts` (and `.test.ts`), `src/ce/pages/AdminSettings/config/index.ts`,
+  `src/pages/Editor/IntegrationEditor/AIPlugins.tsx` (and `__tests__/aiPlugins.test.tsx`),
+  `src/pages/Editor/CustomWidgetBuilder/Editor/index.tsx`.
 
 ### Release approvals
 

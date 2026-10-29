@@ -31,6 +31,8 @@ public enum AppsmithErrorCode {
     ACTION_IS_NOT_AUTHORIZED("AE-APP-4026", "Action is not authorized"),
     NO_RESOURCE_FOUND("AE-APP-4027", "No resource found"),
     VALIDATION_FAILURE("AE-APP-4028", "Validation failure"),
+    // Fork: a feature switched off on this instance (for example the built-in AI).
+    FEATURE_DISABLED("AE-APP-4030", "Feature disabled"),
     WORKSPACE_ID_NOT_GIVEN("AE-APP-4031", "Workspace id not given"),
     REMOVE_LAST_WORKSPACE_ADMIN_ERROR("AE-APP-4038", "Remove last workspace admin error"),
     UNKNOWN_PLUGIN_REFERENCE("AE-APP-4052", "Unknown plugin reference"),
