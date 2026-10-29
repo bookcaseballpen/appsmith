@@ -8,6 +8,8 @@
     db      Shared MongoDB replica set (container appsmith-dev-mongo, 127.0.0.1:27017,
             volume appsmith-dev-mongo; one database per worktree) and a Redis for this
             worktree (127.0.0.1:<Port+4>). Both restart with Docker and stay up.
+            With -Db postgres, a PostgreSQL 16 for this worktree (container
+            appsmith-dev-<Name>-postgres, 127.0.0.1:<Port+5>) instead of MongoDB.
     server  Java server on 127.0.0.1:<Port+1> (local JDK 25 + Maven) and RTS on
             127.0.0.1:<Port+2> (local Node). The first run builds every module and the
             plugins; later runs rebuild only appsmith-server and the modules it uses.
@@ -24,6 +26,8 @@
   .\scripts\fork-uat\up.ps1 -Restart server     # rebuild and restart the server after Java changes
 .EXAMPLE
   .\scripts\fork-uat\up.ps1 -Restart server -Full   # also rebuild the plugins
+.EXAMPLE
+  .\scripts\fork-uat\up.ps1 -Db postgres -Port 8280   # internal database on PostgreSQL
 #>
 [CmdletBinding()]
 param(
@@ -33,8 +37,13 @@ param(
   [int]$Port = 8080,
   # Instance name for containers, volumes and logs. Default: the worktree folder name.
   [string]$Name,
-  # MongoDB database name. Default: appsmith_<Name>.
+  # Database name (MongoDB or PostgreSQL). Default: appsmith_<Name>.
   [string]$Database,
+  # Internal database: mongo (the shared appsmith-dev-mongo) or postgres (a PostgreSQL 16
+  # container for this instance on 127.0.0.1:<Port+5>). Default: postgres for a worktree
+  # that has the PostgreSQL port (Flyway migrations in appsmith-server), otherwise mongo.
+  [ValidateSet("mongo", "postgres")]
+  [string]$Db,
   # Run only these steps: db, server, client.
   [ValidateSet("db", "server", "client")]
   [string[]]$Only = @("db", "server", "client"),
@@ -65,6 +74,10 @@ $SeedName = "Dev Admin"
 
 $MongoContainer = "appsmith-dev-mongo"
 $Network = "appsmith-dev"
+# Dev-only password of an instance's PostgreSQL, bound to 127.0.0.1 (local data only, like
+# the encryption password below).
+$PostgresUser = "appsmith"
+$PostgresPassword = "appsmith-dev"
 
 # Windows PowerShell 5.1 doesn't set $PSScriptRoot in parameter defaults.
 if (-not $Source) { $Source = Join-Path $PSScriptRoot "..\.." }
@@ -208,11 +221,17 @@ if ($Restart -and (Test-Path $instanceFile)) {
   $instance = Get-Content -Raw $instanceFile | ConvertFrom-Json
   if (-not $PSBoundParameters.ContainsKey("Port")) { $Port = [int]$instance.port }
   if (-not $PSBoundParameters.ContainsKey("Database")) { $Database = $instance.db }
+  if (-not $PSBoundParameters.ContainsKey("Db") -and $instance.PSObject.Properties["dbKind"]) { $Db = $instance.dbKind }
+}
+if (-not $Db) {
+  $flywayDir = Join-Path $repoRoot "app\server\appsmith-server\src\main\resources\db\migration\postgres"
+  $Db = if (Test-Path $flywayDir) { "postgres" } else { "mongo" }
 }
 
-$ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4 }
+$ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4; postgres = $Port + 5 }
 $prefix = "appsmith-dev-$Name"
 $redisContainer = "$prefix-redis"
+$postgresContainer = "$prefix-postgres"
 $proxyContainer = "$prefix-proxy"
 $clientDir = Join-Path $repoRoot "app\client"
 $serverDir = Join-Path $repoRoot "app\server"
@@ -220,14 +239,19 @@ $rtsDir = Join-Path $clientDir "packages\rts"
 $node = (Get-Command node).Source
 
 # Remembered so down.ps1 and -Restart find the same instance.
-@{ source = $repoRoot; port = $Port; db = $Database; name = $Name } | ConvertTo-Json |
+@{ source = $repoRoot; port = $Port; db = $Database; dbKind = $Db; name = $Name } | ConvertTo-Json |
   Set-Content -Encoding UTF8 $instanceFile
 
 if ($Restart) { $Only = @($Restart) }
 
 Write-Host "Instance $Name ($branch) from $repoRoot"
-Write-Host ("Ports: browser {0}, server {1}, RTS {2}, webpack {3}, Redis {4}; MongoDB database {5}" -f `
-    $ports.ui, $ports.server, $ports.rts, $ports.client, $ports.redis, $Database)
+if ($Db -eq "postgres") {
+  $databaseText = "PostgreSQL {0} on 127.0.0.1:{1}" -f $Database, $ports.postgres
+} else {
+  $databaseText = "MongoDB database $Database"
+}
+Write-Host ("Ports: browser {0}, server {1}, RTS {2}, webpack {3}, Redis {4}; {5}" -f `
+    $ports.ui, $ports.server, $ports.rts, $ports.client, $ports.redis, $databaseText)
 
 Write-Step "Waiting for Docker"
 $dockerReady = $false
@@ -237,14 +261,39 @@ for ($i = 1; $i -le 30; $i++) {
 }
 if (-not $dockerReady) { throw "Docker is not responding. Start Docker Desktop and try again." }
 
-# ---- db: MongoDB replica set (shared) and Redis (this instance) ---------------
+# ---- db: MongoDB replica set (shared) or PostgreSQL, and Redis (this instance) --
 
 if ($Only -contains "db") {
   Write-Step "Databases"
   if ($null -eq (Invoke-Probe docker @("network", "inspect", $Network))) {
     Invoke-Native docker @("network", "create", $Network) | Out-Null
   }
+}
 
+if ($Only -contains "db" -and $Db -eq "postgres") {
+  if (-not (Test-Container $postgresContainer)) {
+    Invoke-Native docker @("run", "--detach", "--name", $postgresContainer, "--network", $Network,
+      "--restart", "unless-stopped", "--publish", "127.0.0.1:$($ports.postgres):5432",
+      "--volume", "${postgresContainer}:/var/lib/postgresql/data",
+      "--env", "POSTGRES_USER=$PostgresUser", "--env", "POSTGRES_PASSWORD=$PostgresPassword",
+      "--env", "POSTGRES_DB=$Database", "postgres:16") | Out-Null
+  } elseif (-not (Test-ContainerRunning $postgresContainer)) {
+    Invoke-Native docker @("start", $postgresContainer) | Out-Null
+  }
+  # Over TCP: while the image initializes a new volume, its temporary server listens only on
+  # the socket, so this waits for the real one.
+  $postgresReady = $false
+  for ($i = 1; $i -le 60; $i++) {
+    if ($null -ne (Invoke-Probe docker @("exec", $postgresContainer, "pg_isready", "-h", "127.0.0.1", "-U", $PostgresUser, "-d", $Database))) {
+      $postgresReady = $true; break
+    }
+    Start-Sleep -Seconds 2
+  }
+  if (-not $postgresReady) { throw "PostgreSQL is not answering. See: docker logs $postgresContainer" }
+  Write-Host "PostgreSQL is up on 127.0.0.1:$($ports.postgres) (database $Database; the server creates the schema)."
+}
+
+if ($Only -contains "db" -and $Db -eq "mongo") {
   if (-not (Test-Container $MongoContainer)) {
     Invoke-Native docker @("run", "--detach", "--name", $MongoContainer, "--network", $Network,
       "--restart", "unless-stopped", "--publish", "127.0.0.1:27017:27017",
@@ -265,7 +314,9 @@ if ($Only -contains "db") {
   }
   if (-not $primary) { throw "MongoDB replica set has no primary. See: docker logs $MongoContainer" }
   Write-Host "MongoDB replica set rs0 is up on 127.0.0.1:27017 (database $Database)."
+}
 
+if ($Only -contains "db") {
   if (-not (Test-Container $redisContainer)) {
     Invoke-Native docker @("run", "--detach", "--name", $redisContainer, "--network", $Network,
       "--restart", "unless-stopped", "--publish", "127.0.0.1:$($ports.redis):6379",
@@ -379,7 +430,11 @@ if ($Only -contains "server") {
   }
   $localEnv.PORT = $ports.server
   $localEnv.APPSMITH_RTS_PORT = $ports.rts
-  $localEnv.APPSMITH_DB_URL = "mongodb://127.0.0.1:27017/${Database}?directConnection=true"
+  if ($Db -eq "postgres") {
+    $localEnv.APPSMITH_DB_URL = "postgresql://${PostgresUser}:${PostgresPassword}@127.0.0.1:$($ports.postgres)/$Database"
+  } else {
+    $localEnv.APPSMITH_DB_URL = "mongodb://127.0.0.1:27017/${Database}?directConnection=true"
+  }
   $localEnv.APPSMITH_REDIS_URL = "redis://127.0.0.1:$($ports.redis)"
   $localEnv.APPSMITH_ENVFILE_PATH = $envFile
   $localEnv.APPSMITH_GIT_ROOT = $gitRoot
@@ -498,5 +553,5 @@ if ($Only -contains "server" -or $Only -contains "client") {
   Write-Host "Logs: $workDir"
   Write-Host "Stop: .\scripts\fork-uat\down.ps1 -Source `"$repoRoot`""
 } else {
-  Write-Host ("Databases for $Name are up: MongoDB 127.0.0.1:27017 (database $Database), Redis 127.0.0.1:{0}" -f $ports.redis) -ForegroundColor Green
+  Write-Host ("Databases for $Name are up: {0}, Redis 127.0.0.1:{1}" -f $databaseText, $ports.redis) -ForegroundColor Green
 }
