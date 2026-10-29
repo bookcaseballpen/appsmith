@@ -71,6 +71,11 @@ jest.mock("pages/Editor/gitSync/hooks/modHooks", () => ({
   useGitModEnabled: () => false,
 }));
 
+// Fork: the built-in Git switch reads feature flags, which this empty store does not have.
+jest.mock("ee/selectors/builtInGitSelectors", () => ({
+  getIsBuiltInGitEnabled: () => false,
+}));
+
 jest.mock("ee/components/BottomBar/AIAgentSupportTrigger", () => ({
   AIAgentSupportTrigger: () => null,
 }));

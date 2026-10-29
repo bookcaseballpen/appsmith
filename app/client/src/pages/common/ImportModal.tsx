@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import React, { useCallback, useEffect } from "react";
 import styled, { useTheme, css } from "styled-components";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 import { setWorkspaceIdForImport } from "ee/actions/applicationActions";
 import {
   createMessage,
@@ -198,6 +199,8 @@ function ImportModal(props: ImportModalProps) {
     workspaceId,
   } = props;
   const isGitModEnabled = useGitModEnabled();
+  // Fork: no "Import from Git" while built-in Git is off (APPSMITH_GIT_ENABLED).
+  const showGitImport = useSelector(getIsBuiltInGitEnabled) && !toEditor;
   const { mainDescription, title } = useMessages();
   const {
     appFileToBeUploaded,
@@ -276,7 +279,7 @@ function ImportModal(props: ImportModalProps) {
           <Row>
             <FileImportCard
               className="t--import-json-card"
-              fillCardWidth={toEditor}
+              fillCardWidth={!showGitImport}
             >
               <FilePickerV2
                 containerClickable
@@ -289,7 +292,7 @@ function ImportModal(props: ImportModalProps) {
                 uploadIcon="file-line"
               />
             </FileImportCard>
-            {!toEditor && <GitImportCard handler={onGitImport} />}
+            {showGitImport && <GitImportCard handler={onGitImport} />}
           </Row>
         )}
         {isImporting && (

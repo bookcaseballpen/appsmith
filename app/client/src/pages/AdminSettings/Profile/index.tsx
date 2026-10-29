@@ -51,6 +51,7 @@ import { Classes } from "@blueprintjs/core";
 import { useGitModEnabled } from "pages/Editor/gitSync/hooks/modHooks";
 import useGlobalProfile from "git/hooks/useGlobalProfile";
 import { getIsAiAgentInstanceEnabled } from "ee/selectors/aiAgentSelectors";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 
 const nameValidator = (
   value: string,
@@ -96,6 +97,9 @@ export const Profile = () => {
   const [authorName, setAuthorNameInState] = useState(gitConfig?.authorName);
   const [authorEmail, setAuthorEmailInState] = useState(gitConfig?.authorEmail);
   const isAiAgentInstanceEnabled = useSelector(getIsAiAgentInstanceEnabled);
+  // Fork: no Git author settings while built-in Git is off (APPSMITH_GIT_ENABLED).
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
+  const showGitAuthor = isBuiltInGitEnabled && !isAiAgentInstanceEnabled;
 
   useEffect(() => {
     setIsSaving(false);
@@ -107,13 +111,15 @@ export const Profile = () => {
 
   useEffect(
     function fetchGlobalGitConfigOnInitEffect() {
+      if (!isBuiltInGitEnabled) return;
+
       if (isGitModEnabled) {
         fetchGlobalProfile();
       } else {
         dispatch(fetchGlobalGitConfigInit());
       }
     },
-    [dispatch, isGitModEnabled],
+    [dispatch, isBuiltInGitEnabled, isGitModEnabled],
   );
 
   useEffect(() => {
@@ -184,8 +190,9 @@ export const Profile = () => {
     }
 
     if (
-      gitConfig?.authorName !== authorName ||
-      gitConfig?.authorEmail !== authorEmail
+      showGitAuthor &&
+      (gitConfig?.authorName !== authorName ||
+        gitConfig?.authorEmail !== authorEmail)
     ) {
       setIsSaving(true);
       updateConfig();
@@ -217,7 +224,9 @@ export const Profile = () => {
             kind="body-m"
             renderAs="h2"
           >
-            Set your profile and git settings
+            {showGitAuthor
+              ? "Set your profile and git settings"
+              : "Set your profile"}
           </SettingsSubHeader>
         </HeaderWrapper>
         <SubCategory kind="heading-s" renderAs="p">
@@ -277,12 +286,12 @@ export const Profile = () => {
             </Flex>
           </FieldWrapper>
         </Flex>
-        {!isAiAgentInstanceEnabled && (
+        {showGitAuthor && (
           <SubCategory kind="heading-s" renderAs="p">
             Git author
           </SubCategory>
         )}
-        {!isAiAgentInstanceEnabled && (
+        {showGitAuthor && (
           <Flex flexDirection="column" gap="spaces-5">
             <FieldWrapper>
               {isFetching && <Loader className={Classes.SKELETON} />}

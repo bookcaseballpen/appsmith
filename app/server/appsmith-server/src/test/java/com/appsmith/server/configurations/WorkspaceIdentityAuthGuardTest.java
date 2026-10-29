@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockAuthentication;
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.springSecurity;
 
+// Fork: POST /api/v1/workspaces is refused for everyone (HiddenEndpointsWebFilter, covered by
+// HiddenEndpointsHttpTest), so the create request these cases send never reaches the controller.
+@Disabled("Fork: creating a workspace over HTTP is refused by HiddenEndpointsWebFilter")
 @SpringBootTest
 class WorkspaceIdentityAuthGuardTest {
 

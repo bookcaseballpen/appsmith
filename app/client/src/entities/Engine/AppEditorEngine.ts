@@ -71,6 +71,7 @@ import {
 } from "selectors/gitModSelectors";
 import { applicationArtifact } from "git-artifact-helpers/application";
 import log from "loglevel";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 
 export default class AppEditorEngine extends AppEngine {
   constructor(mode: APP_MODE) {
@@ -376,8 +377,11 @@ export default class AppEditorEngine extends AppEngine {
   public *loadGit(applicationId: string, rootSpan: Span) {
     const loadGitSpan = startNestedSpan("AppEditorEngine.loadGit", rootSpan);
     const isGitModEnabled: boolean = yield select(selectGitModEnabled);
+    const isBuiltInGitEnabled: boolean = yield select(getIsBuiltInGitEnabled);
 
-    if (isGitModEnabled) {
+    if (!isBuiltInGitEnabled) {
+      // Fork: built-in Git is off (APPSMITH_GIT_ENABLED), so the editor makes no Git request.
+    } else if (isGitModEnabled) {
       const currentApplication: ApplicationPayload = yield select(
         getCurrentApplication,
       );

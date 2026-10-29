@@ -19,4 +19,18 @@ describe("SignupSuccess", () => {
     renderComponent();
     expect(screen.queryByTestId("welcome-page")).toBeNull();
   });
+
+  // Fork: onboarding is hidden, so a new (non-invited) user never gets the profiling form.
+  it("does not show the profiling form to a new user who would get the onboarding flow", () => {
+    window.history.pushState(
+      {},
+      "",
+      "/signup-success?redirectUrl=%2Fapplications&enableFirstTimeUserExperience=true",
+    );
+
+    renderComponent();
+
+    expect(screen.queryByTestId("welcome-page")).toBeNull();
+    window.history.pushState({}, "", "/");
+  });
 });

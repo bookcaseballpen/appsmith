@@ -36,6 +36,7 @@ import DataSourceEditor from "pages/Editor/DataSourceEditor";
 import DatasourceBlankState from "pages/Editor/DataSourceEditor/DatasourceBlankState";
 import DatasourceForm from "pages/Editor/SaaSEditor/DatasourceForm";
 import type { RouteProps } from "react-router";
+import { isOnboardingHidden } from "ee/utils/forkHiddenFeatures";
 
 export const MainPaneRoutes = (
   path: string,
@@ -83,12 +84,17 @@ export const MainPaneRoutes = (
     exact: true,
     path: `${path}${INTEGRATION_EDITOR_PATH}`,
   },
-  {
-    key: "OnboardingChecklist",
-    component: FirstTimeUserOnboardingChecklist,
-    exact: true,
-    path: `${path}${BUILDER_CHECKLIST_PATH}`,
-  },
+  // Fork: no onboarding checklist page.
+  ...(isOnboardingHidden()
+    ? []
+    : [
+        {
+          key: "OnboardingChecklist",
+          component: FirstTimeUserOnboardingChecklist,
+          exact: true,
+          path: `${path}${BUILDER_CHECKLIST_PATH}`,
+        },
+      ]),
   {
     key: "DatasourceEditor",
     component: DataSourceEditor,

@@ -1,4 +1,5 @@
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
 import {
   ADD_PAGE_FROM_TEMPLATE,
   createMessage,
@@ -37,7 +38,12 @@ export const useGenPageItems = () => {
       });
     }
 
-    if (enableForkingFromTemplates && !isAirgappedInstance) {
+    // Fork: no "Add page from template" (templates are hidden).
+    if (
+      enableForkingFromTemplates &&
+      !isAirgappedInstance &&
+      !areTemplatesHidden()
+    ) {
       items.push({
         title: createMessage(ADD_PAGE_FROM_TEMPLATE),
         icon: "layout-2-line",
