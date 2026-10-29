@@ -71,6 +71,8 @@ export const FEATURE_FLAG = {
   fork_builtin_ai_enabled: "fork_builtin_ai_enabled",
   // Fork: the built-in Git switch (APPSMITH_GIT_ENABLED), set by the server. See ce/selectors/builtInGitSelectors.ts.
   fork_builtin_git_enabled: "fork_builtin_git_enabled",
+  // Fork: sent by the server from APPSMITH_EDITOR_READ_ONLY (see ee/utils/editorReadOnly).
+  fork_editor_read_only: "fork_editor_read_only",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAG;
@@ -129,6 +131,7 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
   release_ssh_key_manager_enabled: false,
   fork_builtin_ai_enabled: false,
   fork_builtin_git_enabled: false,
+  fork_editor_read_only: false,
 };
 
 export const AB_TESTING_EVENT_KEYS = {

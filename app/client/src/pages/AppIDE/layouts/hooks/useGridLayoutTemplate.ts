@@ -5,7 +5,8 @@ import useWindowDimensions from "utils/hooks/useWindowDimensions";
 import { useCurrentEditorState } from "../../hooks/useCurrentEditorState";
 import { useCurrentAppState } from "IDE/hooks/useCurrentAppState";
 import { getPropertyPaneWidth } from "selectors/propertyPaneSelectors";
-import { selectCombinedPreviewMode } from "selectors/gitModSelectors";
+import { selectCanvasOnlyMode } from "selectors/gitModSelectors";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 import { getIDEViewMode } from "selectors/ideSelectors";
 import { EditorState } from "IDE/enums";
 import { EditorEntityTab, EditorViewMode } from "IDE/Interfaces/EditorTypes";
@@ -38,10 +39,12 @@ function useGridLayoutTemplate(): ReturnValue {
   const PropertyPaneWidth = useSelector(getPropertyPaneWidth);
   const { segment } = useCurrentEditorState();
   const appState = useCurrentAppState();
-  // Fork: the combined mode also covers Approvers, so their editor shows only the canvas.
-  const isPreviewMode = useSelector(selectCombinedPreviewMode);
+  // Fork: the canvas-only mode also covers Approvers, so their editor shows only the canvas.
+  const isPreviewMode = useSelector(selectCanvasOnlyMode);
   const editorMode = useSelector(getIDEViewMode);
   const isProtectedMode = useGitProtectedMode();
+  // Fork: the read-only editor has no property pane and keeps the running canvas beside the query and JS panes.
+  const isEditorReadOnly = useSelector(selectIsEditorReadOnly);
 
   React.useEffect(
     function updateIDEColumns() {
@@ -94,6 +97,13 @@ function useGridLayoutTemplate(): ReturnValue {
               `${windowWidth}px`,
               "0px",
             ]);
+          } else if (isEditorReadOnly) {
+            setColumns([
+              SIDEBAR_WIDTH,
+              `${editorStateLeftPaneWidth}px`,
+              `${windowWidth - APP_SIDEBAR_WIDTH - editorStateLeftPaneWidth}px`,
+              "0px",
+            ]);
           } else if (segment !== EditorEntityTab.UI) {
             if (editorMode === EditorViewMode.SplitScreen) {
               setColumns([
@@ -124,6 +134,7 @@ function useGridLayoutTemplate(): ReturnValue {
       appState,
       isPreviewMode,
       isProtectedMode,
+      isEditorReadOnly,
       editorStateLeftPaneWidth,
       PropertyPaneWidth,
       segment,

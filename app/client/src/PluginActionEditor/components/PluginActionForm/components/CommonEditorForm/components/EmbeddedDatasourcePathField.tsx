@@ -596,7 +596,7 @@ class EmbeddedDatasourcePathComponent extends React.Component<
               </Text>
             </StyledTooltip>
           )}
-        {displayValue && shouldSave && (
+        {displayValue && shouldSave && !this.props.disabled && (
           <StoreAsDatasource
             datasourceId={
               datasourceObject && "id" in datasourceObject
@@ -685,6 +685,8 @@ function EmbeddedDatasourcePathField(
     theme: EditorTheme;
     actionName: string;
     codeEditorVisibleOverflow?: boolean;
+    // Fork: read-only URL (the read-only editor); the field didn't follow the action's permission.
+    disabled?: boolean;
     formName: string;
   },
 ) {
