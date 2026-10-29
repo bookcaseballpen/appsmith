@@ -19,7 +19,7 @@ import com.appsmith.server.repositories.McpTokenRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.roles.InstanceRole;
 import com.appsmith.server.roles.InstanceRoleService;
-import org.bson.types.ObjectId;
+import com.appsmith.external.helpers.ObjectIds;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.data.mongodb.core.query.Update;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -365,7 +365,7 @@ class McpTokenServiceImplTest {
 
     @Test
     void should_evictCacheThenOpenTransactionThenPutCache_whenRotateSucceeds() {
-        McpKey key = liveKey(new ObjectId().toString(), "CI pipeline");
+        McpKey key = liveKey(ObjectIds.newId(), "CI pipeline");
         stubRotatePersistence(key);
 
         McpTokenResponseDTO rotated = service.rotate(user, key.getId()).block();
@@ -382,7 +382,7 @@ class McpTokenServiceImplTest {
         inOrder.verify(mcpTokenCache).put(eq(key.getId()), any(McpTokenCache.Entry.class));
 
         verify(mcpTokenRepository)
-                .updateByMcpKeyIdAndStatus(eq(key.getId()), eq(McpTokenStatus.ACTIVE), any(Update.class));
+                .updateByMcpKeyIdAndStatus(eq(key.getId()), eq(McpTokenStatus.ACTIVE), any(BridgeUpdate.class));
         verify(mcpTokenRepository).save(mcpTokenCaptor.capture());
         assertThat(mcpTokenCaptor.getValue().getStatus()).isEqualTo(McpTokenStatus.ACTIVE);
     }
@@ -603,7 +603,7 @@ class McpTokenServiceImplTest {
         when(mcpKeyRepository.save(any(McpKey.class))).thenAnswer(invocation -> {
             persistedKey = invocation.getArgument(0);
             if (persistedKey.getId() == null) {
-                persistedKey.setId(new ObjectId().toString());
+                persistedKey.setId(ObjectIds.newId());
             }
             persistedKey.setCreatedAt(Instant.now());
             return Mono.just(persistedKey);
@@ -618,7 +618,7 @@ class McpTokenServiceImplTest {
         when(mcpKeyRepository.findByIdAndUserIdAndRevokedAtIsNull(key.getId(), user.getId()))
                 .thenReturn(Mono.just(key));
         when(mcpTokenRepository.updateByMcpKeyIdAndStatus(
-                        eq(key.getId()), eq(McpTokenStatus.ACTIVE), any(Update.class)))
+                        eq(key.getId()), eq(McpTokenStatus.ACTIVE), any(BridgeUpdate.class)))
                 .thenReturn(Mono.just(1));
         when(mcpTokenRepository.save(any(McpToken.class))).thenAnswer(invocation -> {
             persistedToken = invocation.getArgument(0);

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -30,7 +30,7 @@ public class CustomUserRepositoryCEImplTest {
     private OrganizationRepository organizationRepository;
 
     @Autowired
-    private ReactiveMongoOperations reactiveMongoOperations;
+    private PostgresOperations postgresOperations;
 
     private final List<User> savedUsers = new ArrayList<>();
     private static final Set<String> PREDEFINED_SYSTEM_USERS = Set.of("anonymousUser");
@@ -188,10 +188,10 @@ public class CustomUserRepositoryCEImplTest {
     }
 
     private void dropSuperUserSetupLockCollection() {
-        try {
-            reactiveMongoOperations.dropCollection("superUserSetupLock").block();
-        } catch (Exception e) {
-            // Collection may not exist, that's fine
-        }
+        // Fork: the lock is a row in super_user_setup_lock on PostgreSQL.
+        postgresOperations
+                .write(em -> em.createNativeQuery("DELETE FROM super_user_setup_lock")
+                        .executeUpdate())
+                .block();
     }
 }

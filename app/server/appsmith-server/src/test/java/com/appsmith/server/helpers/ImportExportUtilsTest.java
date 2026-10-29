@@ -9,7 +9,7 @@ import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.mongodb.MongoTransactionException;
+import org.springframework.transaction.TransactionSystemException;
 
 import java.time.Instant;
 import java.util.Map;
@@ -19,8 +19,8 @@ class ImportExportUtilsTest {
 
     @Test
     void getErrorMessage_filterTransactionalError_returnEmptyString() {
-        Throwable throwable = new MongoTransactionException(
-                "Command failed with error 251 (NoSuchTransaction): 'Transaction 1 has been aborted.");
+        // Fork: a JDBC-side transaction failure (MongoTransactionException is gone with MongoDB).
+        Throwable throwable = new TransactionSystemException("Transaction 1 has been aborted.");
         String errorMessage = ImportExportUtils.getErrorMessage(throwable);
         Assertions.assertEquals(errorMessage, "");
     }
