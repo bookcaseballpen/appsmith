@@ -43,6 +43,7 @@ import com.appsmith.server.newactions.base.NewActionService;
 import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.extern.slf4j.Slf4j;
 import net.minidev.json.JSONArray;
@@ -647,7 +648,8 @@ public class PageServiceTest {
 
         layoutCollectionService.createCollection(actionCollectionDTO).block();
 
-        applicationPageService.publish(applicationId, true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(applicationId, true))
+                .block();
 
         final Mono<PageDTO> pageMono =
                 applicationPageService.clonePage(page.getId()).cache();

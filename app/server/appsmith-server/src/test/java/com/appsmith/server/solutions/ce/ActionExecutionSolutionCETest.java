@@ -48,6 +48,7 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.DatasourceRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.AstService;
 import com.appsmith.server.services.LayoutActionService;
@@ -2162,7 +2163,8 @@ public class ActionExecutionSolutionCETest {
         ActionDTO createdAction =
                 layoutActionService.createSingleAction(action, Boolean.FALSE).block();
 
-        applicationPageService.publish(testApp.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApp.getId(), true))
+                .block();
 
         List<PermissionGroup> permissionGroups = workspaceService
                 .findById(workspaceId, READ_WORKSPACES)

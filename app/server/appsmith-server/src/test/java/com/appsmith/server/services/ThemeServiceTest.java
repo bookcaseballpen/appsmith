@@ -19,6 +19,7 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.ThemeRepository;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.UserAndAccessManagementService;
 import com.appsmith.server.themes.base.ThemeService;
@@ -207,7 +208,8 @@ public class ThemeServiceTest {
         // Apply Sharp theme to the application
         Mono<Theme> applySharpTheme = themeService.changeCurrentTheme(sharpTheme.getId(), savedApplication.getId());
         // Publish app
-        Mono<Application> publishApp = applicationPageService.publish(savedApplication.getId(), TRUE);
+        Mono<Application> publishApp =
+                PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE));
         // apply classic theme to the application
         Mono<Theme> applyClassicTheme = themeService.changeCurrentTheme(classicTheme.getId(), savedApplication.getId());
 
@@ -239,7 +241,8 @@ public class ThemeServiceTest {
         // Apply Sharp theme to the application
         Mono<Theme> applySharpTheme = themeService.changeCurrentTheme(sharpTheme.getId(), savedApplication.getId());
         // Publish app
-        Mono<Application> publishApp = applicationPageService.publish(savedApplication.getId(), TRUE);
+        Mono<Application> publishApp =
+                PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE));
         // apply classic theme to the application
         Mono<Theme> applyClassicTheme = themeService.changeCurrentTheme(classicTheme.getId(), savedApplication.getId());
 
@@ -286,8 +289,9 @@ public class ThemeServiceTest {
 
         Application savedApplication = createApplication();
         // Publish app
-        Application publishedApp =
-                applicationPageService.publish(savedApplication.getId(), TRUE).block();
+        Application publishedApp = PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(savedApplication.getId(), TRUE))
+                .block();
 
         // apply classic theme to the application
         Mono<Theme> applyClassicTheme = themeService.changeCurrentTheme(classicTheme.getId(), savedApplication.getId());
@@ -327,7 +331,8 @@ public class ThemeServiceTest {
 
         Theme classicTheme = themeService.getSystemTheme("Classic").block();
         // Publish app
-        Mono<Application> publishApp = applicationPageService.publish(savedApplication.getId(), TRUE);
+        Mono<Application> publishApp =
+                PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE));
         // apply classic theme to the application
         Mono<Theme> applyClassicTheme = themeService.changeCurrentTheme(classicTheme.getId(), savedApplication.getId());
 
@@ -530,7 +535,8 @@ public class ThemeServiceTest {
 
         Application application = createApplication();
         // Set the default system theme in view mode as well.
-        applicationPageService.publish(application.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), TRUE))
+                .block();
         // Set a custom theme in edit mode.
         Theme customTheme = new Theme();
         customTheme.setName("my-custom-theme");
@@ -566,7 +572,8 @@ public class ThemeServiceTest {
                 .getThemeById(application.getEditModeThemeId(), READ_THEMES)
                 .block();
         // publish the app to ensure system theme gets set
-        applicationPageService.publish(application.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), TRUE))
+                .block();
 
         Theme updatesToSystemTheme = new Theme();
         updatesToSystemTheme.setDisplayName("My updates to existing system theme");
@@ -602,7 +609,8 @@ public class ThemeServiceTest {
 
         String applicationId = application.getId();
         // publish the app to ensure system theme gets set
-        applicationPageService.publish(application.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), TRUE))
+                .block();
 
         // Create and apply custom theme in edit mode.
         Theme customTheme = new Theme();
@@ -657,8 +665,9 @@ public class ThemeServiceTest {
                 .updateById(savedApplication.getId(), updateApp, MANAGE_APPLICATIONS)
                 .block();
 
-        Application publishedApp =
-                applicationPageService.publish(savedApplication.getId(), TRUE).block();
+        Application publishedApp = PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(savedApplication.getId(), TRUE))
+                .block();
 
         Mono<Theme> classicThemeMono = themeRepository.getSystemThemeByName(Theme.LEGACY_THEME_NAME, READ_THEMES);
 
@@ -681,7 +690,8 @@ public class ThemeServiceTest {
         Application savedApplication = createApplication();
 
         // Set the default system theme in view mode as well.
-        applicationPageService.publish(savedApplication.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE))
+                .block();
 
         // Set a custom theme in edit mode.
         Theme customTheme = new Theme();
@@ -691,7 +701,8 @@ public class ThemeServiceTest {
                 .flatMap(theme -> themeService.changeCurrentTheme(theme.getId(), savedApplication.getId()));
 
         // Make the app public.
-        Mono<Application> makeAppPublicMono = applicationPageService.publish(savedApplication.getId(), TRUE);
+        Mono<Application> makeAppPublicMono =
+                PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE));
 
         // Publish the theme
         Mono<Theme> publishThemeMono = themeService.publishTheme(savedApplication.getId());
@@ -904,7 +915,8 @@ public class ThemeServiceTest {
         themeService
                 .changeCurrentTheme(sharpTheme.getId(), savedApplication.getId())
                 .block();
-        applicationPageService.publish(savedApplication.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE))
+                .block();
         themeService
                 .changeCurrentTheme(classicTheme.getId(), savedApplication.getId())
                 .block();
@@ -1052,7 +1064,8 @@ public class ThemeServiceTest {
         themeService
                 .changeCurrentTheme(sharpTheme.getId(), savedApplication.getId())
                 .block();
-        applicationPageService.publish(savedApplication.getId(), TRUE).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(savedApplication.getId(), TRUE))
+                .block();
         themeService
                 .changeCurrentTheme(classicTheme.getId(), savedApplication.getId())
                 .block();

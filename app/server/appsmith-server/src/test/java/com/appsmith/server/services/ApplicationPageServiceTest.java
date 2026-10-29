@@ -22,6 +22,7 @@ import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.UserAndAccessManagementService;
 import lombok.extern.slf4j.Slf4j;
@@ -472,7 +473,8 @@ public class ApplicationPageServiceTest {
         pageDTO.setName(pageName);
         applicationPageService.createPage(pageDTO).block();
 
-        applicationPageService.publish(applicationId, true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(applicationId, true))
+                .block();
 
         PageDTO pageDTO1 = new PageDTO();
         pageDTO1.setApplicationId(applicationId);
@@ -521,7 +523,8 @@ public class ApplicationPageServiceTest {
         Application application = createApplication(uniquePrefix).block();
         assertThat(application).isNotNull();
         String pageId = application.getPages().get(0).getId();
-        applicationPageService.publish(application.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), true))
+                .block();
         NewPage publishedPage =
                 newPageService.getByIdWithoutPermissionCheck(pageId).block();
         assertThat(publishedPage).isNotNull();

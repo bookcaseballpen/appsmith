@@ -35,6 +35,7 @@ import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.refactors.applications.RefactoringService;
 import com.appsmith.server.repositories.NewActionRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.LayoutActionService;
 import com.appsmith.server.services.LayoutCollectionService;
@@ -432,7 +433,8 @@ class RefactoringServiceCETest {
                 .updateLayout(testPage.getId(), testApp.getId(), layout.getId(), layout)
                 .block();
 
-        applicationPageService.publish(testPage.getApplicationId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testPage.getApplicationId(), true))
+                .block();
 
         newActionService.deleteUnpublishedAction(firstAction.getId()).block();
 

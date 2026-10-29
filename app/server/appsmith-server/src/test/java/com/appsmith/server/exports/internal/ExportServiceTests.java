@@ -58,6 +58,7 @@ import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.LayoutActionService;
 import com.appsmith.server.services.LayoutCollectionService;
@@ -1328,7 +1329,8 @@ public class ExportServiceTests {
                 .reorderPage(testApplication.getId(), testPage2.getId(), 1)
                 .block();
         // Deploy the current application
-        applicationPageService.publish(testApplication.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApplication.getId(), true))
+                .block();
 
         Mono<ApplicationJson> applicationJsonMono = exportService
                 .exportByArtifactIdAndBranchName(testApplication.getId(), "", ArtifactType.APPLICATION)
@@ -1364,8 +1366,8 @@ public class ExportServiceTests {
                 .map(importableArtifact -> (Application) importableArtifact)
                 .block();
 
-        application = applicationPageService
-                .publishWithoutPermissionChecks(application.getId(), true)
+        application = PublishApproval.asApprovedRelease(
+                        applicationPageService.publishWithoutPermissionChecks(application.getId(), true))
                 .block();
 
         // Get the unpublished pages and verify the order
@@ -1554,7 +1556,8 @@ public class ExportServiceTests {
         testPage2 = applicationPageService.createPage(testPage2).block();
 
         // Deploy the current application so that edit and view mode will have different page order
-        applicationPageService.publish(testApplication.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApplication.getId(), true))
+                .block();
 
         // Set order for the newly created pages
         applicationPageService
@@ -1596,8 +1599,8 @@ public class ExportServiceTests {
                 .map(importableArtifact -> (Application) importableArtifact)
                 .block();
 
-        application = applicationPageService
-                .publishWithoutPermissionChecks(application.getId(), true)
+        application = PublishApproval.asApprovedRelease(
+                        applicationPageService.publishWithoutPermissionChecks(application.getId(), true))
                 .block();
 
         // Get the unpublished pages and verify the order
@@ -1851,8 +1854,9 @@ public class ExportServiceTests {
         CustomJSLib jsLib = new CustomJSLib("TestLib", Set.of("accessor1"), "url", "docsUrl", "1.0", "defs_string");
         Mono<Boolean> addJSLibMonoCached = customJSLibService
                 .addJSLibsToContext(testAppId, CreatorContextType.APPLICATION, Set.of(jsLib), false)
-                .flatMap(isJSLibAdded ->
-                        Mono.zip(Mono.just(isJSLibAdded), applicationPageService.publish(testAppId, true)))
+                .flatMap(isJSLibAdded -> Mono.zip(
+                        Mono.just(isJSLibAdded),
+                        PublishApproval.asApprovedRelease(applicationPageService.publish(testAppId, true))))
                 .map(tuple2 -> {
                     Boolean isJSLibAdded = tuple2.getT1();
                     Application application = tuple2.getT2();

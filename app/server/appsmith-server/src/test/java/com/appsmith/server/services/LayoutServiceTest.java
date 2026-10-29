@@ -30,6 +30,7 @@ import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.UserAndAccessManagementService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1407,7 +1408,8 @@ public class LayoutServiceTest {
         testPage.setName(uniquePrefix + "_page");
         PageDTO page = createPage(app, testPage).block();
         assertThat(page).isNotNull();
-        applicationPageService.publish(page.getApplicationId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(page.getApplicationId(), true))
+                .block();
         return page;
     }
 
