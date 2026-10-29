@@ -84,7 +84,11 @@ public class ApplicationTemplateServiceImpl extends ApplicationTemplateServiceCE
     @Override
     public Mono<ApplicationTemplate> getFilters() {
         if (!cloudServicesConfig.isEnabled()) {
-            return Mono.just(new ApplicationTemplate());
+            // Empty lists rather than nulls, so the client reads a complete, empty filter set
+            ApplicationTemplate filters = new ApplicationTemplate();
+            filters.setFunctions(List.of());
+            filters.setUseCases(List.of());
+            return Mono.just(filters);
         }
         return super.getFilters();
     }
