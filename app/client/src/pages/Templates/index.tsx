@@ -3,14 +3,13 @@ import { fetchDefaultPlugins } from "actions/pluginActions";
 import { getAllTemplates, getTemplateFilters } from "actions/templateActions";
 import { setHeaderMeta } from "actions/themeActions";
 import { Text } from "@appsmith/ads";
-import { isEmpty } from "lodash";
 import ReconnectDatasourceModal from "pages/Editor/gitSync/ReconnectDatasourceModal";
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Switch, useRouteMatch } from "react-router-dom";
 import {
-  allTemplatesFiltersSelector,
   getForkableWorkspaces,
+  shouldFetchTemplateFiltersSelector,
 } from "selectors/templatesSelectors";
 import styled from "styled-components";
 import { editorInitializer } from "utils/editor/EditorUtils";
@@ -70,7 +69,7 @@ function TemplateRoutes() {
   const templatesCount = useSelector(
     (state: DefaultRootState) => state.ui.templates.templates.length,
   );
-  const filters = useSelector(allTemplatesFiltersSelector);
+  const shouldFetchFilters = useSelector(shouldFetchTemplateFiltersSelector);
 
   useEffect(() => {
     dispatch(setHeaderMeta(true, true));
@@ -96,11 +95,12 @@ function TemplateRoutes() {
     }
   }, [pluginListLength]);
 
+  // Fork: fetch once; an empty result no longer triggers a refetch loop
   useEffect(() => {
-    if (isEmpty(filters.functions)) {
+    if (shouldFetchFilters) {
       dispatch(getTemplateFilters());
     }
-  }, [filters]);
+  }, [shouldFetchFilters]);
 
   return (
     <Switch>

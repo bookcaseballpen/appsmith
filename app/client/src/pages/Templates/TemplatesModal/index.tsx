@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  allTemplatesFiltersSelector,
+  shouldFetchTemplateFiltersSelector,
   templateModalSelector,
   templatesCountSelector,
 } from "selectors/templatesSelectors";
@@ -13,7 +13,6 @@ import {
 } from "actions/templateActions";
 import { fetchDefaultPlugins } from "actions/pluginActions";
 import TemplateDetailedView from "./TemplateDetailedView";
-import { isEmpty } from "lodash";
 import type { DefaultRootState } from "react-redux";
 import { Modal, ModalBody, ModalContent, ModalHeader } from "@appsmith/ads";
 import TemplateModalHeader from "./Header";
@@ -38,7 +37,7 @@ function TemplatesModal() {
     (state: DefaultRootState) =>
       state.entities.plugins.defaultPluginList.length,
   );
-  const filters = useSelector(allTemplatesFiltersSelector);
+  const shouldFetchFilters = useSelector(shouldFetchTemplateFiltersSelector);
   const [showTemplateDetails, setShowTemplateDetails] = useState("");
 
   useEffect(() => {
@@ -63,11 +62,12 @@ function TemplatesModal() {
     }
   }, [pluginListLength]);
 
+  // Fork: fetch once; an empty result no longer triggers a refetch loop
   useEffect(() => {
-    if (isEmpty(filters.functions)) {
+    if (shouldFetchFilters) {
       dispatch(getTemplateFilters());
     }
-  }, [filters]);
+  }, [shouldFetchFilters]);
 
   const onClose = (open: boolean) => {
     if (open === false) {

@@ -11298,6 +11298,7 @@ export const defaultAppState = {
       isImportingTemplate: false,
       isImportingTemplateToApp: false,
       loadingFilters: false,
+      filtersFetched: false,
       gettingAllTemplates: false,
       gettingTemplate: false,
       activeTemplate: null,

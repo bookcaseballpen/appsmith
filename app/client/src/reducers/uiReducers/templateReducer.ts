@@ -10,6 +10,7 @@ const initialState: TemplatesReduxState = {
   isImportingTemplate: false,
   isImportingTemplateToApp: false,
   loadingFilters: false,
+  filtersFetched: false,
   gettingAllTemplates: false,
   gettingTemplate: false,
   activeTemplate: null,
@@ -253,6 +254,7 @@ const templateReducer = createReducer(initialState, {
     return {
       ...state,
       loadingFilters: false,
+      filtersFetched: true,
       allFilters: action.payload,
     };
   },
@@ -262,6 +264,7 @@ const templateReducer = createReducer(initialState, {
     return {
       ...state,
       loadingFilters: false,
+      filtersFetched: true,
     };
   },
 });
@@ -285,6 +288,8 @@ export interface TemplatesReduxState {
     isOpenFromCanvas: boolean;
   };
   loadingFilters: boolean;
+  // Fork: set once a filters request has finished, so an empty result is final and not refetched
+  filtersFetched: boolean;
   currentForkingTemplateInfo: {
     buildingBlock: {
       name: string;
