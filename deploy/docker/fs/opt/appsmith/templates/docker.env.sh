@@ -44,6 +44,10 @@ APPSMITH_DISABLE_TELEMETRY=true
 # Fork: Appsmith cloud services (cs.appsmith.com) stay off unless this is set to true.
 APPSMITH_CLOUD_SERVICES_ENABLED=false
 
+# Fork: the built-in AI (AI assistant, Ask AI, AI settings, AI datasources) stays off unless this is set to true.
+# MCP works either way.
+APPSMITH_AI_ENABLED=false
+
 # Google Recaptcha Config
 APPSMITH_RECAPTCHA_SITE_KEY=
 APPSMITH_RECAPTCHA_SECRET_KEY=

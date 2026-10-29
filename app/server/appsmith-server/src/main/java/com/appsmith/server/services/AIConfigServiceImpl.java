@@ -1,5 +1,6 @@
 package com.appsmith.server.services;
 
+import com.appsmith.server.configurations.BuiltInAiConfig;
 import com.appsmith.server.dtos.AIConfigDTO;
 import com.appsmith.server.services.ce.AIConfigServiceCEImpl;
 import com.appsmith.server.services.ce_compatible.AIConfigServiceCECompatibleImpl;
@@ -15,38 +16,43 @@ import java.util.Map;
 public class AIConfigServiceImpl extends AIConfigServiceCECompatibleImpl implements AIConfigService {
 
     private final AIConfigServiceCEImpl delegate;
+    private final BuiltInAiConfig builtInAiConfig;
 
     public AIConfigServiceImpl(
             OrganizationService organizationService,
             ObjectMapper objectMapper,
             AnalyticsService analyticsService,
-            SessionUserService sessionUserService) {
+            SessionUserService sessionUserService,
+            BuiltInAiConfig builtInAiConfig) {
         this.delegate =
                 new AIConfigServiceCEImpl(organizationService, objectMapper, analyticsService, sessionUserService);
+        this.builtInAiConfig = builtInAiConfig;
     }
+
+    // Fork: every AI settings endpoint is refused while the built-in AI is switched off (APPSMITH_AI_ENABLED).
 
     @Override
     public Mono<Map<String, Object>> updateAIConfig(AIConfigDTO aiConfig) {
-        return delegate.updateAIConfig(aiConfig);
+        return builtInAiConfig.requireEnabled().then(Mono.defer(() -> delegate.updateAIConfig(aiConfig)));
     }
 
     @Override
     public Mono<Map<String, Object>> getAIConfig() {
-        return delegate.getAIConfig();
+        return builtInAiConfig.requireEnabled().then(Mono.defer(delegate::getAIConfig));
     }
 
     @Override
     public Mono<Map<String, Object>> testLlmConnection(Map<String, String> request) {
-        return delegate.testLlmConnection(request);
+        return builtInAiConfig.requireEnabled().then(Mono.defer(() -> delegate.testLlmConnection(request)));
     }
 
     @Override
     public Mono<Map<String, Object>> fetchLlmModels(Map<String, String> request) {
-        return delegate.fetchLlmModels(request);
+        return builtInAiConfig.requireEnabled().then(Mono.defer(() -> delegate.fetchLlmModels(request)));
     }
 
     @Override
     public Mono<Map<String, Object>> testApiKey(Map<String, String> request) {
-        return delegate.testApiKey(request);
+        return builtInAiConfig.requireEnabled().then(Mono.defer(() -> delegate.testApiKey(request)));
     }
 }
