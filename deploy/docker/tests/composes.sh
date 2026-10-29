@@ -15,8 +15,6 @@ services:
             - "443:443"
         volumes:
             - ${stacks_path}:/appsmith-stacks
-        environment:
-            - APPSMITH_CLOUD_SERVICES_BASE_URL=https://release-cs.appsmith.com
         restart: unless-stopped
 EOF
 }
@@ -50,8 +48,6 @@ services:
             - "443:443"
         volumes:
             - ${stacks_path}:/appsmith-stacks
-        environment:
-            - APPSMITH_CLOUD_SERVICES_BASE_URL=https://release-cs.appsmith.com
         restart: unless-stopped
 EOF
 

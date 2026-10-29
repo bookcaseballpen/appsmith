@@ -11,10 +11,16 @@ import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginManager;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 public class PluginServiceImpl extends PluginServiceCEImpl implements PluginService {
+
+    private final CloudServicesConfig cloudServicesConfig;
 
     public PluginServiceImpl(
             Validator validator,
@@ -37,5 +43,17 @@ public class PluginServiceImpl extends PluginServiceCEImpl implements PluginServ
                 cloudServicesConfig,
                 configService,
                 pluginTransformationSolution);
+        this.cloudServicesConfig = cloudServicesConfig;
+    }
+
+    /**
+     * Fork: the "upcoming integrations" list comes from cloud services, so it is empty when they are disabled.
+     */
+    @Override
+    public Mono<List<Map<String, String>>> getUpcomingIntegrations() {
+        if (!cloudServicesConfig.isEnabled()) {
+            return Mono.just(List.of());
+        }
+        return super.getUpcomingIntegrations();
     }
 }

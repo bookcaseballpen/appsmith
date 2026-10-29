@@ -1,6 +1,8 @@
 package com.appsmith.server.configurations;
 
 import com.appsmith.external.services.SharedConfig;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.AppsmithException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,11 +33,22 @@ public class SharedConfigImpl implements SharedConfig {
 
     @Override
     public String getRemoteExecutionUrl() {
-        return cloudServicesConfig.getBaseUrl() + "/api/v1/actions/execute";
+        return requireCloudServicesBaseUrl() + "/api/v1/actions/execute";
     }
 
     @Override
     public String getAIProxyBasePathUrl() {
+        return requireCloudServicesBaseUrl();
+    }
+
+    /**
+     * Fork: with cloud services disabled the base URL is empty, and the URLs built from it would be relative paths on
+     * this host. Fail with a clear error instead.
+     */
+    private String requireCloudServicesBaseUrl() {
+        if (!cloudServicesConfig.isEnabled()) {
+            throw new AppsmithException(AppsmithError.CLOUD_SERVICES_ERROR, CloudServicesConfig.DISABLED_MESSAGE);
+        }
         return cloudServicesConfig.getBaseUrl();
     }
 }

@@ -39,28 +39,29 @@ const useOnUpgrade = (props: Props) => {
     );
 
     if (isEnterprise) {
-      window.open(
-        PRICING_PAGE_URL(
-          appsmithConfigs.pricingUrl,
-          pricingPageUrlSource,
-          instanceId,
-          featureName,
-          sectionName,
-        ),
+      const url = PRICING_PAGE_URL(
+        appsmithConfigs.pricingUrl,
+        pricingPageUrlSource,
+        instanceId,
+        featureName,
+        sectionName,
       );
+
+      // Fork: no pricing URL is configured by default; don't open a blank tab.
+      if (url) window.open(url);
     } else if (isCloudBillingEnabled) {
       window.open(WORKSPACE_SETTINGS_LICENSE_PAGE_URL, "_blank");
     } else {
-      window.open(
-        CUSTOMER_PORTAL_URL_WITH_PARAMS(
-          appsmithConfigs.customerPortalUrl,
-          pricingPageUrlSource,
-          instanceId,
-          featureName,
-          sectionName,
-        ),
-        "_blank",
+      const url = CUSTOMER_PORTAL_URL_WITH_PARAMS(
+        appsmithConfigs.customerPortalUrl,
+        pricingPageUrlSource,
+        instanceId,
+        featureName,
+        sectionName,
       );
+
+      // Fork: no customer portal URL is configured by default; don't open a blank tab.
+      if (url) window.open(url, "_blank");
     }
   };
 

@@ -1,9 +1,9 @@
 import type { InternalAxiosRequestConfig } from "axios";
-import type { ID } from "@segment/analytics-next";
 
+// Fork: no longer used by apiRequestInterceptor, since the anonymous id came from Segment.
 export const addAnonymousUserIdHeader = (
   config: InternalAxiosRequestConfig,
-  options: { anonymousId: ID; segmentEnabled?: boolean },
+  options: { anonymousId: string | null | undefined; segmentEnabled?: boolean },
 ) => {
   const { anonymousId, segmentEnabled } = options;
 

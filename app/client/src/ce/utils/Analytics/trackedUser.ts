@@ -36,9 +36,10 @@ class TrackedUser {
 
   protected constructor(user: User) {
     this.user = user;
-    const { cloudHosting, segment } = getAppsmithConfigs();
+    // Fork: Segment is removed, so only cloud hosting decides this.
+    const { cloudHosting } = getAppsmithConfigs();
 
-    this.selfHosted = !(segment.apiKey || cloudHosting);
+    this.selfHosted = !cloudHosting;
 
     if (this.selfHosted) {
       this.userId = sha256(user.username);

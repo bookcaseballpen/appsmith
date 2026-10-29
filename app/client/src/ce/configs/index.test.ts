@@ -1,13 +1,9 @@
 import { getAppsmithConfigs } from "./index";
 
+// Fork: the Sentry, Smartlook, BetterBugs, Segment and Mixpanel settings are removed.
 const baseInjectedConfigs = {
-  sentry: { dsn: "", release: "", environment: "" },
-  smartLook: { id: "" },
-  betterbugs: { apiKey: "" },
-  segment: { apiKey: "", ceKey: "" },
   observability: { deploymentName: "", serviceInstanceId: "", tracingUrl: "" },
   fusioncharts: { licenseKey: "" },
-  mixpanel: { enabled: false, apiKey: "" },
   googleRecaptchaSiteKey: "",
 };
 

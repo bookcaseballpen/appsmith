@@ -7,49 +7,23 @@ export interface AppVersionData {
   edition: string;
 }
 
+// Fork: the Sentry, Smartlook, BetterBugs, Segment, Mixpanel and Pylon settings are removed with their SDKs.
 export interface AppsmithUIConfigs {
-  sentry: {
-    enabled: boolean;
-    dsn: string;
-    release: string;
-    environment: string;
-    normalizeDepth: number;
-    tracesSampleRate: number;
-  };
-  smartLook: {
-    enabled: boolean;
-    id: string;
-  };
-  betterbugs: {
-    enabled: boolean;
-    apiKey: string;
-  };
   observability: {
     deploymentName: string;
     serviceInstanceId: string;
     serviceName: string;
     tracingUrl: string;
   };
-  segment: {
-    enabled: boolean;
-    apiKey: string;
-    ceKey: string;
-  };
   fusioncharts: {
     enabled: boolean;
     licenseKey: string;
-  };
-
-  mixpanel: {
-    enabled: boolean;
-    apiKey: string;
   };
 
   cloudHosting: boolean;
 
   logLevel: LogLevelDesc;
   appVersion: AppVersionData;
-  pylonAppID: string;
   mailEnabled: boolean;
 
   googleRecaptchaSiteKey: {

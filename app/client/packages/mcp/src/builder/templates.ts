@@ -289,7 +289,8 @@ export const WIDGET_TEMPLATES: Record<WidgetType, WidgetTemplate> = {
         footprint: { columns: 16, rows: 24 },
         props: {
           image,
-          defaultImage: "https://assets.appsmith.com/widgets/default.png",
+          // Fork: served from the client build (public/assets-cdn), not assets.appsmith.com.
+          defaultImage: "/assets-cdn/widgets/default.png",
           imageShape: "RECTANGLE",
           maxZoomLevel: 1,
           objectFit: "cover",

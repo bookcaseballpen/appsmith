@@ -119,7 +119,8 @@ public class GitConnectTests {
 
     @Test
     @WithUserDetails(value = "api_user")
-    public void connectArtifactToGit_whenConnectingMorePrivateReposThanSupported_throwsException() {
+    public void connectArtifactToGit_whenCloudRepoLimitIsZero_limitIsNotApplied() {
+        // Fork: GitPrivateRepoHelperImpl removes the private-repo limit, so the cloud limit is never asked for.
         Workspace workspace = new Workspace();
         workspace.setName("Limit Private Repo Test Workspace");
         String limitPrivateRepoTestWorkspaceId =
@@ -154,10 +155,12 @@ public class GitConnectTests {
                         application.getId(), ArtifactType.APPLICATION, gitConnectDTO, "baseUrl", GitType.FILE_SYSTEM)
                 .map(artifact -> (Application) artifact);
 
-        StepVerifier.create(applicationMono)
-                .expectErrorMatches(error -> error instanceof AppsmithException
-                        && error.getMessage().equals(AppsmithError.GIT_APPLICATION_LIMIT_ERROR.getMessage()))
-                .verify();
+        // The connect may still fail later (there is no real remote), but never on the repo limit.
+        Throwable error = applicationMono.materialize().block().getThrowable();
+        String errorMessage = error == null ? null : error.getMessage();
+        assertThat(errorMessage).isNotEqualTo(AppsmithError.GIT_APPLICATION_LIMIT_ERROR.getMessage());
+        Mockito.verify(gitCloudServicesUtils, Mockito.never())
+                .getPrivateRepoLimitForOrg(Mockito.anyString(), Mockito.anyBoolean());
     }
 
     @WithUserDetails("api_user")

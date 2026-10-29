@@ -324,13 +324,14 @@ class ImageWidget extends BaseWidget<ImageWidgetProps, WidgetState> {
       <ImageComponent
         borderRadius={this.props.borderRadius}
         boxShadow={this.props.boxShadow}
-        defaultImageUrl={this.props.defaultImage}
+        // Fork: saved apps can hold assets.appsmith.com URLs; serve them locally.
+        defaultImageUrl={getAssetUrl(this.props.defaultImage)}
         disableDrag={(disable: boolean) => {
           this.disableDrag(disable);
         }}
         enableDownload={this.props.enableDownload}
         enableRotation={this.props.enableRotation}
-        imageUrl={this.props.image}
+        imageUrl={getAssetUrl(this.props.image)}
         isLoading={this.props.isLoading}
         maxZoomLevel={maxZoomLevel}
         objectFit={objectFit}
