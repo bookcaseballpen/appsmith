@@ -21,15 +21,14 @@ import {
   ModalContent,
   ModalHeader,
 } from "@appsmith/ads";
-import { isEmpty } from "lodash";
 import { TemplateView } from "pages/Templates/TemplateView";
 import TemplatesListLayoutSwitcher from "pages/Templates/TemplatesModal/TemplatesListLayoutSwitcher";
 import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   activeLoadingTemplateId,
-  allTemplatesFiltersSelector,
   getTemplatesSelector,
+  shouldFetchTemplateFiltersSelector,
   templatesCountSelector,
 } from "selectors/templatesSelectors";
 import styled from "styled-components";
@@ -53,7 +52,7 @@ function CreateNewAppFromTemplatesModal({
     (state: DefaultRootState) =>
       state.entities.plugins.defaultPluginList.length,
   );
-  const filters = useSelector(allTemplatesFiltersSelector);
+  const shouldFetchFilters = useSelector(shouldFetchTemplateFiltersSelector);
   const [showTemplateDetails, setShowTemplateDetails] = useState("");
   const allTemplates = useSelector(getTemplatesSelector);
   const loadingTemplateId = useSelector(activeLoadingTemplateId);
@@ -79,11 +78,12 @@ function CreateNewAppFromTemplatesModal({
     }
   }, [pluginListLength]);
 
+  // Fork: fetch once; an empty result no longer triggers a refetch loop
   useEffect(() => {
-    if (isEmpty(filters.functions)) {
+    if (shouldFetchFilters) {
       dispatch(getTemplateFilters());
     }
-  }, [filters]);
+  }, [shouldFetchFilters]);
 
   useEffect(() => {
     if (!showTemplateDetails && modadBodyRef.current) {
