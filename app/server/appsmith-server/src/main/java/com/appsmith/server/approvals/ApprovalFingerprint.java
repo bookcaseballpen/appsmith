@@ -101,25 +101,24 @@ public class ApprovalFingerprint {
             Mono<ArrayNode> pageContents = newPageRepository
                     .findByApplicationId(applicationId)
                     .filter(page -> pageIds.contains(page.getId()))
-                    .map(page -> viewMode ? page.getPublishedPage() : page.getUnpublishedPage())
-                    .filter(Objects::nonNull)
+                    // A side can be missing: a page, query or JS object added since the last publish (for example by
+                    // an import) has no published copy yet.
+                    .mapNotNull(page -> viewMode ? page.getPublishedPage() : page.getUnpublishedPage())
                     .filter(page -> page.getDeletedAt() == null)
                     .collectList()
                     .map(ApprovalFingerprint::sortedArray);
 
             Mono<ArrayNode> actions = newActionRepository
                     .findByApplicationId(applicationId)
-                    .map(action -> viewMode ? action.getPublishedAction() : action.getUnpublishedAction())
-                    .filter(Objects::nonNull)
+                    .mapNotNull(action -> viewMode ? action.getPublishedAction() : action.getUnpublishedAction())
                     .filter(action -> action.getDeletedAt() == null)
                     .collectList()
                     .map(ApprovalFingerprint::sortedArray);
 
             Mono<ArrayNode> collections = actionCollectionRepository
                     .findByApplicationId(applicationId)
-                    .map(collection ->
+                    .mapNotNull(collection ->
                             viewMode ? collection.getPublishedCollection() : collection.getUnpublishedCollection())
-                    .filter(Objects::nonNull)
                     .filter(collection -> collection.getDeletedAt() == null)
                     .collectList()
                     .map(ApprovalFingerprint::sortedArray);

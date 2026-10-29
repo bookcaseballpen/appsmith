@@ -8,6 +8,7 @@ import com.appsmith.external.models.DatasourceStorageDTO;
 import com.appsmith.external.models.Property;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.applications.base.ApplicationService;
+import com.appsmith.server.constants.ArtifactType;
 import com.appsmith.server.datasources.base.DatasourceService;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.Plugin;
@@ -16,6 +17,7 @@ import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.dtos.ApplicationJson;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.exports.internal.ExportService;
 import com.appsmith.server.fork.internal.ApplicationForkingService;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
@@ -122,6 +124,9 @@ class InstanceRolePermissionsTest {
 
     @Autowired
     ImportService importService;
+
+    @Autowired
+    ExportService exportService;
 
     @MockBean
     PluginExecutorHelper pluginExecutorHelper;
@@ -416,25 +421,29 @@ class InstanceRolePermissionsTest {
     @EnumSource(
             value = InstanceRole.class,
             names = {"ADMIN", "DEV"})
-    void should_refuseImportOverLiveAppOnlyForDev_when_roleImportsOverIt(InstanceRole role) {
+    void should_importOverLiveAppAndKeepItLive_when_builderImportsOverIt(InstanceRole role) {
         // Given
         makeLive(application.getId());
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
 
         // When
-        // An empty export is enough: the role check comes before the import reads it.
         Optional<AppsmithError> error = runAs(
                         importService
-                                .updateNonGitConnectedArtifactFromJson(
-                                        workspaceId, application.getId(), new ApplicationJson())
+                                .updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), export)
                                 .map(imported -> Optional.<AppsmithError>empty()),
                         users.get(role))
                 .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
-                .onErrorResume(exception -> Mono.just(Optional.empty()))
                 .block();
 
         // Then
-        assertThat(error.filter(AppsmithError.ACTION_IS_NOT_AUTHORIZED::equals).isPresent())
-                .isEqualTo(role == InstanceRole.DEV);
+        assertThat(error).isEmpty();
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNotNull();
     }
 
     @ParameterizedTest

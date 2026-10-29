@@ -304,6 +304,35 @@ class McpAllowlistWebFilterTest {
     }
 
     @Test
+    void should_allowOnlyProjectsRepoExportAndImport_when_mcpPrincipalCallsProjectsRepo() {
+        // Given
+        McpAllowlistWebFilter filter = new McpAllowlistWebFilter();
+
+        // When / Then
+        assertPassesThrough(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/projects-repo/applications/app1")),
+                mcpPrincipal());
+        assertPassesThrough(
+                filter,
+                MockServerWebExchange.from(
+                        MockServerHttpRequest.post("/api/v1/projects-repo/applications/import/ws1?applicationId=app1")),
+                mcpPrincipal());
+        assertForbidden(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/projects-repo/applications/import")),
+                mcpPrincipal());
+        assertForbidden(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.delete("/api/v1/projects-repo/applications/app1")),
+                mcpPrincipal());
+        assertForbidden(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.post("/api/v1/approvals/applications/app1/approve")),
+                mcpPrincipal());
+    }
+
+    @Test
     void extensionRule_isAllowedAlongsideCoreRules() {
         McpAllowlistWebFilter extended = fixtureFilter(McpAllowRule.rule(HttpMethod.GET, FIXTURE_PREFIX + "/{id}"));
 

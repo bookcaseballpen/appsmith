@@ -128,9 +128,9 @@ describe("release-approval MCP tools", () => {
       idempotentHint: true,
       openWorldHint: false,
     });
-    expect(
-      byName.get("submit_for_approval")?.inputSchema.required,
-    ).toEqual(["applicationId"]);
+    expect(byName.get("submit_for_approval")?.inputSchema.required).toEqual([
+      "applicationId",
+    ]);
     expect(
       TOOL_CATALOG.filter((tool) => tool.name.includes("approval")).map(
         (tool) => [tool.name, tool.gate],
@@ -182,6 +182,36 @@ describe("release-approval MCP tools", () => {
     ]);
   });
 
+  it("submit_for_approval sends the note for the Approver when one is given", async () => {
+    const calls: RecordedCall[] = [];
+    const client = await session(recordingFetch(calls));
+    const res = await callTool(client, "submit_for_approval", {
+      applicationId: "app1",
+      note: "  New order filter ",
+    });
+
+    expect(res.isError).toBe(false);
+    expect(calls.map((call) => [call.method, call.url, call.body])).toEqual([
+      [
+        "POST",
+        `${API_BASE_URL}/api/v1/approvals/applications/app1/submit`,
+        JSON.stringify({ note: "New order filter" }),
+      ],
+    ]);
+  });
+
+  it("refuses a note longer than the server keeps, without calling the server", async () => {
+    const calls: RecordedCall[] = [];
+    const client = await session(recordingFetch(calls));
+    const res = await callTool(client, "submit_for_approval", {
+      applicationId: "app1",
+      note: "x".repeat(501),
+    });
+
+    expect(res.isError).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
   it("get_approval_status GETs the application's state", async () => {
     const calls: RecordedCall[] = [];
     const client = await session(recordingFetch(calls));
@@ -229,20 +259,17 @@ describe("release-approval MCP tools", () => {
   it.each([
     [403, "submit_for_approval", "Developer or Administrator"],
     [404, "get_approval_status", "No application with this id"],
-  ])(
-    "maps a %i from %s to guidance",
-    async (status, tool, expected) => {
-      const client = await session(
-        recordingFetch([], () => errorResponse(status, "nope")),
-      );
-      const body = JSON.parse(
-        (await callTool(client, tool, { applicationId: "app1" })).text,
-      );
+  ])("maps a %i from %s to guidance", async (status, tool, expected) => {
+    const client = await session(
+      recordingFetch([], () => errorResponse(status, "nope")),
+    );
+    const body = JSON.parse(
+      (await callTool(client, tool, { applicationId: "app1" })).text,
+    );
 
-      expect(body.status).toBe(status);
-      expect(body.error).toContain(expected);
-    },
-  );
+    expect(body.status).toBe(status);
+    expect(body.error).toContain(expected);
+  });
 
   it("fails like a core tool on an unexpected server error", async () => {
     const client = await session(

@@ -393,7 +393,8 @@ unaffected — the parameter is optional and ignored.
 The fork adds two always-on tools through the edition seam (`src/ee/extensions/{catalog,api,tools,routeContract}.ts`;
 the server side is `approvals/ApplicationApprovalController.java` and `filters/McpAllowlistExtensions.java`):
 
-- **`submit_for_approval`** (`applicationId`) — `POST /api/v1/approvals/applications/{applicationId}/submit`. Submits
+- **`submit_for_approval`** (`applicationId`, optional `note` up to 500 characters for the Approver, kept in the
+  history) — `POST /api/v1/approvals/applications/{applicationId}/submit`. Submits
   the app's **current edit-mode version** as a frozen snapshot. The agent is told to call it only after the developer
   has finished UAT and asked to submit. Any later change to the app (editor, import, MCP) cancels the request
   automatically, and the app must be submitted again. A non-destructive, non-idempotent write: it publishes nothing.
@@ -406,6 +407,25 @@ guidance for the agent; like every core tool, the server's error body text itsel
 
 **Approving and rejecting are intentionally absent.** They are done by a human Approver in the Appsmith UI: there is
 no MCP tool for them, their routes are not in the MCP allowlist, and the server refuses them for MCP tokens.
+
+### Projects repo (fork)
+
+Two more always-on tools, used by `tools/cab-sync` (the projects repo's sync CLI, an MCP client of this server). The
+server side is `projectsrepo/ProjectsRepoController.java`:
+
+- **`export_application`** (`applicationId`) — `GET /api/v1/projects-repo/applications/{applicationId}`. The app's
+  **edit copy** as app JSON, read with the edit permission (so a Developer can export; the file export needs the
+  export permission only Admins have). No published copy; datasources by name and plugin only, no stored structure,
+  no decrypted fields, no configuration on queries that use a saved datasource and no authentication on an API
+  query's own URL. The server strips these (`EditCopyJson.java`) and the tool strips them again. Read-only.
+- **`import_application`** (`workspaceId`, optional `applicationId`, `artifact` up to 1.5 MB) —
+  `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]`. With `applicationId` it replaces
+  that app's **edit copy only**; the published copy and the app's live state stay as they are, and a pending
+  approval request is cancelled because the app changed. Without it, a new app (not live until a release is
+  approved). Returns `applicationId`, `workspaceId`, `name` and `unconfiguredDatasources`. Annotated as a
+  non-destructive write, like the core tools that write the edit copy.
+
+Both use a 120 s outbound budget (the whole app is read or written).
 
 ## Adding an edition (EE) MCP tool
 
