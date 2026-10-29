@@ -359,11 +359,17 @@ Server plugins (`app/server/appsmith-plugins/`):
   `solutions/DatasourcePermissionImplTest`, and the client files `src/ce/api/InstanceRoleApi.ts`,
   `src/ee/api/InstanceRoleApi.ts`, `src/ce/utils/instanceRoles.ts` (and `.test.ts`), `src/ee/utils/instanceRoles.ts`,
   `src/ce/pages/AdminSettings/config/roles.ts`, `src/pages/AdminSettings/Roles/index.tsx`,
-  `src/pages/AppIDE/RequireEditRole.tsx` (and `.test.tsx`)
+  `src/pages/AppIDE/RequireEditRole.tsx` (and `.test.tsx`),
+  `src/ee/utils/BusinessFeatures/permissionPageHelpers.tsx` (CE stub, now overrides the datasource checks; and
+  `.test.ts`)
 
 ### Upstream files edited for roles (phase A)
 
-- Client: `src/ce/AppRouter.tsx`, `src/ce/pages/AdminSettings/config/index.ts`, `src/selectors/gitModSelectors.ts`
+- Client: `src/ce/AppRouter.tsx`, `src/ce/pages/AdminSettings/config/index.ts`, `src/selectors/gitModSelectors.ts`,
+  `src/pages/AppIDE/layouts/components/Header/DeployButton.tsx` (disabled for Devs),
+  `src/pages/AppIDE/layouts/hooks/useEditorStateLeftPaneWidth.ts` and `useGridLayoutTemplate.ts` (Approvers get the
+  canvas only), `src/pages/Editor/DataSourceEditor/DSFormHeader.tsx` (Edit only with manage),
+  `src/sagas/InitSagas.ts` (an editor URL opens view mode for Users) and `src/sagas/__tests__/initSagas.test.ts`
 - Server main (`src/main/java/com/appsmith/server/`): `acl/PolicyGenerator.java`,
   `datasources/base/DatasourceServiceImpl.java`, `dtos/UserProfileDTO.java`, `helpers/UserUtils.java`,
   `helpers/WorkspaceServiceHelperImpl.java`, `imports/internal/ImportServiceImpl.java`,

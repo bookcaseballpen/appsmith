@@ -1,6 +1,7 @@
 import type { User } from "constants/userConstants";
 import { DefaultCurrentUserDetails } from "constants/userConstants";
 import {
+  canPublishRole,
   getInstanceRole,
   getViewerPathForBuilderPath,
   isReviewOnlyRole,
@@ -29,6 +30,16 @@ describe("instanceRoles", () => {
     expect(isViewOnlyRole(undefined)).toBe(false);
     expect(isReviewOnlyRole("APPROVER")).toBe(true);
     expect(isReviewOnlyRole("ADMIN")).toBe(false);
+  });
+
+  it.each([
+    ["ADMIN", true],
+    ["APPROVER", true],
+    ["DEV", false],
+    ["USER", false],
+    [undefined, true],
+  ] as const)("lets the role %s publish: %s", (role, allowed) => {
+    expect(canPublishRole(role)).toBe(allowed);
   });
 
   it.each([

@@ -31,6 +31,16 @@ export const isReviewOnlyRole = (role?: InstanceRole) => role === "APPROVER";
 export const selectIsReviewOnlyUser = (state: DefaultRootState) =>
   isReviewOnlyRole(getInstanceRole(state.ui?.users?.currentUser));
 
+/** Devs build apps but an Approver or Admin publishes them; Users can't edit at all. */
+export const canPublishRole = (role?: InstanceRole) =>
+  role !== "DEV" && role !== "USER";
+
+export const selectCanPublish = (state: DefaultRootState) =>
+  canPublishRole(getInstanceRole(state.ui?.users?.currentUser));
+
+export const PUBLISH_NOT_ALLOWED_TOOLTIP =
+  "Only an Approver or an Admin can deploy apps";
+
 /**
  * The view-mode URL for an editor URL: every builder route is its viewer route followed by "/edit" and an optional
  * editor sub-path (for example "/app/my-app/page1-abc/edit/queries/q1" -> "/app/my-app/page1-abc").
