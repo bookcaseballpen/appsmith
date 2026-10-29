@@ -68,7 +68,10 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
 Status (milestone 2): on a `-DbType postgres` fork-uat database the server applies V1–V4 and passes an end-to-end check
 over HTTP: first-admin signup, app creation, export, import as a new app, direct publish refused, submit and approve
 publishes, an admin import onto the live app turns the approval back to draft, a Dev cannot import over the live app,
-publish or approve but can submit, the admin rejects, and the published version stays as approved. Tested on Testcontainers PostgreSQL: the repository tests,
+publish or approve but can submit, the admin rejects, and the published version stays as approved. The full
+`up.ps1 -DbType postgres` instance (dependencies linked from the main folder, webpack client) also passes in a headless
+browser: the login page, a Dev's "Submit for approval" in the editor, the admin's Approve in the home page's "Waiting for
+approval" list, and the published page then carrying the Dev's change. Tested on Testcontainers PostgreSQL: the repository tests,
 imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial import/export 4 + 4,
 `ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
 (`ApplicationApprovalServiceTest` 38, `InstanceRolePermissionsTest` 78, `EditorReadOnlyHttpTest` 5) and the Postgres
