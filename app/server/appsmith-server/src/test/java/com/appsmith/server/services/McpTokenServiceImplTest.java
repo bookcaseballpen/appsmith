@@ -17,10 +17,14 @@ import com.appsmith.server.helpers.McpTokenUtils;
 import com.appsmith.server.repositories.McpKeyRepository;
 import com.appsmith.server.repositories.McpTokenRepository;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.InstanceRole;
+import com.appsmith.server.roles.InstanceRoleService;
 import org.bson.types.ObjectId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -80,6 +84,9 @@ class McpTokenServiceImplTest {
     @Mock
     private TransactionalOperator transactionalOperator;
 
+    @Mock
+    private InstanceRoleService instanceRoleService;
+
     @Captor
     private ArgumentCaptor<McpKey> mcpKeyCaptor;
 
@@ -111,6 +118,10 @@ class McpTokenServiceImplTest {
         when(mcpTokenCache.evict(anyString())).thenReturn(Mono.empty());
         when(mcpTokenCache.get(anyString())).thenReturn(Mono.empty());
         when(analyticsService.sendEvent(anyString(), anyString(), anyMap())).thenReturn(Mono.empty());
+        // McpTokenServiceImpl passes exactly ADMIN and DEV, so the two varargs are matched one by one.
+        when(instanceRoleService.requireRole(any(), anyString(), any(InstanceRole.class), any(InstanceRole.class)))
+                .thenReturn(Mono.empty());
+        when(instanceRoleService.getRole(any())).thenReturn(Mono.just(InstanceRole.DEV));
 
         service = new McpTokenServiceImpl(
                 organizationService,
@@ -119,7 +130,8 @@ class McpTokenServiceImplTest {
                 mcpKeyRepository,
                 mcpTokenRepository,
                 mcpTokenCache,
-                transactionalOperator);
+                transactionalOperator,
+                instanceRoleService);
 
         user = new User();
         user.setId("user-id");
@@ -454,6 +466,37 @@ class McpTokenServiceImplTest {
                 .verifyComplete();
 
         verify(mcpTokenRepository, never()).findByMcpKeyIdAndStatus(anyString(), any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"APPROVER", "USER"})
+    void should_completeEmpty_when_tokenOwnerCannotEditApps(InstanceRole role) {
+        // Given
+        McpTokenResponseDTO generated = createToken("Claude Desktop", 30);
+        when(mcpTokenCache.get(generated.id()))
+                .thenReturn(Mono.just(new McpTokenCache.Entry(
+                        user.getId(), persistedToken.getTokenHash(), persistedToken.getExpiresAt())));
+        when(userRepository.findById(user.getId())).thenReturn(Mono.just(user));
+        when(instanceRoleService.getRole(user)).thenReturn(Mono.just(role));
+
+        // When / Then
+        StepVerifier.create(service.authenticate(generated.token())).verifyComplete();
+    }
+
+    @Test
+    void should_refuseAndStoreNothing_when_userWithoutEditRoleCreatesToken() {
+        // Given
+        when(instanceRoleService.requireRole(any(), anyString(), any(InstanceRole.class), any(InstanceRole.class)))
+                .thenReturn(Mono.error(new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, "Use MCP")));
+
+        // When / Then
+        StepVerifier.create(service.create(user, "Claude Desktop", 30))
+                .expectErrorSatisfies(error -> assertThat(((AppsmithException) error).getError())
+                        .isEqualTo(AppsmithError.ACTION_IS_NOT_AUTHORIZED))
+                .verify();
+        verify(mcpKeyRepository, never()).save(any());
     }
 
     @Test

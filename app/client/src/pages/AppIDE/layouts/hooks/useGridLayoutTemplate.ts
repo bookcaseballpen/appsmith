@@ -5,7 +5,7 @@ import useWindowDimensions from "utils/hooks/useWindowDimensions";
 import { useCurrentEditorState } from "../../hooks/useCurrentEditorState";
 import { useCurrentAppState } from "IDE/hooks/useCurrentAppState";
 import { getPropertyPaneWidth } from "selectors/propertyPaneSelectors";
-import { previewModeSelector } from "selectors/editorSelectors";
+import { selectCombinedPreviewMode } from "selectors/gitModSelectors";
 import { getIDEViewMode } from "selectors/ideSelectors";
 import { EditorState } from "IDE/enums";
 import { EditorEntityTab, EditorViewMode } from "IDE/Interfaces/EditorTypes";
@@ -38,7 +38,8 @@ function useGridLayoutTemplate(): ReturnValue {
   const PropertyPaneWidth = useSelector(getPropertyPaneWidth);
   const { segment } = useCurrentEditorState();
   const appState = useCurrentAppState();
-  const isPreviewMode = useSelector(previewModeSelector);
+  // Fork: the combined mode also covers Approvers, so their editor shows only the canvas.
+  const isPreviewMode = useSelector(selectCombinedPreviewMode);
   const editorMode = useSelector(getIDEViewMode);
   const isProtectedMode = useGitProtectedMode();
 

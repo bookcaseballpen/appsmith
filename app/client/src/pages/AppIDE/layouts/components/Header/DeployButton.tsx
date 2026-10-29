@@ -31,6 +31,10 @@ import {
 } from "selectors/editorSelectors";
 import styled from "styled-components";
 import { getIsAnvilEnabledInCurrentApplication } from "layoutSystems/anvil/integrations/selectors";
+import {
+  PUBLISH_NOT_ALLOWED_TOOLTIP,
+  selectCanPublish,
+} from "ee/utils/instanceRoles";
 
 // This wrapper maintains pointer events for tooltips when the child button is disabled.
 // Without this, disabled buttons won't trigger tooltips because they have pointer-events: none
@@ -42,7 +46,9 @@ function DeployButton() {
   const applicationId = useSelector(getCurrentApplicationId);
   const isPackageUpgrading = useSelector(getIsPackageUpgrading);
   const isProtectedMode = useGitProtectedMode();
-  const isDeployDisabled = isPackageUpgrading || isProtectedMode;
+  // Fork: the server refuses publishing from Devs, so the button is disabled for them.
+  const canPublish = useSelector(selectCanPublish);
+  const isDeployDisabled = isPackageUpgrading || isProtectedMode || !canPublish;
   const isPublishing = useSelector(getIsPublishingApplication);
   const isGitConnected = useGitConnected();
   const isGitModEnabled = useGitModEnabled();
@@ -51,6 +57,10 @@ function DeployButton() {
   const redeployTrigger = useSelector(getRedeployApplicationTrigger);
 
   const tooltipText = useMemo(() => {
+    if (!canPublish) {
+      return PUBLISH_NOT_ALLOWED_TOOLTIP;
+    }
+
     if (isPackageUpgrading) {
       return createMessage(PACKAGE_UPGRADING_ACTION_STATUS, "deploy this app");
     }
@@ -69,7 +79,13 @@ function DeployButton() {
     }
 
     return createMessage(DEPLOY_BUTTON_TOOLTIP);
-  }, [isPackageUpgrading, isGitConnected, gitStatusState, redeployTrigger]);
+  }, [
+    canPublish,
+    isPackageUpgrading,
+    isGitConnected,
+    gitStatusState,
+    redeployTrigger,
+  ]);
 
   const dispatch = useDispatch();
 
