@@ -8,8 +8,9 @@
     -StopDatabases  also stops the worktree's Redis, and the shared MongoDB when no other
                     worktree's Redis is still running. Volumes are kept.
     -DeleteData     also drops the worktree's MongoDB database, its Redis container and
-                    volume, and its saved settings (.work\<Name>). Asks first. Other
-                    worktrees' data is never touched.
+                    volume, and its saved settings (.work\<Name>), and removes the links
+                    to the main folder's client dependencies (only the links). Asks
+                    first. Other worktrees' data is never touched.
 
 .EXAMPLE
   .\scripts\fork-uat\down.ps1
@@ -33,6 +34,8 @@ $MongoContainer = "appsmith-dev-mongo"
 
 # Windows PowerShell 5.1 doesn't set $PSScriptRoot in parameter defaults.
 if (-not $Source) { $Source = Join-Path $PSScriptRoot "..\.." }
+
+. (Join-Path $PSScriptRoot "client-deps.ps1")
 
 # Runs a native command for its stdout; returns $null when it fails.
 function Invoke-Probe([string]$exe, [string[]]$arguments) {
@@ -87,6 +90,12 @@ if ($DeleteData) {
     Remove-Container $redisContainer
     if ($null -ne (Invoke-Probe docker @("volume", "rm", $redisContainer))) { Write-Host "Deleted volume $redisContainer." }
     if (Test-Path $workDir) { Remove-Item -Recurse -Force $workDir; Write-Host "Deleted $workDir." }
+    # Only the links are removed, never what they point to in the main folder.
+    $clientDir = Join-Path $repoRoot "app\client"
+    if (Test-LinkedClientDeps $clientDir) {
+      Remove-LinkedClientDeps $clientDir
+      Write-Host "Removed the links to the main folder's client dependencies ($clientDir\node_modules)."
+    }
   }
 } elseif ($StopDatabases) {
   Invoke-Probe docker @("stop", $redisContainer) | Out-Null

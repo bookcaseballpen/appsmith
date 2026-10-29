@@ -401,6 +401,10 @@ yarn on the host and LF line endings in `deploy/docker/fs`.
 The Watchtower labels of the root `Dockerfile` are not set on the fork image: Watchtower updates from a registry,
 and the fork image is local. The hook scripts stay in the image (`/watchtower-hooks`), unused.
 
+Dev instances from source (`scripts/fork-uat/`, see its README): a worktree whose `app/client/package.json` and
+`yarn.lock` match the main folder's links the main folder's client `node_modules` (one junction per entry, workspace
+packages and `.cache` kept its own) instead of a 30-minute `yarn install`; `up.ps1 -NoLink` installs instead.
+
 ## Feature flags (local defaults)
 
 Flag values normally come from cs.appsmith.com. With cloud services disabled they come from
