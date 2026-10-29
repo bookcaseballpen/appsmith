@@ -81,6 +81,24 @@ class ApplicationTemplateServiceImplTest {
     }
 
     @Test
+    void should_returnEmptyFilterLists_when_cloudServicesDisabled() {
+        // Given
+        when(cloudServicesConfig.isEnabled()).thenReturn(false);
+
+        // When
+        Mono<ApplicationTemplate> result = applicationTemplateService.getFilters();
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(filters -> {
+                    assertThat(filters.getFunctions()).isEmpty();
+                    assertThat(filters.getUseCases()).isEmpty();
+                })
+                .verifyComplete();
+        verifyNoInteractions(cacheableTemplateHelper);
+    }
+
+    @Test
     void should_failWithCloudServicesError_when_importingTemplateWithCloudServicesDisabled() {
         // Given
         when(cloudServicesConfig.isEnabled()).thenReturn(false);

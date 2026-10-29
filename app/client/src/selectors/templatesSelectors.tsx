@@ -10,6 +10,7 @@ import {
   WIDGET_TAGS,
 } from "constants/WidgetConstants";
 import Fuse from "fuse.js";
+import { isEmpty } from "lodash";
 import type { Filter } from "pages/Templates/TemplateFilters";
 import { TEMPLATE_BUILDING_BLOCKS_FILTER_FUNCTION_VALUE } from "pages/Templates/constants";
 import { createSelector } from "reselect";
@@ -201,6 +202,13 @@ export const templatesDatasourceFiltersSelector = createSelector(
 
 export const allTemplatesFiltersSelector = (state: DefaultRootState) =>
   state.ui.templates.allFilters;
+
+// Fork: fetch the filters only until one request has finished. With cloud services off the
+// server returns empty filters, and refetching on "empty" looped without end.
+export const shouldFetchTemplateFiltersSelector = (state: DefaultRootState) =>
+  !state.ui.templates.filtersFetched &&
+  !state.ui.templates.loadingFilters &&
+  isEmpty(state.ui.templates.allFilters.functions);
 
 // Get all filters which is associated with atleast one template
 // If no template is associated with a filter, then the filter shouldn't be in the filter list

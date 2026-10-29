@@ -87,6 +87,8 @@ callback. It fails closed when the caller's role cannot be resolved.
 - One logical change per commit, message prefix `fork(...)`. No repo-wide reformatting.
 - Spotless: the pre-commit hook is off in this clone (`core.hooksPath` unset). Format changed server files with
   `mvn spotless:apply -DspotlessFiles=<comma-separated regexes>`, so untouched upstream files stay as they are.
+- `bunfig.toml` and `bun-tests/` exist only so CCPM's merge check (`bun test` at the repo root) passes: bun is
+  pointed at one smoke test instead of the jest and Cypress specs. The real suites are jest and Maven.
 
 ## Configuration
 
@@ -144,7 +146,7 @@ Off by default through `APPSMITH_CLOUD_SERVICES_ENABLED`; no request is made and
 | External-IP lookup | Returns `unknown` | `NetworkUtils` |
 | Release notes / "what's new" / new-version check | Empty base URL, CE code skips; the list is empty | `ReleaseNotesUtilsCEImpl` (unchanged) |
 | Plugin catalogue sync (every 2 h) | Empty base URL, CE code skips; plugins stay as in the database | `PluginScheduledTaskUtilsCEImpl` (unchanged) |
-| Templates (list, filters, similar) | Empty | `ApplicationTemplateServiceImpl` |
+| Templates (list, filters, similar) | Empty (filters as empty lists). The client requests the filters once and treats an empty result or an error as final (`shouldFetchTemplateFiltersSelector`); it used to refetch without end. | `ApplicationTemplateServiceImpl` |
 | Template details, fork, merge, building blocks, publish | Cloud-services error | `ApplicationTemplateServiceImpl` |
 | Sample databases (mock data) | Empty list; creating one is a cloud-services error | `MockDataServiceImpl` |
 | Upcoming integrations list | Empty | `PluginServiceImpl` |
@@ -282,6 +284,8 @@ Client (`app/client/`):
 - `src/api/interceptors/request/addAnonymousUserIdHeader.ts`
 - `src/api/interceptors/request/apiRequestInterceptor.ts`
 - `src/ce/configs/index.ts`, `src/ce/configs/index.test.ts`, `src/ce/configs/types.ts`
+- `src/ce/pages/Applications/CreateNewAppFromTemplateModal/index.tsx`
+- `src/components/editorComponents/PartialImportExport/PartialExportModal/unitTestUtils.ts`
 - `src/ce/sagas/NavigationSagas.ts`, `src/ce/sagas/userSagas.tsx`
 - `src/ce/utils/Analytics/trackedUser.ts`
 - `src/ce/utils/AnalyticsUtil.tsx`, `src/ce/utils/AnalyticsUtil.test.ts`
@@ -296,6 +300,8 @@ Client (`app/client/`):
 - `src/pages/Editor/HelpButton.tsx`, `src/pages/Editor/__tests__/HelpButton.test.tsx`
 - `src/pages/Editor/gitSync/Tabs/GitConnectionV2/AddDeployKey.tsx`, `ChooseGitProvider.tsx`, `GenerateSSH.tsx`,
   `constants.ts`
+- `src/pages/Templates/index.tsx`, `src/pages/Templates/TemplatesModal/index.tsx`
+- `src/reducers/uiReducers/templateReducer.ts`, `src/selectors/templatesSelectors.tsx`
 - `src/pages/common/SearchBar/HomepageHeaderAction.tsx` (and `__tests__/HomepageHeaderAction.test.tsx`)
 - `src/store.ts`
 - `src/utils/bootPylon.ts`, `src/utils/hooks/useOnUpgrade.ts`
@@ -345,7 +351,8 @@ Server plugins (`app/server/appsmith-plugins/`):
 - `app/client/public/assets-cdn/` (vendored assets)
 - `app/client/scripts/fork-vendor-assets.js`
 - `app/client/src/ce/utils/airgapHelpers.test.ts`, `app/client/src/constants/ThirdPartyConstants.test.ts`,
-  `app/client/src/git/components/common/AddDeployKey.test.tsx`
+  `app/client/src/git/components/common/AddDeployKey.test.tsx`,
+  `app/client/src/ce/pages/Applications/CreateNewAppFromTemplateModal/index.test.tsx`
 - `app/server/appsmith-server/src/main/java/com/appsmith/server/featureflags/ForkFeatureFlagDefaults.java`
 - `app/server/appsmith-plugins/appsmithAiPlugin/src/test/java/com/external/plugins/AppsmithAiPluginExecutorTest.java`
 - Server unit tests: `configurations/CloudServicesConfigTest`, `configurations/SharedConfigImplTest`,
