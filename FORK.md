@@ -91,6 +91,8 @@ callback. It fails closed when the caller's role cannot be resolved.
   moving to Postgres. Existing upstream code that uses them stays as it is.
 - Spotless: the pre-commit hook is off in this clone (`core.hooksPath` unset). Format changed server files with
   `mvn spotless:apply -DspotlessFiles=<comma-separated regexes>`, so untouched upstream files stay as they are.
+- `bunfig.toml` and `bun-tests/` exist only so CCPM's merge check (`bun test` at the repo root) passes: bun is
+  pointed at one smoke test instead of the jest and Cypress specs. The real suites are jest and Maven.
 
 ## Configuration
 
@@ -139,6 +141,59 @@ loopback port. Unmocked calls, such as instance registration at start-up, fail l
 "Instance registration failed ... Connection refused: /127.0.0.1:1", never "Registration successful"). Suites that need
 cloud responses set their own MockWebServer URL (`ApplicationTemplateServiceTest`,
 `ApplicationTemplateServicePublishTemplateTest`).
+
+## Build and deploy
+
+The fork builds its own image from source. Docker is the only tool needed on the build machine (no JDK, Maven,
+Node or yarn on the host), and nothing is pulled from Appsmith: base layers are official Docker Hub images
+(`ubuntu`, `redis`, `caddy`, `golang`, `node`, `maven` with Temurin 25) plus the MongoDB, PostgreSQL, Adoptium,
+Node.js, npm, Maven Central and GitHub (mongo-tools) downloads the upstream base already used.
+
+```sh
+scripts/fork-build/build-image.sh            # Linux, macOS, Git Bash
+scripts\fork-build\build-image.ps1           # Windows PowerShell
+docker compose -f deploy/fork/docker-compose.yml up -d
+```
+
+1. `build-image` builds the runtime base from `deploy/docker/base.dockerfile` as `creative-app-builder-base:local`
+   (upstream pulls `appsmith/base-ce:release` instead), then `deploy/fork/Dockerfile` as
+   `creative-app-builder:local`. Options: image tag (first argument / `-Image`), `BASE_IMAGE` / `-BaseImage`,
+   `VERSION` / `-Version` (written to `info.json`).
+2. `deploy/fork/Dockerfile` is multi-stage: the client, RTS and MCP build in `node:24.14.1-bookworm`
+   (`yarn install --immutable --mode=skip-build` with the committed yarn release, then the same `node` commands as
+   the `build.sh` scripts, `REACT_APP_ENVIRONMENT=DEVELOPMENT` so the Faro source-map upload plugin stays off); the
+   server and plugins build in `maven:3.9-eclipse-temurin-25` (`-DskipTests -Dspotless.skip=true`); the last stage
+   repeats the root `Dockerfile` on top of the local base. Keep that stage in sync when a cherry-pick changes the
+   root `Dockerfile`. Yarn and Maven caches are BuildKit cache mounts, so rebuilds are faster.
+3. The build context is filtered by `deploy/fork/Dockerfile.dockerignore` (sources only; local `.env` files stay
+   out). Line endings: `.gitattributes` keeps `*.sh`, Dockerfiles, `deploy/fork/**` and `deploy/docker/fs/**` LF in
+   every new checkout. For checkouts made before that file existed (Windows, `core.autocrlf=true`), the build is
+   still safe: `deploy/docker/fs` is copied with CR characters stripped, the base Dockerfile is sent to Docker on
+   stdin with CRs stripped (its heredocs fail on CRLF), and `deploy/fork/Dockerfile` uses no heredocs.
+4. Type checks (`tsc`, `check-types`) and `app/server/scripts/check-field-constants.mjs` are not part of the image
+   build; run them as usual before merging.
+5. `deploy/fork/docker-compose.yml` runs the image with its embedded MongoDB and Redis (as upstream's single image)
+   and a named volume `creative-app-builder-stacks`. The port binds to `127.0.0.1:8000` by default; override with
+   `APPSMITH_HTTP_PORT`, `APPSMITH_BIND_ADDRESS`, `APPSMITH_CONTAINER_NAME`, `APPSMITH_VOLUME_NAME`,
+   `APPSMITH_IMAGE`. `pull_policy: never`, so compose never tries a registry. On first start the container writes
+   `stacks/configuration/docker.env` with generated MongoDB, Redis and encryption secrets: keep the volume.
+6. Health: `docker inspect --format '{{.State.Health.Status}}' creative-app-builder` (the image's healthcheck), or
+   `http://127.0.0.1:8000/api/v1/health`. The healthcheck turns `healthy` about a minute before the backend is up:
+   until then the editor shows "Appsmith is starting" and `/api/v1/health` answers 502. Wait for the 200.
+7. Build time, measured on an 8-CPU, 20 GB Docker Desktop with empty caches: about 45 minutes (6 minutes to send
+   the ~500 MB build context the first time, then `yarn install` 18 minutes and the client build 19 minutes, with
+   Maven's 20 minutes running alongside). With warm caches, a change to one part rebuilds only that part; a
+   Dockerfile-only change in the last stages takes about a minute.
+
+`scripts/local_testing.sh [tag] [port]` builds the current working tree with `build-image.sh` and runs it as
+`creative-app-builder-local` on `127.0.0.1:80`; upstream's branch and remote modes (git fetch, checkout and pull) are
+removed. `deploy/docker/docker-compose.yml` uses `creative-app-builder:local`. The upstream root `Dockerfile` (with a
+fork comment pointing here; keep its steps and `deploy/fork/Dockerfile`'s final stages in sync) still works with
+`--build-arg BASE=creative-app-builder-base:local` after host builds of the artifacts, but needs JDK 25, Maven and
+yarn on the host and LF line endings in `deploy/docker/fs`.
+
+The Watchtower labels of the root `Dockerfile` are not set on the fork image: Watchtower updates from a registry,
+and the fork image is local. The hook scripts stay in the image (`/watchtower-hooks`), unused.
 
 ## Feature flags (local defaults)
 
@@ -281,17 +336,75 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
 - Third-party, not Appsmith: Google APIs for the Google Sheets picker (`sagas/loadGoogleApi.ts`), Google Fonts on
   the static `terms-and-conditions.html`, CDNs (jsdelivr, unpkg, cdnjs) used by the custom JS library installer.
 
-## Build- and deploy-time dependencies seen (for the follow-up task)
+## Build and deploy: what still references Appsmith
 
-- `app/client/download-assets.js` (airgap builds) downloads from `assets.appsmith.com`; not used by the fork's
+Cleaned in the standalone-build task: the Appsmith base image (`appsmith/base-ce`) is replaced by the locally built
+base; `scripts/local_testing.sh` no longer passes a `release-cs.appsmith.com` URL or pulls the Appsmith base;
+`.env.example` documents `APPSMITH_CLOUD_SERVICES_ENABLED` instead of `release-cs.appsmith.com`;
+`scripts/deploy_preview.sh` and `scripts/cleanup_dp.sh` (Appsmith's own EKS cluster, `helm-ee.appsmith.com`,
+`*.dp.appsmith.com`) and `deploy/docker/fs/opt/appsmith/pull_resource.sh` (an AMI helper that downloaded a compose
+file from `raw.githubusercontent.com/appsmithorg`, called by nothing) are deleted; `deploy/docker/docker-compose.yml`
+and `deploy/docker/route-tests/Dockerfile` use the local images.
+
+Audit of the image itself (`deploy/docker/`): no script in the image calls an Appsmith host at build time or at
+run time. Remaining mentions are text only: `docs.appsmith.com` links in log messages (`entrypoint.sh`,
+`install_docker.sh`, RTS `ctl/mailer.ts`), `support@appsmith.com`, the `LABEL maintainer` of `base.dockerfile`,
+GitHub issue links in comments, and the plugin `iconLocation` URLs in `baseline-ce/plugin.jsonl` (the client
+rewrites them to `/assets-cdn`). Third-party downloads that can happen at run time: `entrypoint.sh` compiles Redis
+from `download.redis.io` only when the host page size is above 4 KB (for example some ARM kernels);
+`install_docker.sh` (not called by the image) uses `download.docker.com` and GitHub.
+
+Checked at run time on `creative-app-builder:local` (October 2026), with a `tcpdump` container sharing the app
+container's network namespace: a first boot on an empty volume (MongoDB init, migrations), the first-admin signup,
+the login page and its APIs, logged-in API calls, a restart of backend, RTS and MCP, and about 15 minutes of idle
+running. The capture held only the HTTP requests from the host on port 80: no DNS query and no outbound connection
+of any kind. The container logs have no Appsmith host (the only URLs are `localhost`, `slf4j.org` and a Micrometer
+GitHub issue in startup warnings).
+
+The built image filesystem (`/opt/appsmith`, source maps excluded) still has these Appsmith URLs; none is fetched by
+the server, RTS or the loaded editor:
+
+- `docs.appsmith.com` (about 270 occurrences), `appsmith.com`, `www.appsmith.com/enterprise`, `www.appsmith.com/blog`,
+  `community.appsmith.com` and the request-a-template form on `app.appsmith.com`: links, see the list above.
+- `assets.appsmith.com/widgets/bird.mp4` and `birds_chirping.mp3` in the widget configs: `example` strings in
+  property validation hints (the widgets' defaults use the local `/assets-cdn`), and the plugin `iconLocation` URLs
+  in `baseline-ce/plugin.jsonl`, rewritten by the client.
+- `mock-api.appsmith.com/users` and `app.appsmith.com/static/media/...png`: a placeholder and a hint.
+- `CRUD-DB-Table-Template-Application.json` in the server jar: besides the `release.app.appsmith.com` strings, two
+  widgets have `defaultImage: https://assets.appsmith.com/widgets/default.png`. If "Generate page from data" copies
+  one of those widgets into an app, the browser loads that image from Appsmith. To fix in a later task (point it at
+  `/assets-cdn/widgets/default.png`, as the MCP template already does).
+- `DEFAULT_ORIGIN_HEADER` (`https://app.appsmith.com`): the server also uses it as the redirect target when a
+  first-admin or user signup fails and the request has no `Referer`. A browser always sends one, so only
+  hand-written requests (curl) end up redirected to Appsmith. To replace in a later task.
+
+Left as they are (not used by the fork's build or deploy):
+
+- `deploy/aws`, `aws_ami`, `ansible`, `digital_ocean`, `heroku`, `helm`, `packer`: upstream's deploy targets. They pull
+  `appsmith/appsmith-ce` / `-ee` images, the `helm.appsmith.com` chart repository or files from
+  `raw.githubusercontent.com/appsmithorg`. Do not use them; remove or port in a later task.
+- `deploy/docker/README.md`, `build-multi-arch.md`, `build-mutil-arch.sh` (pushes `appsmith/appsmith-ce`),
+  `deploy/docker/tests/composes.sh` and `tests/pg-upgrade/run.sh` (pull published `appsmith/appsmith-ce` tags to
+  test upgrades), `deploy/docker/run-test.sh` (an `example@appsmith.com` test login).
+- `app/client/download-assets.js` (airgap builds only) downloads from `assets.appsmith.com`; not used by the fork's
   build, since the assets are committed.
-- `@grafana/faro-webpack-plugin` uploads source maps when `REACT_APP_FARO_*` variables are set.
-- Cypress scripts in `app/client/package.json` use `CYPRESS_BASE_URL=https://dev.appsmith.com`.
-- `release-cs.appsmith.com` / `release-customer.appsmith.com` in `scripts/local_testing.sh`,
-  `scripts/deploy_preview.sh`, a commented example in `.env.example` and several `.github/workflows` files
-  (`server-build.yml`, `server-integration-tests.yml`, `test-build-docker-image.yml`, the deploy-preview and Cypress
-  workflows).
-- Docker base images, registries, Helm chart repository and the GitHub Actions workflows under `.github/`.
+- `@grafana/faro-webpack-plugin` uploads source maps to Grafana when `REACT_APP_ENVIRONMENT=PRODUCTION`; the fork
+  build uses `DEVELOPMENT`.
+- Cypress scripts in `app/client/package.json` use `CYPRESS_BASE_URL=https://dev.appsmith.com`;
+  `app/client/start-https.sh` and `start-caddy.sh` default the dev proxy backend to `release.app.appsmith.com`
+  (pass your own backend URL).
+
+### GitHub Actions workflows (deleted)
+
+All upstream workflows were deleted. We check locally (typecheck, tests). Any future workflow must set
+timeout-minutes (default 10), concurrency with cancel-in-progress, and prefer workflow_dispatch.
+
+Deleted with them: everything under `.github/workflows/` (workflows, their scripts and docs), the composite action
+`.github/actions/setup-server-java`, `.github/dependabot.yml`, and the configs only those workflows or upstream's
+bots read (`labeler.yml`, `release-drafter-template.yml`, `reviewers.yml`, `config.json`, `config-test.json`).
+Kept: the issue and PR templates, and `semantic.yml` / `config.yml` (settings for the `semantic-prs` and welcome
+GitHub Apps; they do nothing unless those apps are installed on the fork, and use no Actions minutes). Some docs
+still mention deleted workflows (`contributions/docs/TestAutomation.md`, `deploy/helm/AGENTS.md`, `.cursor/rules`).
 
 ## Skipped upstream patches
 
@@ -306,7 +419,10 @@ upstream file, `M` = edited upstream file.
 
 Repo root and deploy:
 
+- `.cursor/rules/infra.mdc`, `.env.example`
 - `Dockerfile`
+- `deploy/docker/docker-compose.yml`, `deploy/docker/route-tests/Dockerfile`
+- `scripts/local_testing.sh`
 - `deploy/docker/fs/opt/appsmith/entrypoint.sh`
 - `deploy/docker/fs/opt/appsmith/templates/docker.env.sh`
 - `deploy/docker/fs/opt/appsmith/templates/loading.html`
@@ -375,6 +491,9 @@ Server plugins (`app/server/appsmith-plugins/`):
 
 ### Deleted upstream files (`D`)
 
+- Scripts: `scripts/deploy_preview.sh`, `scripts/cleanup_dp.sh`, `deploy/docker/fs/opt/appsmith/pull_resource.sh`
+- GitHub automation: all of `.github/workflows/`, `.github/actions/`, `.github/dependabot.yml`, `labeler.yml`,
+  `release-drafter-template.yml`, `reviewers.yml`, `config.json`, `config-test.json` (see "GitHub Actions workflows")
 - Client: `src/ce/constants/UsagePulse.ts`, `src/ee/constants/UsagePulse.ts`, `src/ce/hooks/useBetterbugsMetadata.ts`,
   `src/ee/hooks/useBetterbugsMetadata.ts`, `src/ce/hooks/__tests__/useBetterbugsMetadata.test.tsx`,
   `src/ce/sagas/userSagas.test.ts`, `src/usagePulse/` (`index.ts`, `utils.ts` and their tests),
@@ -384,7 +503,9 @@ Server plugins (`app/server/appsmith-plugins/`):
 
 ### New fork files (`A`)
 
-- `FORK.md`
+- `FORK.md`, `.gitattributes`
+- `deploy/fork/` (`Dockerfile`, `Dockerfile.dockerignore`, `docker-compose.yml`)
+- `scripts/fork-build/` (`build-image.sh`, `build-image.ps1`)
 - `app/client/public/assets-cdn/` (vendored assets)
 - `app/client/scripts/fork-vendor-assets.js`
 - `app/client/src/ce/utils/airgapHelpers.test.ts`, `app/client/src/constants/ThirdPartyConstants.test.ts`,

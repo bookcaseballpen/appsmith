@@ -1,3 +1,6 @@
+# Fork: the image the fork builds and deploys comes from deploy/fork/Dockerfile (scripts/fork-build/build-image.sh),
+# not from this file. Its final stages (the fs stage and the runtime stage) repeat this file's steps; keep the two in
+# sync when this file changes, e.g. after a cherry-pick. See FORK.md "Build and deploy".
 ARG BASE
 FROM ${BASE}
 
