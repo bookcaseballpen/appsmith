@@ -14,6 +14,7 @@ import { findDefaultPage } from "pages/utils";
 import { fetchPageDSLSaga } from "ee/sagas/PageSagas";
 import { getCurrentWorkspaceId } from "ee/selectors/selectedWorkspaceSelectors";
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
 import { fetchJSLibraries } from "actions/JSLibraryActions";
 import { fetchDatasources } from "actions/datasourceActions";
 import { fetchJSCollections } from "actions/jsActionActions";
@@ -498,7 +499,8 @@ function* forkTemplateToApplicationViaOnboardingFlowSaga(
 
 // TODO: Refactor and handle this airgap check in a better way - posssibly in root sagas (sangeeth)
 export default function* watchActionSagas() {
-  if (!isAirgappedInstance)
+  // Fork: templates are hidden, so no template saga runs (ee/utils/forkHiddenFeatures).
+  if (!isAirgappedInstance && !areTemplatesHidden())
     yield all([
       takeEvery(ReduxActionTypes.GET_ALL_TEMPLATES_INIT, getAllTemplatesSaga),
       takeEvery(ReduxActionTypes.GET_TEMPLATE_INIT, getTemplateSaga),

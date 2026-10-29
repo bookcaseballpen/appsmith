@@ -22,6 +22,7 @@ import { getIsCreatingApplicationByWorkspaceId } from "ee/selectors/applicationS
 import { getIsFetchingApplications } from "ee/selectors/selectedWorkspaceSelectors";
 import { hasCreateNewAppPermission } from "ee/utils/permissionHelpers";
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
 
 export interface WorkspaceActionProps {
   workspace: Workspace;
@@ -99,7 +100,8 @@ function WorkspaceAction({
         </MenuItem>
         {<Divider className="!block mb-[2px]" />}
 
-        {!isAirgappedInstance && (
+        {/* Fork: no "start from template" (templates are hidden). */}
+        {!isAirgappedInstance && !areTemplatesHidden() && (
           <MenuItem
             data-testid="t--workspace-action-create-app-from-template"
             disabled={!hasCreateNewApplicationPermission}

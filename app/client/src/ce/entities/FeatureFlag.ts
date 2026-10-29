@@ -69,6 +69,8 @@ export const FEATURE_FLAG = {
   release_ssh_key_manager_enabled: "release_ssh_key_manager_enabled",
   // Fork: the built-in AI switch (APPSMITH_AI_ENABLED), set by the server. See ce/utils/builtInAi.ts.
   fork_builtin_ai_enabled: "fork_builtin_ai_enabled",
+  // Fork: the built-in Git switch (APPSMITH_GIT_ENABLED), set by the server. See ce/selectors/builtInGitSelectors.ts.
+  fork_builtin_git_enabled: "fork_builtin_git_enabled",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAG;
@@ -126,6 +128,7 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
   release_branding_logo_resize_enabled: false,
   release_ssh_key_manager_enabled: false,
   fork_builtin_ai_enabled: false,
+  fork_builtin_git_enabled: false,
 };
 
 export const AB_TESTING_EVENT_KEYS = {

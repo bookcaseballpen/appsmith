@@ -1,5 +1,6 @@
 export { addGitBranchHeader } from "./addGitBranchHeader";
 export { blockAirgappedRoutes } from "./blockAirgappedRoutes";
+export { blockHiddenRoutes } from "./blockHiddenRoutes";
 export { addVersionHeader } from "./addVersionHeader";
 export { addEnvironmentHeader } from "./addEnvironmentHeader";
 export { apiRequestInterceptor } from "./apiRequestInterceptor";

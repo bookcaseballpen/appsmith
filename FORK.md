@@ -2,7 +2,9 @@
 
 This repository is a permanent fork of [Appsmith Community Edition](https://github.com/appsmithorg/appsmith).
 It is a slimmed, AI-native, internal Appsmith: it runs on its own, with no runtime dependency on anything
-Appsmith hosts (no cloud services, no telemetry, no Appsmith CDN), and Git sync stays fully usable.
+Appsmith hosts (no cloud services, no telemetry, no Appsmith CDN). Apps are versioned outside Appsmith (export and
+import, by the AI, in a separate repository), so Appsmith's built-in Git is off by default; its code still works when
+switched on (see "Hidden features").
 
 - **Fork point:** upstream `release` at `728ab11367`, tagged `fork-base-728ab11367`.
 - **Upstream remote:** `upstream` (`https://github.com/appsmithorg/appsmith.git`). We do not follow upstream
@@ -164,6 +166,7 @@ refuses approve and reject for MCP tokens as well.
 | `APPSMITH_CLOUD_SERVICES_ENABLED` | `false` | Kill switch for cs.appsmith.com. When false, `CloudServicesConfig` returns empty base URLs and every consumer skips its call (see below). Set `true` only to restore upstream behaviour. |
 | `APPSMITH_DISABLE_TELEMETRY` | `true` | Kept for compatibility; telemetry code is removed regardless. `docker.env.sh` now writes `true`. |
 | `APPSMITH_AI_ENABLED` | `false` | Switch for the built-in AI (see "Built-in AI switch" below). MCP is not affected. Read at start-up: restart the server after changing it. |
+| `APPSMITH_GIT_ENABLED` | `false` | Switch for Appsmith's built-in Git (see "Hidden features" below). Read at start-up: restart the server after changing it. |
 
 ## Built-in AI switch
 
@@ -204,6 +207,82 @@ loopback port. Unmocked calls, such as instance registration at start-up, fail l
 "Instance registration failed ... Connection refused: /127.0.0.1:1", never "Registration successful"). Suites that need
 cloud responses set their own MockWebServer URL (`ApplicationTemplateServiceTest`,
 `ApplicationTemplateServicePublishTemplateTest`).
+
+## Hidden features
+
+The fork hides what it does not use: the code stays, but no screen, menu item or route leads to it, and the server
+refuses its endpoints. Where to look:
+
+- **Server:** `hidden/HiddenEndpointsWebFilter` refuses the endpoints with `FEATURE_DISABLED` (HTTP 403,
+  `AE-APP-4030`, "{feature} is disabled on this instance."). It runs after Spring Security, so an anonymous caller still
+  gets 401 first.
+- **Client:** `ce/utils/forkHiddenFeatures.ts` (`isWorkspaceUiHidden`, `areTemplatesHidden`, `isOnboardingHidden`,
+  always true) and, for Git, `ce/selectors/builtInGitSelectors.ts` (`getIsBuiltInGitEnabled`). Every hidden entry point
+  checks one of them, with a `Fork:` comment.
+
+### Workspaces: one hidden workspace
+
+There is one workspace, "Apps" (see "Roles"), and users never see it as a workspace.
+
+- Hidden: the workspace list and "create workspace" on the home page (also on mobile), the workspace menu (settings,
+  rename, delete, leave, members, invite), the member avatars and the invite button, the `/workspace/...` settings and
+  members pages, the "Workspaces" section of the home search, "Fork" on the app card (it copies an app into a workspace
+  picked from a list; "Duplicate" stays), and the invite form in the editor's and the viewer's Share dialog (the app URL
+  and the public toggle stay; the dialog is titled "Share application").
+- The home page shows the apps of the default workspace directly, picked by `defaultWorkspaceId` from `/users/me`; the
+  "Create new" menu (new app, import) stays. Favourites are not listed separately.
+- Kept for the Admin: users and roles live in **Admin settings > User roles** (`GET /api/v1/admin/users`,
+  `PUT /api/v1/admin/users/{userId}/role`). New users join by signing up (they become User); nobody is invited into a
+  workspace any more.
+- Server: `POST /api/v1/workspaces` and `DELETE /api/v1/workspaces/{id}` are refused for everyone. The fork's startup
+  code (`DefaultWorkspaceService`) creates "Apps" straight through the repository, so it is not affected, and neither
+  are server-internal calls of `WorkspaceService`. Other workspace endpoints (read, members, rename, logo,
+  `/users/invite`) are not refused; nothing in the UI reaches them.
+
+### Templates
+
+- Hidden: the template gallery (`/templates`), "Start from template" on the home page, "Add page from template" in the
+  editor's add-page menu, and the templates modal the editor mounted on every load (it fetched the template list and
+  filters each time). "Fork template" lived only inside those screens. Building blocks stay off behind the upstream
+  flag `release_drag_drop_building_blocks_enabled` (false).
+- No request to `/api/v1/app-templates` is made: the template sagas are not registered, and the request interceptor
+  `api/interceptors/request/blockHiddenRoutes.ts` answers any such request locally (as for an airgapped instance).
+- Server: every `/api/v1/app-templates` endpoint is refused. With cloud services off they already returned nothing.
+
+### Onboarding
+
+- Hidden: the profiling form after signup ("What will you build?"), the first-app screen a new user got instead of the
+  app list (`CreateNewAppsOption`, "connect your data"), the onboarding checklist page (`/edit/checklist`) and the
+  signposting overlay. Feature walkthroughs were already off (`rollout_remove_feature_walkthrough_enabled`), and the
+  checklist was never started in CE.
+- Kept: the first admin signup (`/setup/welcome`, `SetupForm`), the login and signup pages.
+
+### Built-in Git (`APPSMITH_GIT_ENABLED`, off by default)
+
+The switch is `BuiltInGitConfig` (Spring property `appsmith.git.enabled`). The server sends it to the client as the
+feature flag `fork_builtin_git_enabled` (`FeatureFlagServiceImpl`, after the cached flags, like the AI switch).
+
+While it is off:
+
+- The server refuses every `/api/v1/git/**` endpoint (connect, commit, branches, pull, merge, discard, protected
+  branches, auto-commit, deploy keys, import from Git, Git profiles) and `/api/v1/applications/ssh-keypair/{id}`.
+  The MCP server's Git tools get the same error.
+- The client hides: the Git modals in the editor and on the home page (connect, ops, settings, disconnect, import, repo
+  limit), the bottom-bar Git actions ("Connect Git", branch, commit, pull), "Connect to Git repository" in the deploy
+  menu, the "Import from Git" card, the Git keyboard shortcut, the Git author fields in Admin settings > Profile and
+  the "Git user config" profile tab. The editor makes no Git request when it loads (`AppEditorEngine.loadGit`).
+- Left as is: UI that only shows for an app that is already connected (Git badge on the app card, protected-branch
+  callout, Deploy opening the Git modal). No app can be connected while the switch is off, and app exports carry no
+  Git metadata.
+
+`APPSMITH_GIT_ENABLED=true` restores upstream behaviour; the section "Git without the cloud" below then applies. The
+upstream integration tests run with it on (`application-test.properties`); the default is covered by
+`HiddenEndpointsWebFilterTest`, `HiddenEndpointsHttpTest` and `FeatureFlagServiceImplTest`, and on the client by
+`ce/pages/Applications/tests/hiddenFeatures.test.tsx`.
+
+Two upstream HTTP tests changed with the refused workspace creation: `WorkspaceControllerTest` now expects the 403, and
+`WorkspaceIdentityAuthGuardTest` (GHSA checks of the create request body) is disabled, since the request never reaches
+the controller.
 
 ## Build and deploy
 
@@ -286,7 +365,8 @@ as upstream when the cloud is unreachable.
 To change a flag, edit `ForkFeatureFlagDefaults` and this table together.
 
 `fork_builtin_ai_enabled` is not in `ForkFeatureFlagDefaults`: its value is `APPSMITH_AI_ENABLED`, added by
-`FeatureFlagServiceImpl` (see "Built-in AI switch").
+`FeatureFlagServiceImpl` (see "Built-in AI switch"). The same goes for `fork_builtin_git_enabled`
+(`APPSMITH_GIT_ENABLED`, see "Hidden features"); the Git flags above only matter when it is on.
 
 ## What the fork turns off, removes or stubs
 
@@ -355,6 +435,8 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
 
 ### Git without the cloud
 
+Applies when built-in Git is switched on (`APPSMITH_GIT_ENABLED=true`; off by default, see "Hidden features").
+
 - `GitPrivateRepoHelperImpl.isRepoLimitReached` always returns false, so connect, import and commit work for
   private repos on any host, with no limit.
 - `GitCloudServicesUtils` returns "no limit" without a call when cloud services are disabled.
@@ -375,8 +457,8 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
   hiding them is left for a later task.
 - **Placeholders and hints, never fetched:** `mock-api.appsmith.com/users` as an input placeholder, the
   `example` URLs in `packages/dsl/.../widget-configs.json`, the `release.app.appsmith.com` strings inside
-  `CRUD-DB-Table-Template-Application.json`, `DEFAULT_ORIGIN_HEADER` (`app.appsmith.com`, a redirect fallback
-  when a request has no Origin), `ai.appsmith.com` as the old Appsmith AI datasource URL (migration 047 and the
+  `CRUD-DB-Table-Template-Application.json`, `DEFAULT_ORIGIN_HEADER` (`app.appsmith.com`, a redirect-domain fallback
+  when a request has no Origin, Referer or Host), `ai.appsmith.com` as the old Appsmith AI datasource URL (migration 047 and the
   plugin form) and the `HostUrlHelperCE` Javadoc examples.
 - **Test fixtures and Storybook stories:** `app.appsmith.com`, `appcdn.appsmith.com`, `dev.appsmith.com` and
   `assets.appsmith.com` URLs in unit-test data and design-system stories.
@@ -394,8 +476,8 @@ root; without `--dry` it downloads what is missing into `public/assets-cdn`. Com
 - `@sentry/browser` in `recommendedLibraries.ts` is a library a user can choose to install into an app; nothing
   loads it by default.
 - Hint strings: the image-URL example in `utils/validation/common.ts` (`app.appsmith.com/static/...`) and the
-  "request a template" link in `pages/Templates/Template/RequestTemplate.tsx` (an Appsmith-hosted form; templates
-  are empty with the cloud off, so it is not reachable from the normal UI).
+  "request a template" link in `pages/Templates/Template/RequestTemplate.tsx` (an Appsmith-hosted form inside the
+  template gallery, which is hidden, see "Hidden features").
 - Third-party, not Appsmith: Google APIs for the Google Sheets picker (`sagas/loadGoogleApi.ts`), Google Fonts on
   the static `terms-and-conditions.html`, CDNs (jsdelivr, unpkg, cdnjs) used by the custom JS library installer.
 
@@ -433,13 +515,13 @@ the server, RTS or the loaded editor:
   property validation hints (the widgets' defaults use the local `/assets-cdn`), and the plugin `iconLocation` URLs
   in `baseline-ce/plugin.jsonl`, rewritten by the client.
 - `mock-api.appsmith.com/users` and `app.appsmith.com/static/media/...png`: a placeholder and a hint.
-- `CRUD-DB-Table-Template-Application.json` in the server jar: besides the `release.app.appsmith.com` strings, two
-  widgets have `defaultImage: https://assets.appsmith.com/widgets/default.png`. If "Generate page from data" copies
-  one of those widgets into an app, the browser loads that image from Appsmith. To fix in a later task (point it at
-  `/assets-cdn/widgets/default.png`, as the MCP template already does).
-- `DEFAULT_ORIGIN_HEADER` (`https://app.appsmith.com`): the server also uses it as the redirect target when a
-  first-admin or user signup fails and the request has no `Referer`. A browser always sends one, so only
-  hand-written requests (curl) end up redirected to Appsmith. To replace in a later task.
+- `CRUD-DB-Table-Template-Application.json` in the server jar: the `release.app.appsmith.com` strings only. Fixed in
+  the hidden-features task: its two `defaultImage` URLs and the "Generate page from data" success images
+  (`constants/Assets.java`, `crud/workflow_sql.svg` and `workflow_s3.svg`) point at the vendored `/assets-cdn` copies.
+- `DEFAULT_ORIGIN_HEADER` (`https://app.appsmith.com`): only `RedirectHelper.getRedirectDomain`'s fallback for a
+  request with no Origin, Referer and Host header, which HTTP/1.1 clients always send. Fixed in the hidden-features
+  task: a failed first-admin signup without a `Referer` now redirects to this instance's `/user/login`
+  (`UserSignupCEImpl`, covered by `UserSignupFailureRedirectTest`); the user signup already used a relative path.
 
 Left as they are (not used by the fork's build or deploy):
 
@@ -640,3 +722,30 @@ Server plugins (`app/server/appsmith-plugins/`):
   `DeployButton`), `src/ce/pages/Applications/index.tsx` (`PendingApprovals` above the app list).
 - MCP: `packages/mcp/src/ee/extensions/api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts` (re-exports of `ce/`
   upstream, now the fork's implementation), the test `approvals.test.ts`, and `packages/mcp/README.md`.
+
+### Hidden features (workspace UI, templates, onboarding, built-in Git)
+
+- New: server `configurations/BuiltInGitConfig.java`, `hidden/HiddenEndpointsWebFilter.java`, tests
+  `hidden/HiddenEndpointsWebFilterTest`, `hidden/HiddenEndpointsHttpTest`, `solutions/UserSignupFailureRedirectTest`;
+  client `src/ce/utils/forkHiddenFeatures.ts`, `src/ee/utils/forkHiddenFeatures.ts`,
+  `src/ce/selectors/builtInGitSelectors.ts`, `src/ee/selectors/builtInGitSelectors.ts`,
+  `src/api/interceptors/request/blockHiddenRoutes.ts` (and `.test.ts`),
+  `src/ce/pages/Applications/tests/hiddenFeatures.test.tsx`, `src/ce/pages/AppIDE/hooks/useGenPageItems.test.tsx`,
+  `src/pages/AppIDE/components/GitModals.test.tsx`.
+- Edited upstream files: `deploy/docker/fs/opt/appsmith/templates/docker.env.sh`; server `constants/Assets.java`,
+  `services/FeatureFlagServiceImpl.java`, `solutions/ce/UserSignupCEImpl.java`,
+  `resources/CRUD-DB-Table-Template-Application.json`, `resources/application-ee.properties`, tests
+  `configurations/WorkspaceIdentityAuthGuardTest.java` (disabled), `controllers/WorkspaceControllerTest.java`,
+  `services/FeatureFlagServiceImplTest.java`, `resources/application-test.properties`; client
+  `src/api/interceptors/request/apiRequestInterceptor.ts`, `index.ts`, `src/ce/AppRouter.tsx`,
+  `src/ce/entities/FeatureFlag.ts`, `src/ce/pages/AppIDE/components/AppIDEModals.tsx`,
+  `src/ce/pages/AppIDE/hooks/useGenPageItems.tsx`, `src/ce/pages/AppIDE/layout/routers/MainPane/constants.ts`,
+  `src/ce/pages/Applications/index.tsx`, `WorkspaceAction.tsx` (and `tests/WorkspaceAction.test.tsx`),
+  `src/ce/utils/signupHelpers.ts`, `src/components/BottomBar/index.tsx`, `src/constants/userConstants.ts`,
+  `src/entities/Engine/AppEditorEngine.ts`, `src/pages/AdminSettings/Profile/index.tsx`,
+  `src/pages/AppIDE/components/GitModals.tsx`, `src/pages/AppIDE/layouts/components/Header/ChevronMenu.tsx`,
+  `Header/index.tsx`, `src/pages/AppViewer/Navigation/components/ShareButton.tsx`,
+  `src/pages/Applications/ApplicationCard.tsx`, `src/pages/Editor/GlobalHotKeys/GlobalHotKeys.tsx`,
+  `src/pages/UserProfile/index.tsx`, `src/pages/common/ImportModal.tsx`,
+  `src/pages/common/SearchBar/WorkspaceSearchItems.tsx`, `src/pages/setup/SignupSuccess.tsx` (and `.test.tsx`),
+  `src/pages/workspace/AppInviteUsersForm.tsx`, `src/sagas/TemplatesSagas.ts`.
