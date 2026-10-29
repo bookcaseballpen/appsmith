@@ -31,12 +31,14 @@ const SUBMIT_DESCRIPTION =
   "snapshot. Any later change to the app (in the editor, by an import, or through MCP) cancels the request " +
   "automatically, and the app must then be submitted again. Approving and rejecting are done by a human Approver in " +
   "the Appsmith UI and are not available via MCP; the app is published only when an Approver approves it. Returns " +
-  "the approval state: status (DRAFT, SUBMITTED, APPROVED or REJECTED), version, who submitted or reviewed it and " +
+  "the approval state: status (DRAFT, SUBMITTED, APPROVING, APPROVED or REJECTED), version, who submitted or " +
+  "reviewed it and " +
   "when, the reject comment, and the history.";
 
 const STATUS_DESCRIPTION =
   "Read an application's release-approval state: status (DRAFT = not submitted, or the submitted version was " +
-  "cancelled because the app changed; SUBMITTED = waiting for an Approver; APPROVED = approved and published; " +
+  "cancelled because the app changed; SUBMITTED = waiting for an Approver; APPROVING = an Approver approved it and " +
+  "it is being published; APPROVED = approved and published; " +
   "REJECTED = rejected, with the Approver's comment), the submitted version, who submitted and reviewed it and when, " +
   "and the history (SUBMITTED, APPROVED, REJECTED and CANCELLED events). Pass the applicationId you work on. Use it " +
   "to report progress to the developer or to see why a request was cancelled or rejected.";

@@ -25,6 +25,10 @@ const COLORS: Record<ApprovalStatus, { bg: string; fg: string }> = {
     bg: "var(--ads-v2-color-bg-warning)",
     fg: "var(--ads-v2-color-fg-warning)",
   },
+  APPROVING: {
+    bg: "var(--ads-v2-color-bg-warning)",
+    fg: "var(--ads-v2-color-fg-warning)",
+  },
   APPROVED: {
     bg: "var(--ads-v2-color-bg-success)",
     fg: "var(--ads-v2-color-fg-success)",

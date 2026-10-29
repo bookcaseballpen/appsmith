@@ -119,49 +119,55 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
     }
 
     /**
-     * CE deploys with edit permission alone. Here a manual deploy also needs the publish permission, which the
-     * developer role lacks (see {@link com.appsmith.server.roles.InstanceRole}), so only approvers and administrators
-     * deploy. Internal publishes (fork) keep CE's edit check and are decided in {@link #publishWithoutPermissionChecks}.
+     * CE deploys with edit permission alone. Here a manual deploy is refused for every role unless it is the publish of
+     * an approved release ({@link PublishApproval#asApprovedRelease}), so the public {@code POST
+     * /api/v1/applications/publish/{id}} always fails; that publish also needs the publish permission (APPROVER or
+     * ADMIN). Internal publishes (fork) keep CE's edit check and are decided in {@link #publishWithoutPermissionChecks}.
      */
     @Override
     public Mono<Application> publish(String branchedApplicationId, boolean isPublishedManually) {
         if (!isPublishedManually) {
             return super.publish(branchedApplicationId, false);
         }
-        return applicationRepository
-                .findById(branchedApplicationId, applicationPermission.getPublishPermission())
+        return PublishApproval.isApprovedRelease()
+                .filter(Boolean::booleanValue)
+                .switchIfEmpty(Mono.error(new AppsmithException(
+                        AppsmithError.ACTION_IS_NOT_AUTHORIZED,
+                        "Publish application directly; submit it for approval instead")))
+                .then(applicationRepository.findById(
+                        branchedApplicationId, applicationPermission.getPublishPermission()))
                 .switchIfEmpty(Mono.error(
                         new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, "Publish application")))
                 .then(Mono.defer(() -> super.publish(branchedApplicationId, true)));
     }
 
     /**
-     * Every publish ends here: the Deploy button, git commit-and-deploy, and the server's own publishes after creating,
-     * duplicating or forking an app and after a git pull, merge, discard or branch checkout. For a caller who cannot
-     * publish (DEV):
+     * Every publish ends here: an approved release, git commit-and-deploy, and the server's own publishes after
+     * creating, duplicating or forking an app and after a git pull, merge, discard or branch checkout. Unless it is
+     * the publish of an approved release, for every signed-in role:
      * <ul>
      *   <li>on an app that is not live yet, the publish goes ahead, since users cannot see that app, but never as a
      *       manual one, so the app does not become live;</li>
-     *   <li>on a live app, the publish is skipped: the change stays in edit mode until an approver publishes it.</li>
+     *   <li>on a live app, the publish is skipped: the change stays in edit mode until a release is approved.</li>
      * </ul>
      * Neither case fails, because git commit publishes after the commit is made (and before its lock is released). The
-     * Deploy button is refused earlier, in {@link #publish}. Calls without a signed-in user are the server's own and
-     * are not limited.
+     * public publish endpoint is refused earlier, in {@link #publish}. Calls without a signed-in user are the server's
+     * own and are not limited.
      */
     @Override
     public Mono<Application> publishWithoutPermissionChecks(String applicationId, boolean isPublishedManually) {
-        return ReactiveSecurityContextHolder.getContext()
-                .hasElement()
-                .flatMap(signedIn -> signedIn ? publishApproval.canPublish(applicationId) : Mono.just(true))
-                .flatMap(canPublish -> {
-                    if (canPublish) {
+        return Mono.zip(
+                        PublishApproval.isApprovedRelease(),
+                        ReactiveSecurityContextHolder.getContext().hasElement())
+                .flatMap(tuple -> {
+                    if (tuple.getT1() || !tuple.getT2()) {
                         return super.publishWithoutPermissionChecks(applicationId, isPublishedManually);
                     }
                     return publishApproval.isLive(applicationId).flatMap(isLive -> {
                         if (!isLive) {
                             return super.publishWithoutPermissionChecks(applicationId, false);
                         }
-                        log.debug("Not publishing live application {}: the caller cannot publish", applicationId);
+                        log.debug("Not publishing live application {}: not an approved release", applicationId);
                         return applicationRepository.findById(applicationId);
                     });
                 });

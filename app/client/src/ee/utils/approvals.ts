@@ -12,12 +12,17 @@ import type { InstanceRole } from "ee/utils/instanceRoles";
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Waiting for approval",
+  APPROVING: "Being published",
   APPROVED: "Approved",
   REJECTED: "Rejected",
 };
 
-/** Devs submit instead of deploying; Admins deploy directly (and Approvers deploy what they reviewed). */
-export const submitsForApproval = (role?: InstanceRole) => role === "DEV";
+/**
+ * Every release goes through submit and approve; nobody deploys directly. Devs, Admins and Approvers submit (an Admin
+ * or Approver may approve their own submit).
+ */
+export const submitsForApproval = (role?: InstanceRole) =>
+  role === "DEV" || role === "ADMIN" || role === "APPROVER";
 
 /** Approvers and Admins approve or reject submitted releases. */
 export const reviewsReleases = (role?: InstanceRole) =>

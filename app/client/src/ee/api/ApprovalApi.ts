@@ -2,7 +2,12 @@ import type { AxiosPromise } from "axios";
 import Api from "api/Api";
 import type { ApiResponse } from "api/ApiResponses";
 
-export type ApprovalStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+export type ApprovalStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVING"
+  | "APPROVED"
+  | "REJECTED";
 
 export interface ApprovalEvent {
   type: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";

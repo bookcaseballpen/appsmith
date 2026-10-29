@@ -66,7 +66,9 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
     public Mono<? extends Artifact> updateNonGitConnectedArtifactFromJson(
             String workspaceId, String artifactId, ArtifactExchangeJson artifactExchangeJson) {
         return requirePublishIfLive(artifactId, "Import over a published application")
-                .then(Mono.defer(() ->
+                .flatMap(wasLive -> takeOfflineIf(
+                        wasLive,
+                        artifactId,
                         super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson)));
     }
 
@@ -74,18 +76,33 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
     public Mono<? extends Artifact> restoreSnapshot(
             String workspaceId, String branchedArtifactId, ArtifactExchangeJson artifactExchangeJson) {
         return requirePublishIfLive(branchedArtifactId, "Restore a published application")
-                .then(Mono.defer(() -> super.restoreSnapshot(workspaceId, branchedArtifactId, artifactExchangeJson)));
+                .flatMap(wasLive -> takeOfflineIf(
+                        wasLive,
+                        branchedArtifactId,
+                        super.restoreSnapshot(workspaceId, branchedArtifactId, artifactExchangeJson)));
     }
 
-    private Mono<Void> requirePublishIfLive(String applicationId, String action) {
+    /** Answers whether the app is live, after refusing a caller without the publish permission on a live app. */
+    private Mono<Boolean> requirePublishIfLive(String applicationId, String action) {
         if (!StringUtils.hasText(applicationId)) {
-            return Mono.empty();
+            return Mono.just(false);
         }
-        return publishApproval
-                .isLive(applicationId)
-                .flatMap(isLive -> isLive ? publishApproval.canPublish(applicationId) : Mono.just(true))
-                .flatMap(allowed -> allowed
-                        ? Mono.<Void>empty()
-                        : Mono.error(new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, action)));
+        return publishApproval.isLive(applicationId).flatMap(isLive -> !isLive
+                ? Mono.just(false)
+                : publishApproval
+                        .canPublish(applicationId)
+                        .flatMap(allowed -> allowed
+                                ? Mono.just(true)
+                                : Mono.error(new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, action))));
+    }
+
+    /**
+     * The import carries the file's view mode with it, which nobody approved, so a live app is taken out of users'
+     * sight until a release of it is approved.
+     */
+    private Mono<Artifact> takeOfflineIf(boolean wasLive, String applicationId, Mono<? extends Artifact> imported) {
+        return imported.flatMap(artifact -> wasLive
+                ? publishApproval.markNotLive(applicationId).thenReturn((Artifact) artifact)
+                : Mono.just((Artifact) artifact));
     }
 }

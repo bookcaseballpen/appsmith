@@ -7,7 +7,13 @@ import type { ApiRequest } from "../../ce/extensions/api.js";
 
 export type { ApiRequest } from "../../ce/extensions/api.js";
 
-export type ApprovalStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+// APPROVING: an approver's approve is publishing the submitted version right now.
+export type ApprovalStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVING"
+  | "APPROVED"
+  | "REJECTED";
 
 export interface ApprovalEvent {
   type: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";

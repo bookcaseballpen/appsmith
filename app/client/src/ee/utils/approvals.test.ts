@@ -23,8 +23,8 @@ const approval = (
 describe("approval roles", () => {
   it.each([
     ["DEV", true, false],
-    ["ADMIN", false, true],
-    ["APPROVER", false, true],
+    ["ADMIN", true, true],
+    ["APPROVER", true, true],
     ["USER", false, false],
   ] as const)("%s: submits %s, reviews %s", (role, submits, reviews) => {
     expect(submitsForApproval(role)).toBe(submits);

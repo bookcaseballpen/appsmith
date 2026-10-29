@@ -14,11 +14,6 @@ jest.mock("selectors/editorSelectors", () => ({
   getCurrentApplicationId: () => "app-1",
 }));
 
-jest.mock("pages/AppIDE/layouts/components/Header/DeployButton", () => ({
-  __esModule: true,
-  default: () => <button data-testid="deploy-button">Deploy</button>,
-}));
-
 const mockedApi = ApprovalApi as jest.Mocked<typeof ApprovalApi>;
 
 const ok = (data: unknown) =>
@@ -63,23 +58,56 @@ describe("ReleaseControls", () => {
     renderAs("DEV");
 
     expect(await screen.findByText("Submit for approval")).toBeTruthy();
-    expect(screen.queryByTestId("deploy-button")).toBeNull();
+    expect(screen.queryByText(/deploy/i)).toBeNull();
     expect((await screen.findByTestId("t--approval-status-chip")).textContent)
       .toBe("Draft");
   });
 
-  it.each(["APPROVER", "ADMIN"])("shows Deploy to %s", async (role) => {
+  it.each(["APPROVER", "ADMIN"])(
+    "shows Submit and Approve, never Deploy, to %s",
+    async (role) => {
+      mockedApi.fetchStatus.mockResolvedValue(
+        ok(status({ status: "SUBMITTED" })),
+      );
+
+      renderAs(role);
+
+      expect(await screen.findByTestId("t--approve-release-btn")).toBeTruthy();
+      expect(screen.getByText("Submit for approval")).toBeTruthy();
+      expect(screen.queryByText(/deploy/i)).toBeNull();
+      expect(screen.getByTestId("t--approval-status-chip").textContent).toBe(
+        "Waiting for approval",
+      );
+    },
+  );
+
+  it("approves a waiting release, which publishes it", async () => {
+    mockedApi.fetchStatus.mockResolvedValue(
+      ok(status({ status: "SUBMITTED" })),
+    );
+    mockedApi.approve.mockResolvedValue(ok(status({ status: "APPROVED" })));
+
+    renderAs("ADMIN");
+    fireEvent.click(await screen.findByTestId("t--approve-release-btn"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("t--approval-status-chip").textContent).toBe(
+        "Approved",
+      ),
+    );
+    expect(mockedApi.approve).toHaveBeenCalledWith("app-1");
+    expect(screen.queryByTestId("t--approve-release-btn")).toBeNull();
+  });
+
+  it("does not offer Approve to a Dev", async () => {
     mockedApi.fetchStatus.mockResolvedValue(
       ok(status({ status: "SUBMITTED" })),
     );
 
-    renderAs(role);
+    renderAs("DEV");
+    await screen.findByTestId("t--approval-status-chip");
 
-    expect(await screen.findByTestId("deploy-button")).toBeTruthy();
-    expect(screen.queryByText("Submit for approval")).toBeNull();
-    expect(
-      (await screen.findByTestId("t--approval-status-chip")).textContent,
-    ).toBe("Waiting for approval");
+    expect(screen.queryByTestId("t--approve-release-btn")).toBeNull();
   });
 
   it("submits the app and shows it waiting", async () => {

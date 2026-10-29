@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -32,8 +33,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Fork: the release approval flow. A DEV (or ADMIN) submits the app's current edit-mode version; an APPROVER (or ADMIN)
- * approves it, which publishes it, or rejects it with a comment.
+ * Fork: the release approval flow, the only way to publish an app. A DEV, ADMIN or APPROVER submits the app's current
+ * edit-mode version; an APPROVER or ADMIN (possibly the one who submitted) approves it, which publishes it, or rejects
+ * it with a comment.
  *
  * <p>The submitted version is frozen as an {@link ApprovalFingerprint} of the edit-mode content. The request is
  * cancelled as soon as the content no longer matches: every read of the state (the editor's status chip, the approvers'
@@ -58,6 +60,8 @@ public class ApplicationApprovalService {
 
     static final String CHANGED_WHILE_PUBLISHING =
             "The app changed while it was being published, so it was taken offline. Submit it again.";
+
+    static final Duration STALE_CLAIM = Duration.ofMinutes(10);
 
     private static final int VERSION_LENGTH = 12;
 
@@ -97,7 +101,8 @@ public class ApplicationApprovalService {
 
     public Mono<ApplicationApprovalDTO> submit(String applicationId) {
         return instanceRoleService
-                .requireCurrentUserRole("Submit for approval", InstanceRole.ADMIN, InstanceRole.DEV)
+                .requireCurrentUserRole(
+                        "Submit for approval", InstanceRole.ADMIN, InstanceRole.DEV, InstanceRole.APPROVER)
                 .then(findApplication(applicationId, false))
                 .flatMap(application -> Mono.zip(
                                 ensureDocument(application).flatMap(this::checkUnchanged),
@@ -108,6 +113,9 @@ public class ApplicationApprovalService {
                             String submittedFingerprint = tuple.getT2();
                             if (state.getStatus() == ApprovalStatus.SUBMITTED) {
                                 return badRequest("This version is already waiting for approval.");
+                            }
+                            if (state.getStatus() == ApprovalStatus.APPROVING) {
+                                return badRequest("This version is being approved and published right now.");
                             }
                             if (state.getStatus() == ApprovalStatus.APPROVED) {
                                 return badRequest("This version is already approved and published.");
@@ -129,51 +137,67 @@ public class ApplicationApprovalService {
                         .map(state -> toDTO(application, state)));
     }
 
+    /**
+     * Claims the request (SUBMITTED to APPROVING, bumping its revision) before publishing, so a concurrent reject or
+     * resubmit fails on the revision check instead of overwriting a release that is going live. A failed publish puts
+     * the request back to SUBMITTED; a change that landed while publishing takes the app offline and cancels it.
+     */
     public Mono<ApplicationApprovalDTO> approve(String applicationId) {
         return requireReviewer("Approve a release")
                 .then(findApplication(applicationId, true))
-                .flatMap(application -> findPending(application)
-                        .flatMap(state -> {
-                            String approved = state.getFingerprint();
-                            return applicationPageService
-                                    .publish(application.getId(), true)
-                                    .then(fingerprint.ofViewMode(application.getId()))
-                                    .zipWith(currentUserEmail())
-                                    .flatMap(tuple -> {
-                                        Instant now = Instant.now();
-                                        if (!approved.equals(tuple.getT1())) {
-                                            log.warn(
-                                                    "Application {} changed while its approved version was published; taking"
-                                                            + " it offline",
-                                                    application.getId());
-                                            return publishApproval
-                                                    .markNotLive(application.getId())
-                                                    .then(transition(
-                                                            state,
-                                                            Bridge.update()
-                                                                    .set(
-                                                                            ApplicationApproval.Fields.status,
-                                                                            ApprovalStatus.DRAFT),
-                                                            new ApprovalEvent(
-                                                                    ApprovalEvent.Type.CANCELLED,
-                                                                    null,
-                                                                    now,
-                                                                    CHANGED_WHILE_PUBLISHING)))
-                                                    .then(badRequest(CHANGED_WHILE_PUBLISHING));
-                                        }
-                                        BridgeUpdate update = Bridge.update()
-                                                .set(ApplicationApproval.Fields.status, ApprovalStatus.APPROVED)
-                                                .set(ApplicationApproval.Fields.reviewedBy, tuple.getT2())
-                                                .set(ApplicationApproval.Fields.reviewedAt, now)
-                                                .set(ApplicationApproval.Fields.comment, null);
-                                        return transition(
-                                                state,
-                                                update,
-                                                new ApprovalEvent(
-                                                        ApprovalEvent.Type.APPROVED, tuple.getT2(), now, null));
-                                    });
-                        })
+                .flatMap(application -> Mono.zip(findPending(application), currentUserEmail())
+                        .flatMap(tuple -> claim(tuple.getT1(), tuple.getT2()))
+                        .flatMap(claimed -> publishClaimed(application, claimed))
                         .map(state -> toDTO(application, state)));
+    }
+
+    private Mono<ApplicationApproval> claim(ApplicationApproval state, String reviewer) {
+        BridgeUpdate update = Bridge.update()
+                .set(ApplicationApproval.Fields.status, ApprovalStatus.APPROVING)
+                .set(ApplicationApproval.Fields.reviewedBy, reviewer)
+                .set(ApplicationApproval.Fields.reviewedAt, Instant.now());
+        return transition(state, update, null);
+    }
+
+    private Mono<ApplicationApproval> publishClaimed(Application application, ApplicationApproval claimed) {
+        String approved = claimed.getFingerprint();
+        return PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), true))
+                .onErrorResume(error -> {
+                    log.warn("Publishing the approved release of application {} failed", application.getId(), error);
+                    return transition(
+                                    claimed,
+                                    Bridge.update()
+                                            .set(ApplicationApproval.Fields.status, ApprovalStatus.SUBMITTED)
+                                            .set(ApplicationApproval.Fields.reviewedBy, null)
+                                            .set(ApplicationApproval.Fields.reviewedAt, null),
+                                    null)
+                            .then(Mono.<Application>error(error));
+                })
+                .then(fingerprint.ofViewMode(application.getId()))
+                .flatMap(published -> {
+                    Instant now = Instant.now();
+                    if (!approved.equals(published)) {
+                        log.warn(
+                                "Application {} changed while its approved version was published; taking it offline",
+                                application.getId());
+                        return publishApproval
+                                .markNotLive(application.getId())
+                                .then(transition(
+                                        claimed,
+                                        Bridge.update().set(ApplicationApproval.Fields.status, ApprovalStatus.DRAFT),
+                                        new ApprovalEvent(
+                                                ApprovalEvent.Type.CANCELLED, null, now, CHANGED_WHILE_PUBLISHING)))
+                                .then(badRequest(CHANGED_WHILE_PUBLISHING));
+                    }
+                    BridgeUpdate update = Bridge.update()
+                            .set(ApplicationApproval.Fields.status, ApprovalStatus.APPROVED)
+                            .set(ApplicationApproval.Fields.reviewedAt, now)
+                            .set(ApplicationApproval.Fields.comment, null);
+                    return transition(
+                            claimed,
+                            update,
+                            new ApprovalEvent(ApprovalEvent.Type.APPROVED, claimed.getReviewedBy(), now, null));
+                });
     }
 
     public Mono<ApplicationApprovalDTO> reject(String applicationId, String comment) {
@@ -260,6 +284,9 @@ public class ApplicationApprovalService {
      * next submit.
      */
     private Mono<ApplicationApproval> checkUnchanged(ApplicationApproval state) {
+        if (state.getStatus() == ApprovalStatus.APPROVING) {
+            return releaseStaleClaim(state);
+        }
         if (state.getStatus() != ApprovalStatus.SUBMITTED && state.getStatus() != ApprovalStatus.APPROVED) {
             return Mono.just(state);
         }
@@ -278,6 +305,24 @@ public class ApplicationApprovalService {
                     return transition(state, update, event)
                             .onErrorResume(AppsmithException.class, error -> repository.findById(state.getId()));
                 });
+    }
+
+    /**
+     * A claim is held only while a publish runs; one older than {@link #STALE_CLAIM} was left by a server that stopped
+     * mid-publish, so the request goes back to SUBMITTED (and is checked like any other).
+     */
+    private Mono<ApplicationApproval> releaseStaleClaim(ApplicationApproval state) {
+        Instant claimedAt = state.getReviewedAt();
+        if (claimedAt != null && claimedAt.isAfter(Instant.now().minus(STALE_CLAIM))) {
+            return Mono.just(state);
+        }
+        BridgeUpdate update = Bridge.update()
+                .set(ApplicationApproval.Fields.status, ApprovalStatus.SUBMITTED)
+                .set(ApplicationApproval.Fields.reviewedBy, null)
+                .set(ApplicationApproval.Fields.reviewedAt, null);
+        return transition(state, update, null)
+                .flatMap(this::checkUnchanged)
+                .onErrorResume(AppsmithException.class, error -> repository.findById(state.getId()));
     }
 
     private Mono<ApplicationApproval> ensureDocument(Application application) {

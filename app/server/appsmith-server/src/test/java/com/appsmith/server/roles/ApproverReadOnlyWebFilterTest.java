@@ -73,7 +73,8 @@ class ApproverReadOnlyWebFilterTest {
 
     @ParameterizedTest
     @CsvSource({
-        "POST, /api/v1/applications/publish/appId",
+        "POST, /api/v1/approvals/applications/appId/submit",
+        "POST, /api/v1/approvals/applications/appId/approve",
         "POST, /api/v1/actions/execute",
         "POST, /api/v1/logout",
         "GET, /api/v1/pages/pageId",

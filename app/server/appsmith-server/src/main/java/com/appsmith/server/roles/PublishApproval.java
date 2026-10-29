@@ -14,9 +14,15 @@ import reactor.core.publisher.Mono;
  *
  * <p>So a caller without the publish permission (DEV) may still let the server copy edit into view mode on an app that
  * is not live yet (a new, duplicated, forked or imported app), but never on a live one.
+ *
+ * <p>Every role publishes through the release approval flow: only a publish run inside {@link #asApprovedRelease} (by
+ * {@link com.appsmith.server.approvals.ApplicationApprovalService#approve}) may make an app live or change a live app's
+ * view mode. The marker lives in the Reactor context, which no request can set.
  */
 @Component
 public class PublishApproval {
+
+    private static final String APPROVED_RELEASE = PublishApproval.class.getName() + ".approvedRelease";
 
     private final ApplicationRepository applicationRepository;
     private final ApplicationPermission applicationPermission;
@@ -24,6 +30,15 @@ public class PublishApproval {
     public PublishApproval(ApplicationRepository applicationRepository, ApplicationPermission applicationPermission) {
         this.applicationRepository = applicationRepository;
         this.applicationPermission = applicationPermission;
+    }
+
+    /** Runs {@code publish} as the publish of an approved release. */
+    public static <T> Mono<T> asApprovedRelease(Mono<T> publish) {
+        return publish.contextWrite(context -> context.put(APPROVED_RELEASE, true));
+    }
+
+    public static Mono<Boolean> isApprovedRelease() {
+        return Mono.deferContextual(context -> Mono.just(context.getOrDefault(APPROVED_RELEASE, false)));
     }
 
     public Mono<Boolean> canPublish(String applicationId) {

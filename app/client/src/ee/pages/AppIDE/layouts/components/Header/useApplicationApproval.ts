@@ -5,7 +5,7 @@ import { callApprovalApi } from "ee/utils/approvals";
 // A submitted or approved version is cancelled by the server as soon as the app changes; poll so the chip follows.
 export const APPROVAL_POLL_INTERVAL_MS = 15000;
 
-/** Fork: the current app's approval state, kept fresh while a request is open, and a submit action. */
+/** Fork: the current app's approval state, kept fresh while a request is open, and the submit and approve actions. */
 export function useApplicationApproval(applicationId?: string) {
   const [approval, setApproval] = useState<ApplicationApproval | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,7 +37,12 @@ export function useApplicationApproval(applicationId?: string) {
 
   useEffect(
     function pollWhileOpen() {
-      if (status !== "SUBMITTED" && status !== "APPROVED") return;
+      if (
+        status !== "SUBMITTED" &&
+        status !== "APPROVING" &&
+        status !== "APPROVED"
+      )
+        return;
 
       const timer = setInterval(refresh, APPROVAL_POLL_INTERVAL_MS);
 
@@ -63,5 +68,29 @@ export function useApplicationApproval(applicationId?: string) {
     }
   }, [applicationId]);
 
-  return { approval, isSubmitting, refresh, submit };
+  const [isApproving, setIsApproving] = useState(false);
+
+  // Approving publishes the submitted version; there is no other way to deploy.
+  const approve = useCallback(async () => {
+    if (!applicationId) return;
+
+    setIsApproving(true);
+
+    try {
+      setApproval(
+        await callApprovalApi<ApplicationApproval>(
+          async () => ApprovalApi.approve(applicationId),
+          "Could not approve the release",
+        ),
+      );
+    } catch (error) {
+      // A refused approve may have cancelled the request (the app changed); show what the server holds now.
+      await refresh();
+      throw error;
+    } finally {
+      setIsApproving(false);
+    }
+  }, [applicationId, refresh]);
+
+  return { approval, approve, isApproving, isSubmitting, refresh, submit };
 }
