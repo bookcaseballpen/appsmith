@@ -12,6 +12,7 @@ import {
 } from "git/store/selectors";
 import type { DefaultRootState } from "react-redux";
 import { applicationArtifact } from "git-artifact-helpers/application";
+import { selectIsReviewOnlyUser } from "ee/utils/instanceRoles";
 
 export const selectGitModEnabled = createSelector(
   (state: DefaultRootState) => {
@@ -52,7 +53,10 @@ export const selectCombinedPreviewMode = createSelector(
   // need to do this to avoid circular dependency
   (state: DefaultRootState) => state.ui.editor.isPreviewMode,
   selectGitApplicationProtectedMode,
-  (isPreviewMode, isProtectedMode) => isPreviewMode || isProtectedMode,
+  // Approvers review apps read-only, so the editor always stays in preview for them.
+  selectIsReviewOnlyUser,
+  (isPreviewMode, isProtectedMode, isReviewOnlyUser) =>
+    isPreviewMode || isProtectedMode || isReviewOnlyUser,
 );
 
 export const selectGitOpsModalOpen = createSelector(

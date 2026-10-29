@@ -12,6 +12,9 @@ import { testSaga } from "redux-saga-test-plan";
 import { generateAutoHeightLayoutTreeAction } from "actions/autoHeightActions";
 import mockResponse from "./mockConsolidatedApiResponse.json";
 import { startRootSpan } from "instrumentation/generateTraces";
+import { getCurrentUser as getCurrentUserSelector } from "selectors/usersSelectors";
+import { DefaultCurrentUserDetails } from "constants/userConstants";
+import history from "utils/history";
 
 jest.mock("../../api/Api", () => ({
   __esModule: true,
@@ -65,6 +68,8 @@ describe("tests the sagas in initSagas", () => {
       .next()
       .call(getInitResponses, { ...action.payload })
       .next(mockResponse.data)
+      .select(getCurrentUserSelector)
+      .next({ ...DefaultCurrentUserDetails, role: "DEV" })
       .put({ type: ReduxActionTypes.LINT_SETUP })
       .next()
       .call(engine.loadAppData, action.payload, mockResponse.data, mockRootSpan)
@@ -100,5 +105,39 @@ describe("tests the sagas in initSagas", () => {
       .put(generateAutoHeightLayoutTreeAction(true, false))
       .next()
       .isDone();
+  });
+
+  it("sends a User from an editor URL to the same page in view mode", () => {
+    const engine = { setupEngine: jest.fn(), loadAppData: jest.fn() };
+    const mockRootSpan = startRootSpan("startAppEngine");
+    const replace = jest
+      .spyOn(history, "replace")
+      .mockImplementation(jest.fn());
+
+    window.history.pushState({}, "", "/app/my-app/page1-abc/edit?branch=main");
+    (AppEngineFactory.create as jest.Mock).mockReturnValue(engine);
+
+    testSaga(startAppEngine, action)
+      .next()
+      .call(engine.setupEngine, action.payload, mockRootSpan)
+      .next()
+      .call(getInitResponses, { ...action.payload })
+      .next(mockResponse.data)
+      .select(getCurrentUserSelector)
+      .next({ ...DefaultCurrentUserDetails, role: "USER" })
+      .call(
+        executeActionDuringUserDetailsInitialisation,
+        ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
+        action.payload.shouldInitialiseUserDetails,
+      )
+      .next()
+      .isDone();
+
+    expect(replace).toHaveBeenCalledWith({
+      pathname: "/app/my-app/page1-abc",
+      search: "?branch=main",
+    });
+    expect(engine.loadAppData).not.toHaveBeenCalled();
+    replace.mockRestore();
   });
 });

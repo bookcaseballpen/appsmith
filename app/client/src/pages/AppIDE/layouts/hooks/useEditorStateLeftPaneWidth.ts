@@ -10,7 +10,7 @@ import { getIDEViewMode } from "selectors/ideSelectors";
 import { getPropertyPaneWidth } from "selectors/propertyPaneSelectors";
 import { EditorEntityTab, EditorViewMode } from "IDE/Interfaces/EditorTypes";
 import { useCurrentEditorState } from "../../hooks/useCurrentEditorState";
-import { previewModeSelector } from "selectors/editorSelectors";
+import { selectCombinedPreviewMode } from "selectors/gitModSelectors";
 import { useGitProtectedMode } from "pages/Editor/gitSync/hooks/modHooks";
 
 export const useEditorStateLeftPaneWidth = (): number => {
@@ -19,7 +19,8 @@ export const useEditorStateLeftPaneWidth = (): number => {
   const editorMode = useSelector(getIDEViewMode);
   const { segment } = useCurrentEditorState();
   const propertyPaneWidth = useSelector(getPropertyPaneWidth);
-  const isPreviewMode = useSelector(previewModeSelector);
+  // Fork: the combined mode also covers Approvers, so their editor shows only the canvas.
+  const isPreviewMode = useSelector(selectCombinedPreviewMode);
   const isProtectedMode = useGitProtectedMode();
 
   useEffect(

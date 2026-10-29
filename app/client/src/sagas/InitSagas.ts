@@ -66,6 +66,11 @@ import { getCurrentUser } from "actions/authActions";
 import { getCurrentUser as getCurrentUserSelector } from "selectors/usersSelectors";
 import { ANONYMOUS_USERNAME } from "constants/userConstants";
 import history from "utils/history";
+import {
+  getInstanceRole,
+  getViewerPathForBuilderPath,
+  isViewOnlyRole,
+} from "ee/utils/instanceRoles";
 import { APPLICATIONS_URL } from "constants/routes";
 import { FAVORITES_KEY } from "ee/constants/workspaceConstants";
 import { toast } from "@appsmith/ads";
@@ -338,6 +343,26 @@ export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
     });
 
     endSpan(getInitResponsesSpan);
+
+    // Fork: the server hides the editor from Users, so an editor URL opens the same page in view mode instead.
+    if (action.payload.mode === APP_MODE.EDIT) {
+      const currentUser: ReturnType<typeof getCurrentUserSelector> =
+        yield select(getCurrentUserSelector);
+
+      if (isViewOnlyRole(getInstanceRole(currentUser))) {
+        yield call(
+          executeActionDuringUserDetailsInitialisation,
+          ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
+          action.payload.shouldInitialiseUserDetails,
+        );
+        history.replace({
+          pathname: getViewerPathForBuilderPath(window.location.pathname),
+          search: window.location.search,
+        });
+
+        return;
+      }
+    }
 
     yield put({ type: ReduxActionTypes.LINT_SETUP });
 
