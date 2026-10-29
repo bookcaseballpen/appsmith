@@ -89,8 +89,10 @@ docker compose -f deploy/fork/docker-compose.yml up -d
    Maven's 20 minutes running alongside). With warm caches, a change to one part rebuilds only that part; a
    Dockerfile-only change in the last stages takes about a minute.
 
-`scripts/local_testing.sh` now calls `build-image.sh` and runs the result on `127.0.0.1:80`, and
-`deploy/docker/docker-compose.yml` uses `creative-app-builder:local`. The upstream root `Dockerfile` still works with
+`scripts/local_testing.sh [tag] [port]` builds the current working tree with `build-image.sh` and runs it as
+`creative-app-builder-local` on `127.0.0.1:80`; upstream's branch and remote modes (git fetch, checkout and pull) are
+removed. `deploy/docker/docker-compose.yml` uses `creative-app-builder:local`. The upstream root `Dockerfile` (with a
+fork comment pointing here; keep its steps and `deploy/fork/Dockerfile`'s final stages in sync) still works with
 `--build-arg BASE=creative-app-builder-base:local` after host builds of the artifacts, but needs JDK 25, Maven and
 yarn on the host and LF line endings in `deploy/docker/fs`.
 
@@ -293,33 +295,17 @@ Left as they are (not used by the fork's build or deploy):
   `app/client/start-https.sh` and `start-caddy.sh` default the dev proxy backend to `release.app.appsmith.com`
   (pass your own backend URL).
 
-### GitHub Actions workflows (not edited; recommendation: disable)
+### GitHub Actions workflows (deleted)
 
-No workflow was edited, added or enabled. These upstream workflows call Appsmith hosts, pull or push Appsmith images
-or deploy to Appsmith's infrastructure. Most also need Appsmith's secrets (`DOCKER_HUB_*`, AWS OIDC roles, Cypress and
-TED keys), so in the fork they would fail after using runner minutes. Recommended: disable them in the repository's
-Actions settings (`gh workflow disable <file>`), the user decides.
+All upstream workflows were deleted. We check locally (typecheck, tests). Any future workflow must set
+timeout-minutes (default 10), concurrency with cancel-in-progress, and prefer workflow_dispatch.
 
-| Workflow | Trigger | Appsmith dependency |
-|---|---|---|
-| `docker-base-image.yml` | push to `release` touching `base.dockerfile`, weekly schedule, manual | Pushes `$DOCKER_HUB_ORGANIZATION/base-ce` (Appsmith's Docker Hub) |
-| `test-build-docker-image.yml` | push to `master`, weekday schedule, manual | `release-cs.appsmith.com`, `internal.appsmith.com`, Appsmith base image and Docker Hub push |
-| `cleanup-dp.yml` | daily schedule, manual | Appsmith's EKS deploy previews (`scripts/cleanup_dp.sh`, now deleted) |
-| `ci-test-hosted.yml` | weekday schedule, manual | Tests against `internal.appsmith.com` |
-| `helm-docs.yml` | pull_request (Helm paths), manual | `helm.appsmith.com` |
-| `quality-checks.yml` → `server-build.yml` | pull_request | Server tests get `APPSMITH_CLOUD_SERVICES_BASE_URL=https://release-cs.appsmith.com` |
-| `pr-automation.yml` → `pr-cypress.yml` | pull_request | `internal.appsmith.com`, `server-integration-tests.yml` (`release-cs.appsmith.com`), `ci-test-custom-script.yml` (`appsmith/cloud-services` image, `dev`/`cs-dev`/`login.*-customer`/`t.appsmith.com`) |
-| `build-client-server.yml`, `build-client-server-count.yml` | repository_dispatch (`/build-deploy-preview`-style commands) | `internal.appsmith.com`, `ci-test-limited*.yml` (same hosts as above) |
-| `on-demand-build-docker-image-deploy-preview.yml` | repository_dispatch, manual | `release-cs.appsmith.com`, `*.dp.appsmith.com`, `scripts/deploy_preview.sh` (now deleted) |
-| `playwright-e2e.yml`, `pw-test-command.yml` → `ci-test-playwright.yml` | manual, repository_dispatch | Published `appsmith/appsmith-ce`/`-ee`/`-airgap` images, `appsmith/cloud-services`, `carbon.appsmith.com` and the hosts above |
-| `github-release.yml` | release published | Pushes to Appsmith's Docker Hub organisation |
-| `ad-hoc-docker-image.yml`, `build-docker-image.yml` | manual / called | Appsmith base image (`$DOCKER_HUB_ORGANIZATION/base-ce`) |
-| `test-vulnerabilities-data.yml` | manual | Scans `appsmith/appsmith-ce:release` |
-
-Other upstream workflows (labelers, stale, Chromatic/Storybook, `helm-release.yml`, `merge-gate.yml`,
-`sync-release-to-pg.yml`, `release-drafter.yml`, `ghcr-citest-retention.yml`, ...) do not call Appsmith hosts in the
-lines checked, but many run on push or pull_request and use Appsmith-specific secrets or labels; review them before
-enabling Actions on the fork.
+Deleted with them: everything under `.github/workflows/` (workflows, their scripts and docs), the composite action
+`.github/actions/setup-server-java`, `.github/dependabot.yml`, and the configs only those workflows or upstream's
+bots read (`labeler.yml`, `release-drafter-template.yml`, `reviewers.yml`, `config.json`, `config-test.json`).
+Kept: the issue and PR templates, and `semantic.yml` / `config.yml` (settings for the `semantic-prs` and welcome
+GitHub Apps; they do nothing unless those apps are installed on the fork, and use no Actions minutes). Some docs
+still mention deleted workflows (`contributions/docs/TestAutomation.md`, `deploy/helm/AGENTS.md`, `.cursor/rules`).
 
 ## Skipped upstream patches
 
@@ -403,6 +389,8 @@ Server plugins (`app/server/appsmith-plugins/`):
 ### Deleted upstream files (`D`)
 
 - Scripts: `scripts/deploy_preview.sh`, `scripts/cleanup_dp.sh`, `deploy/docker/fs/opt/appsmith/pull_resource.sh`
+- GitHub automation: all of `.github/workflows/`, `.github/actions/`, `.github/dependabot.yml`, `labeler.yml`,
+  `release-drafter-template.yml`, `reviewers.yml`, `config.json`, `config-test.json` (see "GitHub Actions workflows")
 - Client: `src/ce/constants/UsagePulse.ts`, `src/ee/constants/UsagePulse.ts`, `src/ce/hooks/useBetterbugsMetadata.ts`,
   `src/ee/hooks/useBetterbugsMetadata.ts`, `src/ce/hooks/__tests__/useBetterbugsMetadata.test.tsx`,
   `src/ce/sagas/userSagas.test.ts`, `src/usagePulse/` (`index.ts`, `utils.ts` and their tests),
