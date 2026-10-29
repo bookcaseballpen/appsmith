@@ -577,4 +577,8 @@ Server plugins (`app/server/appsmith-plugins/`):
   `src/pages/AppIDE/layouts/components/EditorTabs/ScreenModeToggle.tsx`,
   `src/pages/AppIDE/layouts/routers/UISegmentLeftPane/UISegmentLeftPane.tsx`,
   `src/pages/Editor/commons/EditorWrapperContainer.tsx`, `src/pages/Editor/GlobalHotKeys/GlobalHotKeys.tsx`,
-  `src/PluginActionEditor/components/PluginActionForm/components/UQIEditor/FormRender.tsx`
+  `src/PluginActionEditor/components/PluginActionForm/components/UQIEditor/FormRender.tsx`,
+  `src/ee/sagas/ApiCallerSagas.ts` (and `.test.ts`: when read-only, the JS-object and action syncs the
+  client sends on load stay in the client instead of hitting the server guard),
+  `CommonEditorForm/InfoFields.tsx` and `components/EmbeddedDatasourcePathField.tsx` (the API URL field
+  follows the action's edit permission and hides "Save URL" when disabled)

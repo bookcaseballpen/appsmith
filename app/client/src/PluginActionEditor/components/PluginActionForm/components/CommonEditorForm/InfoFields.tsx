@@ -32,6 +32,7 @@ export function InfoFields(props: {
         <EmbeddedDatasourcePathField
           actionName={props.actionName}
           codeEditorVisibleOverflow
+          disabled={!props.changePermitted}
           formName={props.formName}
           name="actionConfiguration.path"
           placeholder="https://mock-api.appsmith.com/users"
