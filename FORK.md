@@ -642,3 +642,30 @@ Server plugins (`app/server/appsmith-plugins/`):
   `src/ce/sagas/AIAssistantSagas.ts` (and `.test.ts`), `src/ce/pages/AdminSettings/config/index.ts`,
   `src/pages/Editor/IntegrationEditor/AIPlugins.tsx` (and `__tests__/aiPlugins.test.tsx`),
   `src/pages/Editor/CustomWidgetBuilder/Editor/index.tsx`.
+
+### Hidden features (workspace UI, templates, onboarding, built-in Git)
+
+- New: server `configurations/BuiltInGitConfig.java`, `hidden/HiddenEndpointsWebFilter.java`, tests
+  `hidden/HiddenEndpointsWebFilterTest`, `hidden/HiddenEndpointsHttpTest`, `solutions/UserSignupFailureRedirectTest`;
+  client `src/ce/utils/forkHiddenFeatures.ts`, `src/ee/utils/forkHiddenFeatures.ts`,
+  `src/ce/selectors/builtInGitSelectors.ts`, `src/ee/selectors/builtInGitSelectors.ts`,
+  `src/api/interceptors/request/blockHiddenRoutes.ts` (and `.test.ts`),
+  `src/ce/pages/Applications/tests/hiddenFeatures.test.tsx`, `src/ce/pages/AppIDE/hooks/useGenPageItems.test.tsx`,
+  `src/pages/AppIDE/components/GitModals.test.tsx`.
+- Edited upstream files: `deploy/docker/fs/opt/appsmith/templates/docker.env.sh`; server `constants/Assets.java`,
+  `services/FeatureFlagServiceImpl.java`, `solutions/ce/UserSignupCEImpl.java`,
+  `resources/CRUD-DB-Table-Template-Application.json`, `resources/application-ee.properties`, tests
+  `configurations/WorkspaceIdentityAuthGuardTest.java` (disabled), `controllers/WorkspaceControllerTest.java`,
+  `services/FeatureFlagServiceImplTest.java`, `resources/application-test.properties`; client
+  `src/api/interceptors/request/apiRequestInterceptor.ts`, `index.ts`, `src/ce/AppRouter.tsx`,
+  `src/ce/entities/FeatureFlag.ts`, `src/ce/pages/AppIDE/components/AppIDEModals.tsx`,
+  `src/ce/pages/AppIDE/hooks/useGenPageItems.tsx`, `src/ce/pages/AppIDE/layout/routers/MainPane/constants.ts`,
+  `src/ce/pages/Applications/index.tsx`, `WorkspaceAction.tsx` (and `tests/WorkspaceAction.test.tsx`),
+  `src/ce/utils/signupHelpers.ts`, `src/components/BottomBar/index.tsx`, `src/constants/userConstants.ts`,
+  `src/entities/Engine/AppEditorEngine.ts`, `src/pages/AdminSettings/Profile/index.tsx`,
+  `src/pages/AppIDE/components/GitModals.tsx`, `src/pages/AppIDE/layouts/components/Header/ChevronMenu.tsx`,
+  `Header/index.tsx`, `src/pages/AppViewer/Navigation/components/ShareButton.tsx`,
+  `src/pages/Applications/ApplicationCard.tsx`, `src/pages/Editor/GlobalHotKeys/GlobalHotKeys.tsx`,
+  `src/pages/UserProfile/index.tsx`, `src/pages/common/ImportModal.tsx`,
+  `src/pages/common/SearchBar/WorkspaceSearchItems.tsx`, `src/pages/setup/SignupSuccess.tsx` (and `.test.tsx`),
+  `src/pages/workspace/AppInviteUsersForm.tsx`, `src/sagas/TemplatesSagas.ts`.
