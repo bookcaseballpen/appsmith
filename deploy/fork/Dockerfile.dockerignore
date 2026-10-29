@@ -1,0 +1,23 @@
+# Build context for deploy/fork/Dockerfile (BuildKit reads <Dockerfile>.dockerignore). Only sources go in;
+# every artifact is built inside the image build.
+*
+!app/client
+!app/server
+!deploy/docker/fs
+
+**/node_modules
+**/.DS_Store
+app/client/build
+app/client/packages/*/dist
+app/client/.yarn/cache
+app/client/.yarn/install-state.gz
+app/client/cypress/videos
+app/client/cypress/screenshots
+app/server/dist
+app/server/**/target
+app/server/**/.env
+# Local developer settings stay out of the image.
+app/client/.env*
+!app/client/.env.example
+deploy/docker/fs/opt/appsmith/server
+deploy/docker/fs/opt/appsmith/info.json

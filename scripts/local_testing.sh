@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 set -o errexit
 
+# Fork: builds the current working tree through scripts/fork-build/build-image.sh (everything is compiled inside
+# Docker, on a base image built locally), so neither an Appsmith base image nor a cloud-services URL is involved.
+# Upstream's branch and remote modes (git fetch, checkout and pull) are removed: the script never pulls code.
+# See FORK.md.
+
+container=creative-app-builder-local
+
 display_help()
 {
   echo "---------------------------------------------------------------------------------------"
-  echo "Use this script to run a local instance of Appsmith on port 80."
-  echo "The script will build all the artefacts required for a fat Docker container to come up."
-  echo "If no argument is given, the build defaults to release branch."
-  echo "If --local or -l is passed, it will build with local changes"
+  echo "Use this script to run a local instance on http://127.0.0.1:<port> (default 80)."
+  echo "It builds the image from the current working tree, including uncommitted changes,"
+  echo "and runs it as the container '$container' with data in ./stacks."
+  echo "It does not fetch, check out or pull any branch; switch branches yourself first."
   echo "---------------------------------------------------------------------------------------"
   echo
-  echo "Syntax: $0 [-h] [-l] [-r [remote_url]] [branch_name] [tag] [cs_url]"
+  echo "Syntax: $0 [-h] [tag] [port]"
   echo "options:"
-  echo "-h     			Print this help"
-  echo "-l or --local    	Use the local codebase and not git"
-  echo "-r or --remote    	Use the branch from a remote repository"
-  echo "For more info please check: https://www.notion.so/appsmith/Test-an-Appsmith-branch-locally-c39ad68aea0d42bf94a149ea22e86820#9cee16c7e2054b5980513ec6f351ace2"
+  echo "-h or --help    Print this help"
+  echo "tag             Image tag, creative-app-builder:<tag> (default latest)"
+  echo "port            Port on 127.0.0.1 (default 80)"
   echo
 }
 
@@ -27,106 +33,37 @@ pretty_print()
   echo
 }
 
-# Check whether user had supplied -h or --help. If yes display usage
-if [[ ( $@ == "--help") ||  $@ == "-h" ]]
+if [[ $1 == "--help" || $1 == "-h" ]]
 then
   display_help
   exit 0
 fi
 
-LOCAL=false
-if [[ ($1 == "--local" || $1 == "-l")]]
+# Upstream's -l/--local is what the script always does now; accept it so old habits still work.
+if [[ $1 == "--local" || $1 == "-l" ]]
 then
-  LOCAL=true
+  shift
 fi
 
-REMOTE=false
-if [[ ($1 == "--remote" || $1 == "-r")]]
+if [[ $1 == "--remote" || $1 == "-r" || $1 == -* ]]
 then
-  REMOTE=true
-fi
-
-if [[ ($LOCAL == true) ]]
-then
-  pretty_print "Setting up instance with local changes"
-  BRANCH=release
-  tag=$2
-  cs_url=$3
-elif [[ ($REMOTE == true) ]]
-then
-  pretty_print "Setting up instance with remote repository branch ..."
-  REMOTE_REPOSITORY_URL=$2
-  REMOTE_BRANCH=$3
-  tag=$4
-  pretty_print "Please ignore if the following error occurs: remote remote_origin_for_local_test already exists."
-  git remote add remote_origin_for_local_test $REMOTE_REPOSITORY_URL || git remote set-url remote_origin_for_local_test $REMOTE_REPOSITORY_URL
-  git fetch remote_origin_for_local_test
-  git checkout $REMOTE_BRANCH
-  git pull remote_origin_for_local_test $REMOTE_BRANCH
-else
-  BRANCH=$1
-  tag=$2
-  cs_url=$3
-  pretty_print "Setting up instance to run on branch: $BRANCH"
-  cd "$(dirname "$0")"/..
-  git fetch origin $BRANCH
-  git checkout $BRANCH
-  git pull origin $BRANCH
-  pretty_print "Local branch is now up to date. Starting server build ..."
-fi
-
-if [[ -z "$tag" ]]; then
-  tag=latest
-fi
-pretty_print "Building Appsmith with tag: $tag"
-edition=ce
-if [[ "$(git remote get-url origin)" == *"/appsmith-ee"* ]]; then
-  edition=ee
-fi
-
-pretty_print "Starting server build ..."
-
-pushd app/server > /dev/null
-if ! ./build.sh -DskipTests > /dev/null; then
-  echo Server build failed >&2
+  echo "Unknown option: $1 (remote and branch modes are removed in the fork)" >&2
+  display_help >&2
   exit 1
 fi
-popd
-./scripts/prepare_server_artifacts.sh
-pretty_print "Server build successful. Starting client build ..."
 
-pushd app/client > /dev/null
-yarn > /dev/null
-if ! yarn build > /dev/null; then
-  echo Client build failed >&2
+tag="${1:-latest}"
+port="${2:-80}"
+image="creative-app-builder:$tag"
+pretty_print "Building $image from the working tree ..."
+
+if ! "$(dirname "$0")/fork-build/build-image.sh" "$image"; then
+  echo Docker image build failed >&2
   exit 1
 fi
-pretty_print "Client build successful. Starting RTS build ..."
-
-popd
-pushd app/client/packages/rts/ > /dev/null
-if ! ./build.sh > /dev/null; then
-  echo RTS build failed >&2
-  exit 1
-fi
-pretty_print "RTS build successful. Starting MCP build ..."
-
-popd
-pushd app/client/packages/mcp/ > /dev/null
-if ! ./build.sh > /dev/null; then
-  echo MCP build failed >&2
-  exit 1
-fi
-pretty_print "MCP build successful. Starting Docker build ..."
-
-popd
-bash "$(dirname "$0")/generate_info_json.sh"
-docker build -t appsmith/appsmith-local-$edition:$tag \
-  --build-arg BASE="appsmith/base-$edition:release" \
-  --build-arg APPSMITH_CLOUD_SERVICES_BASE_URL="${cs_url:-https://release-cs.appsmith.com}" \
-  . \
-  > /dev/null
 pretty_print "Docker image build successful. Triggering run now ..."
 
-(docker stop appsmith || true) && (docker rm appsmith || true)
-docker run -d --name appsmith -p 80:80 -v "$PWD/stacks:/appsmith-stacks" -e APPSMITH_BASE_URL=http://localhost appsmith/appsmith-local-$edition:$tag && sleep 15 && pretty_print "Local instance is up! Open Appsmith at http://localhost! "
+(docker stop "$container" || true) && (docker rm "$container" || true)
+docker run -d --name "$container" -p "127.0.0.1:$port:80" -v "$PWD/stacks:/appsmith-stacks" \
+  -e "APPSMITH_BASE_URL=http://localhost:$port" "$image" \
+  && pretty_print "Started. Open http://localhost:$port once /api/v1/health answers 200 (about two minutes)."

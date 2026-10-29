@@ -1,0 +1,4 @@
+# CCPM's merge check runs `bun test` at the repo root. The real suites are jest (app/client) and
+# Maven (app/server), so bun only looks in bun-tests/ and never picks up the jest and Cypress specs.
+[test]
+root = "bun-tests"

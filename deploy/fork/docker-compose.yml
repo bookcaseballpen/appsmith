@@ -1,0 +1,31 @@
+# Fork: runs the image built by scripts/fork-build/build-image.sh (or .ps1). See FORK.md "Build and deploy".
+#
+#   docker compose -f deploy/fork/docker-compose.yml up -d
+#
+# The container runs its own MongoDB and Redis, as upstream's single image does; data lives in the named volume.
+# Ports bind to 127.0.0.1 only. Put a reverse proxy in front, or change APPSMITH_BIND_ADDRESS, to expose it.
+# On first start the container writes stacks/configuration/docker.env with generated MongoDB, Redis and
+# encryption secrets; keep the volume (or back that file up), or encrypted datasource credentials are lost.
+
+name: creative-app-builder
+
+services:
+  appsmith:
+    image: ${APPSMITH_IMAGE:-creative-app-builder:local}
+    container_name: ${APPSMITH_CONTAINER_NAME:-creative-app-builder}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "${APPSMITH_BIND_ADDRESS:-127.0.0.1}:${APPSMITH_HTTP_PORT:-8000}:80"
+      # HTTPS through the built-in Caddy, only useful with APPSMITH_CUSTOM_DOMAIN set:
+      # - "${APPSMITH_BIND_ADDRESS:-127.0.0.1}:${APPSMITH_HTTPS_PORT:-8443}:443"
+    environment:
+      # Off by default in the image already; set here so the intent is visible.
+      APPSMITH_CLOUD_SERVICES_ENABLED: "false"
+      APPSMITH_DISABLE_TELEMETRY: "true"
+    volumes:
+      - stacks:/appsmith-stacks
+
+volumes:
+  stacks:
+    name: ${APPSMITH_VOLUME_NAME:-creative-app-builder-stacks}
