@@ -13,6 +13,7 @@ import LeftPane from "./routers/LeftPane";
 import MainPane from "./routers/MainPane";
 import RightPane from "./routers/RightPane";
 import { ProtectedCallout } from "../components/ProtectedCallout";
+import { EditorReadOnlyBanner } from "../components/EditorReadOnlyBanner";
 import { useGridLayoutTemplate } from "./hooks/useGridLayoutTemplate";
 import { Areas } from "./constants";
 import {
@@ -44,6 +45,7 @@ export const StaticLayout = React.memo(() => {
   return (
     <>
       <GitProtectedBranchCallout />
+      <EditorReadOnlyBanner />
       <EditorWrapperContainer>
         <GridContainer
           style={{

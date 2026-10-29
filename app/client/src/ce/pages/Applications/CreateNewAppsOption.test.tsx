@@ -11,6 +11,7 @@ import { unitTestBaseMockStore } from "layoutSystems/common/dropTarget/unitTestU
 
 jest.mock("selectors/gitModSelectors", () => ({
   selectCombinedPreviewMode: jest.fn(() => false),
+  selectCanvasOnlyMode: jest.fn(() => false),
 }));
 
 const defaultStoreState = {
