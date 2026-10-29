@@ -9,7 +9,11 @@ import {
   getAIArtifact,
   getAIAssistantState,
   getAIEditorContext,
+  getIsAIConfigLoaded,
 } from "ee/selectors/aiAssistantSelectors";
+import { getIsBuiltInAiEnabled } from "ee/selectors/builtInAiSelectors";
+import OrganizationApi from "ee/api/OrganizationApi";
+import { getCurrentUser } from "selectors/usersSelectors";
 import aiAssistantSagasListener from "./AIAssistantSagas";
 
 jest.mock("@appsmith/ads", () => ({
@@ -45,6 +49,8 @@ async function requestFor(url: string, editorContext: Record<string, unknown>) {
   await expectSaga(aiAssistantSagasListener)
     .provide({
       select({ args, selector }, next) {
+        if (selector === getIsBuiltInAiEnabled) return true;
+
         if (selector === getAIAssistantState) return aiState;
 
         if (selector === getAIEditorContext) return editorContext;
@@ -137,5 +143,86 @@ describe("fetchAIResponseSaga request context", () => {
     });
 
     expect(context).toMatchObject({ entityId: "action-1", ...application });
+  });
+});
+
+describe("built-in AI switch", () => {
+  const signedInUser = { email: "dev@example.com", isAnonymous: false };
+
+  async function loadSettingsWith(isBuiltInAiEnabled: boolean) {
+    const getAIConfig = jest
+      .fn()
+      .mockResolvedValue({ data: { isAIAssistantEnabled: true } });
+
+    const result = await expectSaga(aiAssistantSagasListener)
+      .provide({
+        select({ selector }, next) {
+          if (selector === getIsBuiltInAiEnabled) return isBuiltInAiEnabled;
+
+          if (selector === getIsAIConfigLoaded) return false;
+
+          if (selector === getCurrentUser) return signedInUser;
+
+          return next();
+        },
+        call(effect, next) {
+          return effect.fn === OrganizationApi.getAIConfig
+            ? getAIConfig()
+            : next();
+        },
+      })
+      .dispatch({ type: ReduxActionTypes.FETCH_FEATURE_FLAGS_SUCCESS })
+      .silentRun(500);
+
+    return { getAIConfig, result };
+  }
+
+  it("does not request the AI settings when the switch is off", async () => {
+    const { getAIConfig, result } = await loadSettingsWith(false);
+
+    expect(getAIConfig).not.toHaveBeenCalled();
+    expect(
+      result.effects.put?.some(
+        (effect) =>
+          effect.payload.action.type === ReduxActionTypes.UPDATE_AI_SETTINGS,
+      ) ?? false,
+    ).toBe(false);
+  });
+
+  it("requests the AI settings once the flags arrive with the switch on", async () => {
+    const { getAIConfig } = await loadSettingsWith(true);
+
+    expect(getAIConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a prompt at once when the switch is off", async () => {
+    const requestAIResponse = jest.fn();
+
+    await expectSaga(aiAssistantSagasListener)
+      .provide({
+        select({ selector }, next) {
+          if (selector === getIsBuiltInAiEnabled) return false;
+
+          if (selector === getAIAssistantState) return aiState;
+
+          return next();
+        },
+        call(effect, next) {
+          return effect.fn === UserApi.requestAIResponse
+            ? requestAIResponse()
+            : next();
+        },
+      })
+      .put({
+        type: ReduxActionTypes.FETCH_AI_RESPONSE_ERROR,
+        payload: { error: "The built-in AI is disabled on this instance." },
+      })
+      .dispatch({
+        type: ReduxActionTypes.FETCH_AI_RESPONSE,
+        payload: { prompt: "Find and fix any bugs", context: {} },
+      })
+      .silentRun(500);
+
+    expect(requestAIResponse).not.toHaveBeenCalled();
   });
 });

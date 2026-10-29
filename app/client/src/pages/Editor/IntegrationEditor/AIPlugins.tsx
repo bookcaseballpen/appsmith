@@ -19,6 +19,7 @@ import {
 import { pluginSearchSelector } from "./CreateNewDatasourceHeader";
 import { getPlugins } from "ee/selectors/entitiesSelector";
 import { filterSearch } from "./util";
+import { getIsBuiltInAiEnabled } from "ee/selectors/builtInAiSelectors";
 
 interface CreateAIPluginsProps {
   pageId: string;
@@ -80,6 +81,9 @@ function CreateAIPlugins(props: CreateAIPluginsProps) {
 }
 
 const mapStateToProps = (state: DefaultRootState) => {
+  // Fork: no AI integrations while the built-in AI is switched off (APPSMITH_AI_ENABLED).
+  if (!getIsBuiltInAiEnabled(state)) return { plugins: [] };
+
   const searchedPlugin = (
     pluginSearchSelector(state, "search") || ""
   ).toLocaleLowerCase();

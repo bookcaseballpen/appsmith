@@ -1,5 +1,6 @@
 package com.appsmith.server.services;
 
+import com.appsmith.server.configurations.BuiltInAiConfig;
 import com.appsmith.server.dtos.AIEditorContextDTO;
 import com.appsmith.server.dtos.AIMessageDTO;
 import com.appsmith.server.newactions.base.NewActionService;
@@ -20,6 +21,7 @@ import java.util.List;
 public class AIAssistantServiceImpl extends AIAssistantServiceCEImpl implements AIAssistantService {
 
     private final InstanceRoleService instanceRoleService;
+    private final BuiltInAiConfig builtInAiConfig;
 
     public AIAssistantServiceImpl(
             OrganizationService organizationService,
@@ -28,7 +30,8 @@ public class AIAssistantServiceImpl extends AIAssistantServiceCEImpl implements 
             DatasourceStructureSolution datasourceStructureSolution,
             PluginService pluginService,
             ActionPermission actionPermission,
-            InstanceRoleService instanceRoleService) {
+            InstanceRoleService instanceRoleService,
+            BuiltInAiConfig builtInAiConfig) {
         super(
                 organizationService,
                 aiReferenceService,
@@ -37,23 +40,28 @@ public class AIAssistantServiceImpl extends AIAssistantServiceCEImpl implements 
                 pluginService,
                 actionPermission);
         this.instanceRoleService = instanceRoleService;
+        this.builtInAiConfig = builtInAiConfig;
     }
 
-    // Only the roles that edit apps may ask the AI assistant.
+    // Only when the built-in AI is switched on (APPSMITH_AI_ENABLED), and only the roles that edit apps may ask the
+    // AI assistant.
 
     @Override
     public Mono<String> getAIResponse(String provider, String prompt, AIEditorContextDTO context) {
-        return requireEditRole().then(Mono.defer(() -> super.getAIResponse(provider, prompt, context)));
+        return requireAiAccess().then(Mono.defer(() -> super.getAIResponse(provider, prompt, context)));
     }
 
     @Override
     public Mono<String> getAIResponse(
             String provider, String prompt, AIEditorContextDTO context, List<AIMessageDTO> conversationHistory) {
-        return requireEditRole()
+        return requireAiAccess()
                 .then(Mono.defer(() -> super.getAIResponse(provider, prompt, context, conversationHistory)));
     }
 
-    private Mono<Void> requireEditRole() {
-        return instanceRoleService.requireCurrentUserRole("Use the AI assistant", InstanceRole.ADMIN, InstanceRole.DEV);
+    private Mono<Void> requireAiAccess() {
+        return builtInAiConfig
+                .requireEnabled()
+                .then(Mono.defer(() -> instanceRoleService.requireCurrentUserRole(
+                        "Use the AI assistant", InstanceRole.ADMIN, InstanceRole.DEV)));
     }
 }

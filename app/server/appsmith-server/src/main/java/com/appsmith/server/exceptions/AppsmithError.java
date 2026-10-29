@@ -290,6 +290,15 @@ public enum AppsmithError {
             "Permission denied",
             ErrorType.AUTHENTICATION_ERROR,
             null),
+    // Fork: a feature switched off on this instance (for example the built-in AI, APPSMITH_AI_ENABLED).
+    FEATURE_DISABLED(
+            403,
+            AppsmithErrorCode.FEATURE_DISABLED.getCode(),
+            "{0} is disabled on this instance.",
+            AppsmithErrorAction.DEFAULT,
+            "Feature disabled",
+            ErrorType.BAD_REQUEST,
+            null),
     NO_RESOURCE_FOUND(
             404,
             AppsmithErrorCode.NO_RESOURCE_FOUND.getCode(),
