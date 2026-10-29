@@ -29,6 +29,8 @@ Appsmith hosts (no cloud services, no telemetry, no Appsmith CDN), and Git sync 
 - One logical change per commit, message prefix `fork(...)`. No repo-wide reformatting.
 - Spotless: the pre-commit hook is off in this clone (`core.hooksPath` unset). Format changed server files with
   `mvn spotless:apply -DspotlessFiles=<comma-separated regexes>`, so untouched upstream files stay as they are.
+- `bunfig.toml` and `bun-tests/` exist only so CCPM's merge check (`bun test` at the repo root) passes: bun is
+  pointed at one smoke test instead of the jest and Cypress specs. The real suites are jest and Maven.
 
 ## Configuration
 
