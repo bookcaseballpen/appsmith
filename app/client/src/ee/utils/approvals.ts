@@ -38,8 +38,15 @@ export const getApprovalPreviewPath = (approval: ApplicationApproval) =>
     ? `/app/application/page-${approval.defaultBasePageId}/edit`
     : undefined;
 
-export const formatApprovalTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleString() : "";
+// The server writes Instants as epoch seconds (with a fraction); ISO strings are accepted too.
+export const formatApprovalTime = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === "") return "";
+
+  const date =
+    typeof value === "number" ? new Date(value * 1000) : new Date(value);
+
+  return date.toLocaleString();
+};
 
 // Responses come back unwrapped by the axios interceptors: { responseMeta, data }, also for 4xx answers.
 interface UnwrappedApiResponse<T> {

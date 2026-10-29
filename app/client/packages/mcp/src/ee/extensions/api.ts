@@ -12,7 +12,8 @@ export type ApprovalStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 export interface ApprovalEvent {
   type: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";
   by: string | null;
-  at: string | null;
+  // Times are epoch seconds (with a fraction), as the server writes Instants.
+  at: number | null;
   comment: string | null;
 }
 
@@ -26,9 +27,9 @@ export interface ApplicationApprovalState {
   // A short id of the frozen snapshot; null while DRAFT.
   version: string | null;
   submittedBy: string | null;
-  submittedAt: string | null;
+  submittedAt: number | null;
   reviewedBy: string | null;
-  reviewedAt: string | null;
+  reviewedAt: number | null;
   // The approver's comment, only while REJECTED.
   comment: string | null;
   history: ApprovalEvent[];

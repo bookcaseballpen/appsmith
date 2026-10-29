@@ -17,7 +17,7 @@ const STATE = {
   status: "SUBMITTED",
   version: "0123456789ab",
   submittedBy: "dev@appsmith.com",
-  submittedAt: "2026-10-29T10:00:00Z",
+  submittedAt: 1793268000.125,
   reviewedBy: null,
   reviewedAt: null,
   comment: null,
@@ -25,7 +25,7 @@ const STATE = {
     {
       type: "SUBMITTED",
       by: "dev@appsmith.com",
-      at: "2026-10-29T10:00:00Z",
+      at: 1793268000.125,
       comment: null,
     },
   ],

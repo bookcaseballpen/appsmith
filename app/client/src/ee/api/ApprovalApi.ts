@@ -7,7 +7,8 @@ export type ApprovalStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 export interface ApprovalEvent {
   type: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";
   by?: string | null;
-  at: string;
+  // Epoch seconds, as the server writes Instants.
+  at: number | string;
   comment?: string | null;
 }
 
@@ -19,9 +20,9 @@ export interface ApplicationApproval {
   status: ApprovalStatus;
   version?: string | null;
   submittedBy?: string | null;
-  submittedAt?: string | null;
+  submittedAt?: number | string | null;
   reviewedBy?: string | null;
-  reviewedAt?: string | null;
+  reviewedAt?: number | string | null;
   comment?: string | null;
   history: ApprovalEvent[];
 }

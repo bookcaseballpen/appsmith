@@ -1,6 +1,7 @@
 import type { ApplicationApproval } from "ee/api/ApprovalApi";
 import {
   callApprovalApi,
+  formatApprovalTime,
   getApprovalPreviewPath,
   getCancellationReason,
   reviewsReleases,
@@ -73,6 +74,23 @@ describe("getApprovalPreviewPath", () => {
     expect(
       getApprovalPreviewPath(approval({ defaultBasePageId: null })),
     ).toBeUndefined();
+  });
+});
+
+describe("formatApprovalTime", () => {
+  it("reads the server's epoch seconds, not milliseconds", () => {
+    const seconds = Date.UTC(2026, 9, 29, 10, 0, 0) / 1000 + 0.25;
+
+    expect(formatApprovalTime(seconds)).toBe(
+      new Date(Date.UTC(2026, 9, 29, 10, 0, 0, 250)).toLocaleString(),
+    );
+  });
+
+  it("accepts ISO strings and shows nothing for no value", () => {
+    expect(formatApprovalTime("2026-10-29T10:00:00Z")).toBe(
+      new Date("2026-10-29T10:00:00Z").toLocaleString(),
+    );
+    expect(formatApprovalTime(null)).toBe("");
   });
 });
 
