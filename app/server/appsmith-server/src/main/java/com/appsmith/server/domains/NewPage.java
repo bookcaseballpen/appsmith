@@ -13,7 +13,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.List;
 
@@ -21,7 +20,6 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class NewPage extends RefAwareDomain implements Context {
     @JsonView(Views.Public.class)

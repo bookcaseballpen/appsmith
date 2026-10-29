@@ -11,13 +11,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 @NoArgsConstructor
 @Getter

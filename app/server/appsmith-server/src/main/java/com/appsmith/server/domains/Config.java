@@ -12,7 +12,6 @@ import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 import net.minidev.json.JSONObject;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.Map;
 
@@ -22,7 +21,6 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class Config extends BaseDomain {
     @Type(CustomJsonType.class)

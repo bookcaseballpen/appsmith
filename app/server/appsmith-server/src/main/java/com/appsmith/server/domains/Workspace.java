@@ -14,7 +14,6 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.Set;
 
@@ -23,7 +22,6 @@ import java.util.Set;
 @ToString
 @NoArgsConstructor
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class Workspace extends BaseDomain {
 

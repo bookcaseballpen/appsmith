@@ -15,7 +15,6 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
@@ -33,7 +32,6 @@ import java.util.Set;
 @Setter
 @ToString
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class User extends BaseDomain implements UserDetails, OidcUser {
 

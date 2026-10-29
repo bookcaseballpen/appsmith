@@ -13,7 +13,6 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.io.Serializable;
 
@@ -24,7 +23,6 @@ import java.io.Serializable;
 @ToString
 @NoArgsConstructor
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class Tenant extends BaseDomain implements Serializable {
 

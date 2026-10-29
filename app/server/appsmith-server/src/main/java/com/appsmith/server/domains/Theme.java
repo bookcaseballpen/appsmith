@@ -15,14 +15,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.Map;
 
 @Getter
 @Setter
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class Theme extends BaseDomain {
     public static final String LEGACY_THEME_NAME = "classic";

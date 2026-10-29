@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 
 import java.util.List;
 
@@ -18,7 +17,6 @@ import java.util.List;
 @ToString
 @NoArgsConstructor
 @Entity
-@Where(clause = "deleted_at IS NULL")
 public class Collection extends BaseDomain {
 
     String name;

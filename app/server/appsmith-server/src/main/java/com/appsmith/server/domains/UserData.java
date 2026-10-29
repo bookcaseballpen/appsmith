@@ -15,7 +15,6 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 import org.hibernate.annotations.Type;
-import org.hibernate.annotations.Where;
 import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
@@ -31,7 +30,6 @@ import static com.appsmith.server.constants.FieldName.DEFAULT;
 @Setter
 @ToString
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 @NoArgsConstructor
 @Cacheable(false)

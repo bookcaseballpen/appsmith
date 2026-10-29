@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.hibernate.annotations.Where;
 
 import java.time.Instant;
 
@@ -17,7 +16,6 @@ import java.time.Instant;
 @Setter
 @ToString
 @Entity
-@Where(clause = "deleted_at IS NULL")
 @FieldNameConstants
 public class McpToken extends BaseDomain {
 
