@@ -2,6 +2,8 @@ package com.appsmith.server.repositories.postgres;
 
 import com.appsmith.external.models.Datasource;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.util.DuplicateKeyExceptionUtils;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.DatasourceRepository;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,24 @@ class UniqueNameIndexesTest {
                 .expectErrorSatisfies(error -> assertThat(error)
                         .isInstanceOf(DuplicateKeyException.class)
                         .hasMessageContaining("workspace_app_deleted_gitApplicationMetadata"))
+                .verify();
+    }
+
+    @Test
+    void should_nameTheConflictingApplicationInTheErrorMessage_when_applicationNameIsTaken() {
+        // Given
+        final String workspaceId = UUID.randomUUID().toString();
+        applicationRepository.save(application(workspaceId, "Sales, North")).block();
+
+        // When
+        final Mono<Application> result = applicationRepository.save(application(workspaceId, "Sales, North"));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorSatisfies(error -> assertThat(AppsmithError.DUPLICATE_KEY.getMessage(
+                                DuplicateKeyExceptionUtils.extractConflictingObjectName(
+                                        error.getCause().getMessage())))
+                        .startsWith("Duplicate key error: An object with the name \"Sales, North\" already exists."))
                 .verify();
     }
 

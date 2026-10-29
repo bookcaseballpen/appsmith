@@ -53,7 +53,8 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
   and a failed insert gives back the id `save` generated, as on MongoDB. Services find name clashes by Mongo index
   name, so `V3__unique_name_indexes.sql` creates `workspace_app_deleted_gitApplicationMetadata` and
   `workspace_datasource_deleted_compound_index` under those names (`NULLS NOT DISTINCT`, PostgreSQL 15+). This keeps
-  "App (1)" naming on fork and import.
+  "App (1)" naming on fork and import. The "An object with the name … already exists" message takes the name from
+  PostgreSQL's `Key (…)=(…)` detail (`DuplicateKeyExceptionUtils`), as it did from Mongo's `dup key`.
 - Soft delete: entities have no Hibernate `@Where(deleted_at IS NULL)`; every repository query filters `deleted_at`
   itself. With the filter, saving an archived row could not see it and inserted it again (duplicate primary key).
 - `APPSMITH_ADMIN_EMAILS` is applied at every start by `migrations/SuperUserSync` (an `ApplicationRunner`, replacing
@@ -76,8 +77,28 @@ imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial i
 `ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
 (`ApplicationApprovalServiceTest` 38, `InstanceRolePermissionsTest` 78, `EditorReadOnlyHttpTest` 5) and the Postgres
 tests (transactions, unique names, soft delete, admin sync). The datasource plugins postgres, mysql, mssql and REST API
-and JS objects run on a live server in edit and view mode. The rest of the server suite has not been run on PostgreSQL.
+and JS objects run on a live server in edit and view mode.
 The REST API plugin refuses loopback hosts (SSRF filter); for local tests only, `APPSMITH_DISABLE_SSRF_FILTER=true`.
+
+Server test suite on PostgreSQL (`appsmith-server`, Testcontainers, one JVM per batch as in CI), in batches by
+package. Classes, not test methods:
+
+| Batch | Packages | Passed | Failed | Skipped |
+|---|---|---|---|---|
+| 1 | 27 small packages (acl … widgets, controllers, domains, imports, exports), `ServerApplicationTests` | 66 | 2 | 0 |
+| 2 | `repositories`, `configurations` | | | |
+| 3 | `helpers` | | | |
+| 4 | `solutions` | | | |
+| 5 | `git` | | | |
+| 6 | `services` | | | |
+
+Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
+alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
+default-workspace config of another context).
+
+Test setup: every cached test context has its own connection pool, so the test container allows 400 connections and
+each pool holds at most 5 (`PostgresTestContainerInitializer`); with the defaults (100 and 10) the later contexts in a
+batch failed with "too many clients".
 
 ## Roles (phase A)
 
