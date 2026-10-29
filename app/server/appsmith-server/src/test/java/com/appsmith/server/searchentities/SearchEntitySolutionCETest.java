@@ -6,6 +6,7 @@ import com.appsmith.server.domains.GitArtifactMetadata;
 import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.dtos.SearchEntityDTO;
 import com.appsmith.server.helpers.CollectionUtils;
+import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.WorkspaceService;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +39,9 @@ class SearchEntitySolutionCETest {
     @Autowired
     SearchEntitySolution searchEntitySolution;
 
+    @Autowired
+    DefaultWorkspaceService defaultWorkspaceService;
+
     private final List<String> applicationIds = new ArrayList<>();
 
     private final List<String> workspaceIds = new ArrayList<>();
@@ -54,6 +58,10 @@ class SearchEntitySolutionCETest {
                     workspaceId -> workspaceService.archiveById(workspaceId).block());
             workspaceIds.clear();
         }
+    }
+
+    private String defaultWorkspaceId() {
+        return defaultWorkspaceService.getIds().block().workspaceId();
     }
 
     @Test
@@ -138,7 +146,10 @@ class SearchEntitySolutionCETest {
         StepVerifier.create(searchEntityDTOMono)
                 .assertNext(searchEntityDTO -> {
                     assertThat(searchEntityDTO.getApplications()).hasSize(1);
-                    assertThat(searchEntityDTO.getWorkspaces()).hasSize(1);
+                    // Fork: api_user is also a member of the default "Apps" workspace (SeedTestUserRoles).
+                    assertThat(searchEntityDTO.getWorkspaces())
+                            .extracting(Workspace::getId)
+                            .containsExactlyInAnyOrder(workspace.getId(), defaultWorkspaceId());
                 })
                 .verifyComplete();
     }

@@ -4,10 +4,12 @@ import com.appsmith.server.helpers.ce.WorkspaceServiceHelperCEImpl;
 import com.appsmith.server.roles.InstanceRole;
 import com.appsmith.server.roles.InstanceRoleService;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import static java.lang.Boolean.FALSE;
+import static java.lang.Boolean.TRUE;
 
 /**
  * This fork has one workspace for everyone (see {@link com.appsmith.server.roles.DefaultWorkspaceService}, which
@@ -26,13 +28,21 @@ public class WorkspaceServiceHelperImpl extends WorkspaceServiceHelperCEImpl imp
 
     /**
      * A personal ("default") workspace is never created, which also makes the OAuth signup skip its first app. Any
-     * other workspace needs the ADMIN role.
+     * other workspace needs the ADMIN role. A server-internal call without a security context is not limited; every
+     * request has one, even an anonymous one.
      */
     @Override
     public Mono<Boolean> isCreateWorkspaceAllowed(Boolean isDefaultWorkspace) {
         if (Boolean.TRUE.equals(isDefaultWorkspace)) {
             return Mono.just(FALSE);
         }
-        return instanceRoleService.getCurrentUserRole().map(role -> role == InstanceRole.ADMIN);
+        return ReactiveSecurityContextHolder.getContext()
+                .hasElement()
+                .flatMap(signedIn -> signedIn
+                        ? instanceRoleService
+                                .getCurrentUserRole()
+                                .map(role -> role == InstanceRole.ADMIN)
+                                .defaultIfEmpty(FALSE)
+                        : Mono.just(TRUE));
     }
 }

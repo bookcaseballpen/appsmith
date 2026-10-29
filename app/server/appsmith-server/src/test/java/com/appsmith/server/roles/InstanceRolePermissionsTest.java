@@ -32,6 +32,7 @@ import com.appsmith.server.services.McpTokenService;
 import com.appsmith.server.services.WorkspaceService;
 import com.appsmith.server.solutions.EnvironmentPermission;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
@@ -362,16 +363,17 @@ class InstanceRolePermissionsTest {
         Optional<String> forkedId = runAs(
                         applicationForkingService
                                 .forkApplicationToWorkspace(application.getId(), workspaceId)
-                                .map(imported -> Optional.of(imported.getApplication().getId())),
+                                .map(imported ->
+                                        Optional.of(imported.getApplication().getId())),
                         users.get(role))
                 .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.empty()))
                 .block();
 
         // Then
         assertThat(forkedId.isPresent()).isEqualTo(role == InstanceRole.ADMIN);
-        forkedId.ifPresent(id -> assertThat(
-                        applicationRepository.findById(id).block().getLastDeployedAt())
-                .isNull());
+        forkedId.ifPresent(
+                id -> assertThat(applicationRepository.findById(id).block().getLastDeployedAt())
+                        .isNull());
     }
 
     @ParameterizedTest
@@ -519,6 +521,23 @@ class InstanceRolePermissionsTest {
         } else {
             assertThat(error).contains(AppsmithError.ACTION_IS_NOT_AUTHORIZED);
         }
+    }
+
+    @Test
+    void should_createWorkspaceForGivenOwner_when_serverCallsWithoutSecurityContext() {
+        // Given
+        Workspace unsaved = new Workspace();
+        unsaved.setName(unique("roles-internal-workspace"));
+
+        // When
+        Workspace created = workspaceService
+                .create(unsaved, users.get(InstanceRole.USER), Boolean.FALSE)
+                .block();
+
+        // Then
+        assertThat(created.getId()).isNotBlank();
+        runAs(workspaceService.archiveById(created.getId()), users.get(InstanceRole.USER))
+                .block();
     }
 
     @ParameterizedTest
