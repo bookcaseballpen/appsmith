@@ -386,8 +386,7 @@ public class CustomNewActionRepositoryCEImpl extends BaseAppsmithRepositoryImpl<
                     .getResultList();
             return rows.stream()
                     .map(row -> new PluginTypeAndCountDTO(
-                            row[0] == null ? null : PluginType.valueOf((String) row[0]),
-                            ((Number) row[1]).intValue()))
+                            row[0] == null ? null : PluginType.valueOf((String) row[0]), ((Number) row[1]).intValue()))
                     .toList();
         });
     }

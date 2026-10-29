@@ -35,8 +35,7 @@ public final class EntityMeta {
         if (entity == null) {
             throw new IllegalArgumentException(type.getName() + " is not an @Entity");
         }
-        this.table = SnakeCaseNamingStrategy.quoted(
-                entity.name().isEmpty() ? type.getSimpleName() : entity.name());
+        this.table = SnakeCaseNamingStrategy.quoted(entity.name().isEmpty() ? type.getSimpleName() : entity.name());
 
         for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
             for (Field field : c.getDeclaredFields()) {

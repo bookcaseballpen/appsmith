@@ -9,10 +9,10 @@ import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.repositories.BaseAppsmithRepositoryImpl;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import lombok.RequiredArgsConstructor;
-import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

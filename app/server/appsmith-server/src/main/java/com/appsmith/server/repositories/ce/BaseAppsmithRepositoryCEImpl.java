@@ -358,7 +358,9 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                     }
 
                     final int modifiers = field.getModifiers();
-                    if (Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers) || Modifier.isTransient(modifiers)) {
+                    if (Modifier.isStatic(modifiers)
+                            || Modifier.isFinal(modifiers)
+                            || Modifier.isTransient(modifiers)) {
                         return;
                     }
 
@@ -490,9 +492,8 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
      * outside the JSON columns. Fork: an UPDATE and a SELECT in one transaction (Mongo's findAndModify).
      */
     public Mono<T> updateAndReturn(String id, BridgeUpdate updateObj, AclPermission permission) {
-        final Mono<Set<String>> groupsMono = permission == null
-                ? Mono.just(Set.of())
-                : getCurrentUserPermissionGroupsIfRequired(permission, true);
+        final Mono<Set<String>> groupsMono =
+                permission == null ? Mono.just(Set.of()) : getCurrentUserPermissionGroupsIfRequired(permission, true);
 
         return groupsMono.flatMap(permissionGroups -> {
             final List<BridgeQuery<T>> criteria = new ArrayList<>();
@@ -505,8 +506,8 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 if (matched == 0) {
                     return null;
                 }
-                final List<T> rows =
-                        PostgresOperations.select(em, genericDomain, List.of(Bridge.equal(FieldName.ID, id)), null, 1, 0);
+                final List<T> rows = PostgresOperations.select(
+                        em, genericDomain, List.of(Bridge.equal(FieldName.ID, id)), null, 1, 0);
                 return rows.isEmpty() ? null : rows.get(0);
             });
         });

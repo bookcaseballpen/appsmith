@@ -76,7 +76,9 @@ class SuperUserSyncTest {
     void restoreAdmins() {
         final BridgeUpdate instance = Bridge.update();
         instance.set(PermissionGroup.Fields.assignedToUserIds, instanceAdminsBefore);
-        permissionGroupRepository.updateById(instanceAdminRole().getId(), instance).block();
+        permissionGroupRepository
+                .updateById(instanceAdminRole().getId(), instance)
+                .block();
         final BridgeUpdate organization = Bridge.update();
         organization.set(PermissionGroup.Fields.assignedToUserIds, organizationAdminsBefore);
         permissionGroupRepository

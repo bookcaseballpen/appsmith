@@ -48,8 +48,8 @@ public class PartTreeAppsmithQuery<T extends BaseDomain> implements RepositoryQu
         this.returnedType = method.getResultProcessor().getReturnedType().getReturnedType();
 
         if (!ReactiveWrappers.isAvailable() || !ReactiveWrappers.supports(declaredReturnType)) {
-            throw new IllegalStateException("Derived query " + method + " must return Mono or Flux (got "
-                    + declaredReturnType.getName() + ")");
+            throw new IllegalStateException(
+                    "Derived query " + method + " must return Mono or Flux (got " + declaredReturnType.getName() + ")");
         }
         for (PartTree.OrPart orPart : tree) {
             for (Part part : orPart) {
@@ -73,8 +73,9 @@ public class PartTreeAppsmithQuery<T extends BaseDomain> implements RepositoryQu
             case GREATER_THAN_EQUAL -> Op.GREATER_THAN_OR_EQUAL;
             case LESS_THAN -> Op.LESS_THAN;
             case LESS_THAN_EQUAL -> Op.LESS_THAN_OR_EQUAL;
-            default -> throw new IllegalStateException("Unsupported derived query keyword " + part.getType() + " in "
-                    + part.getProperty());
+            default ->
+                throw new IllegalStateException(
+                        "Unsupported derived query keyword " + part.getType() + " in " + part.getProperty());
         };
     }
 

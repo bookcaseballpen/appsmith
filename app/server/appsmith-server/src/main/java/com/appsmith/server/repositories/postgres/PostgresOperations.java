@@ -108,12 +108,7 @@ public class PostgresOperations {
 
     @SuppressWarnings("unchecked")
     public static <T extends BaseDomain> List<T> select(
-            EntityManager em,
-            Class<T> type,
-            Collection<BridgeQuery<T>> criteria,
-            Sort sort,
-            int limit,
-            int skip) {
+            EntityManager em, Class<T> type, Collection<BridgeQuery<T>> criteria, Sort sort, int limit, int skip) {
         final SqlRenderer sql = new SqlRenderer(EntityMeta.of(type));
         final StringBuilder statement = new StringBuilder("SELECT * FROM ")
                 .append(sql.meta().getTable())
@@ -134,10 +129,11 @@ public class PostgresOperations {
         return rows;
     }
 
-    public static <T extends BaseDomain> long count(EntityManager em, Class<T> type, Collection<BridgeQuery<T>> criteria) {
+    public static <T extends BaseDomain> long count(
+            EntityManager em, Class<T> type, Collection<BridgeQuery<T>> criteria) {
         final SqlRenderer sql = new SqlRenderer(EntityMeta.of(type));
-        final String statement = "SELECT count(*) FROM " + sql.meta().getTable() + " WHERE "
-                + sql.where(List.copyOf(criteria));
+        final String statement =
+                "SELECT count(*) FROM " + sql.meta().getTable() + " WHERE " + sql.where(List.copyOf(criteria));
         final Query query = em.createNativeQuery(statement);
         bind(query, sql.params());
         return ((Number) query.getSingleResult()).longValue();
@@ -163,15 +159,16 @@ public class PostgresOperations {
         final String set = sql.set(update);
         final String where = sql.where(List.copyOf(criteria));
         final String statement = firstOnly
-                ? "UPDATE " + table + " SET " + set + " WHERE " + id + " = (SELECT " + id + " FROM " + table
-                        + " WHERE " + where + " LIMIT 1)"
+                ? "UPDATE " + table + " SET " + set + " WHERE " + id + " = (SELECT " + id + " FROM " + table + " WHERE "
+                        + where + " LIMIT 1)"
                 : "UPDATE " + table + " SET " + set + " WHERE " + where;
         final Query query = em.createNativeQuery(statement);
         bind(query, sql.params());
         return query.executeUpdate();
     }
 
-    public static <T extends BaseDomain> int delete(EntityManager em, Class<T> type, Collection<BridgeQuery<T>> criteria) {
+    public static <T extends BaseDomain> int delete(
+            EntityManager em, Class<T> type, Collection<BridgeQuery<T>> criteria) {
         final SqlRenderer sql = new SqlRenderer(EntityMeta.of(type));
         final String statement = "DELETE FROM " + sql.meta().getTable() + " WHERE " + sql.where(List.copyOf(criteria));
         final Query query = em.createNativeQuery(statement);

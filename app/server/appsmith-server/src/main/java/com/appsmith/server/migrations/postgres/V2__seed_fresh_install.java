@@ -56,8 +56,8 @@ public class V2__seed_fresh_install extends BaseJavaMigration {
         }
 
         // The instance id is unique to each install, so it is not in the snapshot (Mongock generated it).
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO config (id, name, config, created_at, updated_at, policy_map)"
+        try (PreparedStatement statement =
+                connection.prepareStatement("INSERT INTO config (id, name, config, created_at, updated_at, policy_map)"
                         + " VALUES (?, 'instance-id', CAST(? AS jsonb), now(), now(), '{}'::jsonb)")) {
             statement.setString(1, ObjectIds.newId());
             statement.setString(2, "{\"value\": \"" + ObjectIds.newId() + "\"}");
@@ -67,8 +67,8 @@ public class V2__seed_fresh_install extends BaseJavaMigration {
 
     private static Map<String, String> columnTypes(Connection connection, String table) throws Exception {
         final Map<String, String> types = new HashMap<>();
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT column_name, data_type FROM information_schema.columns"
+        try (PreparedStatement statement =
+                connection.prepareStatement("SELECT column_name, data_type FROM information_schema.columns"
                         + " WHERE table_schema = current_schema() AND table_name = ?")) {
             statement.setString(1, table);
             try (ResultSet rs = statement.executeQuery()) {

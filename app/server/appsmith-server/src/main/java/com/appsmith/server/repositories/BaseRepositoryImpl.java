@@ -239,7 +239,8 @@ public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable> i
         Assert.notNull(id, "The given id must not be null!");
 
         return postgresOperations
-                .write(em -> PostgresOperations.update(em, type(), List.of(idIs(id), notDeleted()), getForArchive(), true))
+                .write(em ->
+                        PostgresOperations.update(em, type(), List.of(idIs(id), notDeleted()), getForArchive(), true))
                 .map(count -> count > 0);
     }
 

@@ -33,7 +33,8 @@ public class EqualityTest {
     void testAffirmation() {
         // Test that all classes we suspect equality screw-up in, are accounted for in the TESTED_CLASSES set.
         // Fork: the stored domains are JPA entities (they were Mongo @Document classes).
-        final ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
+        final ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(Entity.class));
         final Set<Class<?>> classes = new HashSet<>();
         for (BeanDefinition candidate : scanner.findCandidateComponents("com.appsmith")) {

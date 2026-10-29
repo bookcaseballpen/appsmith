@@ -212,9 +212,10 @@ public final class SqlRenderer {
 
         return switch (op) {
             case EQUAL -> jsonish ? pathExists(path, "@ == " + jsonLiteral(value)) : col + " = " + param(value);
-            case NOT_EQUAL -> jsonish
-                    ? "NOT " + pathExists(path, "@ == " + jsonLiteral(value))
-                    : "(" + col + " IS NULL OR " + col + " <> " + param(value) + ")";
+            case NOT_EQUAL ->
+                jsonish
+                        ? "NOT " + pathExists(path, "@ == " + jsonLiteral(value))
+                        : "(" + col + " IS NULL OR " + col + " <> " + param(value) + ")";
             case EQ_IGNORE_CASE -> "lower(" + (jsonish ? nestedText(path) : col) + ") = lower(" + param(value) + ")";
             case SEARCH_IGNORE_CASE -> {
                 final String escaped = ((String) value).replaceAll("[\\\\_%]", "\\\\$0");
@@ -243,20 +244,23 @@ public final class SqlRenderer {
             }
             case EXISTS -> path.nested().isEmpty() ? col + " IS NOT NULL" : pathExists(path, null);
             case NOT_EXISTS -> path.nested().isEmpty() ? col + " IS NULL" : "NOT " + pathExists(path, null);
-            case IS_NULL -> path.nested().isEmpty()
-                    ? col + " IS NULL"
-                    : "(" + nestedValue(path) + " IS NULL OR " + nestedValue(path) + " = 'null'::jsonb)";
-            case IS_NOT_NULL -> path.nested().isEmpty()
-                    ? col + " IS NOT NULL"
-                    : "(" + nestedValue(path) + " IS NOT NULL AND " + nestedValue(path) + " <> 'null'::jsonb)";
+            case IS_NULL ->
+                path.nested().isEmpty()
+                        ? col + " IS NULL"
+                        : "(" + nestedValue(path) + " IS NULL OR " + nestedValue(path) + " = 'null'::jsonb)";
+            case IS_NOT_NULL ->
+                path.nested().isEmpty()
+                        ? col + " IS NOT NULL"
+                        : "(" + nestedValue(path) + " IS NOT NULL AND " + nestedValue(path) + " <> 'null'::jsonb)";
             case IS_TRUE -> jsonish ? pathExists(path, "@ == true") : col + " IS TRUE";
             case IS_FALSE -> jsonish ? pathExists(path, "@ == false") : col + " IS FALSE";
             case GREATER_THAN -> scalarCompare(path, ">", value);
             case GREATER_THAN_OR_EQUAL -> scalarCompare(path, ">=", value);
             case LESS_THAN -> scalarCompare(path, "<", value);
             case LESS_THAN_OR_EQUAL -> scalarCompare(path, "<=", value);
-            case SIZE_LESS_THAN -> "(CASE WHEN jsonb_typeof(" + nestedValue(path) + ") = 'array' THEN jsonb_array_length("
-                    + nestedValue(path) + ") ELSE 0 END) < " + param(value);
+            case SIZE_LESS_THAN ->
+                "(CASE WHEN jsonb_typeof(" + nestedValue(path) + ") = 'array' THEN jsonb_array_length("
+                        + nestedValue(path) + ") ELSE 0 END) < " + param(value);
         };
     }
 
@@ -317,22 +321,24 @@ public final class SqlRenderer {
                 }
                 case SET_FROM_FIELD -> resolve((String) value).column();
                 case INC -> "COALESCE(" + current + ", 0) + 1";
-                case PUSH, ADD_TO_SET, PULL -> arrayChange(
-                        "COALESCE(" + current + ", '[]'::jsonb)", operation.kind(), value);
+                case PUSH, ADD_TO_SET, PULL ->
+                    arrayChange("COALESCE(" + current + ", '[]'::jsonb)", operation.kind(), value);
             };
         }
 
         final String newValue =
                 switch (operation.kind()) {
                     case SET -> jsonParam(value);
-                    case INC -> "to_jsonb(COALESCE((" + current + " #>> " + textArray(path.nested())
-                            + ")::numeric, 0) + 1)";
-                    case PUSH, ADD_TO_SET, PULL -> arrayChange(
-                            "COALESCE(" + current + " #> " + textArray(path.nested()) + ", '[]'::jsonb)",
-                            operation.kind(),
-                            value);
-                    case SET_FROM_FIELD -> throw new UnsupportedOperationException(
-                            "setToValueFromField on a nested key: " + operation.key());
+                    case INC ->
+                        "to_jsonb(COALESCE((" + current + " #>> " + textArray(path.nested()) + ")::numeric, 0) + 1)";
+                    case PUSH, ADD_TO_SET, PULL ->
+                        arrayChange(
+                                "COALESCE(" + current + " #> " + textArray(path.nested()) + ", '[]'::jsonb)",
+                                operation.kind(),
+                                value);
+                    case SET_FROM_FIELD ->
+                        throw new UnsupportedOperationException(
+                                "setToValueFromField on a nested key: " + operation.key());
                 };
         return setDeep(current, path.nested(), newValue);
     }
@@ -342,8 +348,8 @@ public final class SqlRenderer {
             case PUSH -> "(" + array + " || jsonb_build_array(" + jsonParam(value) + "))";
             case ADD_TO_SET -> {
                 final String element = jsonParam(value);
-                yield "(CASE WHEN " + array + " @> jsonb_build_array(" + element + ") THEN " + array + " ELSE "
-                        + array + " || jsonb_build_array(" + element + ") END)";
+                yield "(CASE WHEN " + array + " @> jsonb_build_array(" + element + ") THEN " + array + " ELSE " + array
+                        + " || jsonb_build_array(" + element + ") END)";
             }
             case PULL -> {
                 // Like Mongo's $pull: an object value removes the elements that contain all its non-null fields.

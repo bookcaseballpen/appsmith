@@ -3,8 +3,8 @@ package com.appsmith.server.repositories.ce;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.domains.User;
-import com.appsmith.server.repositories.AppsmithRepository;
 import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
+import com.appsmith.server.repositories.AppsmithRepository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

@@ -83,7 +83,8 @@ public class SuperUserSync implements ApplicationRunner {
                 .doOnNext(userIds -> log.info("Instance administrators set from APPSMITH_ADMIN_EMAILS: {}", userIds));
     }
 
-    private Mono<Set<String>> assign(PermissionGroup instanceAdminRole, Organization organization, Set<String> userIds) {
+    private Mono<Set<String>> assign(
+            PermissionGroup instanceAdminRole, Organization organization, Set<String> userIds) {
         final Set<String> changedUserIds =
                 CollectionUtils.findSymmetricDiff(instanceAdminRole.getAssignedToUserIds(), userIds);
 

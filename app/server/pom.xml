@@ -245,6 +245,10 @@
                                 <include>.gitignore</include>
                                 <include>**/*.sql</include>
                             </includes>
+                            <!-- Flyway checksums applied migrations: reformatting one breaks every database that ran it -->
+                            <excludes>
+                                <exclude>**/db/migration/**/*.sql</exclude>
+                            </excludes>
                             <!-- define the steps to apply to those files -->
                             <trimTrailingWhitespace/>
                             <endWithNewline/>

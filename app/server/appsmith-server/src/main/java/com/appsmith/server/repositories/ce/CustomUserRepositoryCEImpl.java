@@ -57,12 +57,14 @@ public class CustomUserRepositoryCEImpl extends BaseAppsmithRepositoryImpl<User>
      */
     @Override
     public Mono<Boolean> claimSuperUserCreationSlot() {
-        return getPostgresOperations().write(em -> em.createNativeQuery("INSERT INTO " + SUPER_USER_SETUP_TABLE
-                                + " (id, status, claimed_at) VALUES (?1, 'CLAIMED', ?2) ON CONFLICT (id) DO NOTHING")
-                        .setParameter(1, SUPER_USER_SETUP_LOCK_ID)
-                        .setParameter(2, Instant.now().toString())
-                        .executeUpdate()
-                == 1);
+        return getPostgresOperations()
+                .write(em -> em.createNativeQuery(
+                                        "INSERT INTO " + SUPER_USER_SETUP_TABLE
+                                                + " (id, status, claimed_at) VALUES (?1, 'CLAIMED', ?2) ON CONFLICT (id) DO NOTHING")
+                                .setParameter(1, SUPER_USER_SETUP_LOCK_ID)
+                                .setParameter(2, Instant.now().toString())
+                                .executeUpdate()
+                        == 1);
     }
 
     @Override
