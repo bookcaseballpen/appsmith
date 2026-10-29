@@ -67,6 +67,7 @@ import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ConsolidatedAPIService;
 import com.appsmith.server.services.LayoutActionService;
 import com.appsmith.server.services.LayoutCollectionService;
@@ -2844,8 +2845,8 @@ public class ApplicationServiceCETest {
 
         Mono<Application> applicationMono = applicationPageService
                 .createApplication(testApplication, workspaceId)
-                .flatMap(application -> applicationPageService
-                        .publish(application.getId(), true)
+                .flatMap(application -> PublishApproval.asApprovedRelease(
+                                applicationPageService.publish(application.getId(), true))
                         .then(applicationService.findById(application.getId(), MANAGE_APPLICATIONS)))
                 .cache();
 
@@ -2981,10 +2982,11 @@ public class ApplicationServiceCETest {
                                         .getActions()
                                         .get(0)
                                         .getId();
-                                return applicationPageService
-                                        .publish(testApplication.getId(), true)
+                                return PublishApproval.asApprovedRelease(
+                                                applicationPageService.publish(testApplication.getId(), true))
                                         .then(applicationPageService.deleteUnpublishedPage(page.getId()))
-                                        .then(applicationPageService.publish(testApplication.getId(), true))
+                                        .then(PublishApproval.asApprovedRelease(
+                                                applicationPageService.publish(testApplication.getId(), true)))
                                         .then(Mono.zip(
                                                 (Mono<NewAction>)
                                                         this.getArchivedResource(savedAction.getId(), NewAction.class),
@@ -3031,7 +3033,8 @@ public class ApplicationServiceCETest {
 
         Mono<Application> applicationMono = applicationService
                 .update(gitConnectedApp.getId(), gitConnectedApp)
-                .flatMap(updatedApp -> applicationPageService.publish(updatedApp.getId(), true))
+                .flatMap(updatedApp ->
+                        PublishApproval.asApprovedRelease(applicationPageService.publish(updatedApp.getId(), true)))
                 .flatMap(application -> applicationService.findByBranchNameAndBaseApplicationId(
                         gitData.getRefName(), gitData.getDefaultApplicationId(), MANAGE_APPLICATIONS))
                 .cache();
@@ -3096,7 +3099,8 @@ public class ApplicationServiceCETest {
         page.setApplicationId(testApplication.getId());
         page = applicationPageService.createPage(page).block();
 
-        Mono<Application> applicationMono = applicationPageService.publish(testApplication.getId(), true);
+        Mono<Application> applicationMono =
+                PublishApproval.asApprovedRelease(applicationPageService.publish(testApplication.getId(), true));
 
         Mono<List<NewPage>> applicationPagesMono = applicationMono
                 .map(application -> application.getPages())
@@ -3150,7 +3154,8 @@ public class ApplicationServiceCETest {
                     page.setLayouts(layouts);
                     return applicationPageService
                             .createPage(page)
-                            .flatMap(page1 -> applicationPageService.publish(page1.getApplicationId(), true))
+                            .flatMap(page1 -> PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(page1.getApplicationId(), true)))
                             .then(applicationService.findById(application.getId(), MANAGE_APPLICATIONS));
                 })
                 .cache();
@@ -3195,7 +3200,8 @@ public class ApplicationServiceCETest {
 
         Mono<Application> applicationMono = applicationPageService
                 .createPage(page)
-                .flatMap(pageDTO -> applicationPageService.publish(pageDTO.getApplicationId(), true))
+                .flatMap(pageDTO -> PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(pageDTO.getApplicationId(), true)))
                 .cache();
 
         PageDTO newPage = applicationMono
@@ -3242,7 +3248,8 @@ public class ApplicationServiceCETest {
                     page.setLayouts(layouts);
                     return applicationPageService
                             .createPage(page)
-                            .flatMap(page1 -> applicationPageService.publish(page1.getApplicationId(), true))
+                            .flatMap(page1 -> PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(page1.getApplicationId(), true)))
                             .then(applicationService.findById(application.getId(), MANAGE_APPLICATIONS));
                 })
                 .cache();
@@ -3320,7 +3327,8 @@ public class ApplicationServiceCETest {
                     page.setLayouts(layouts);
                     return applicationPageService
                             .createPage(page)
-                            .flatMap(page1 -> applicationPageService.publish(page1.getApplicationId(), true))
+                            .flatMap(page1 -> PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(page1.getApplicationId(), true)))
                             .then(applicationService.findById(application.getId(), MANAGE_APPLICATIONS));
                 })
                 .cache();
@@ -4381,7 +4389,8 @@ public class ApplicationServiceCETest {
                 .collect(Collectors.toSet());
         gitAppPage.setPolicies(newPoliciesWithoutEdit);
         NewPage updatedGitAppPage = newPageRepository.save(gitAppPage).block();
-        StepVerifier.create(applicationPageService.publish(gitConnectedApp.getId(), true))
+        StepVerifier.create(PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(gitConnectedApp.getId(), true)))
                 .expectErrorMatches(throwable -> throwable instanceof AppsmithException
                         && throwable
                                 .getMessage()
@@ -4731,7 +4740,8 @@ public class ApplicationServiceCETest {
                                         .clonePage(page1.getId())
                                         .flatMap(clonedPage -> {
                                             basePageId2Ref.set(clonedPage.getId());
-                                            return applicationPageService.publish(page1.getApplicationId(), true);
+                                            return PublishApproval.asApprovedRelease(
+                                                    applicationPageService.publish(page1.getApplicationId(), true));
                                         });
                             })
                             .then(applicationService.findById(application.getId(), MANAGE_APPLICATIONS));
@@ -4807,7 +4817,8 @@ public class ApplicationServiceCETest {
                 .verifyComplete();
 
         // Step 13: Publish the application again
-        applicationPageService.publish(newPage.getApplicationId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(newPage.getApplicationId(), true))
+                .block();
 
         // Step 14: Verify that the cache entries for deleted pages are evicted
         cachedBaseAppId1 = cacheableRepositoryHelper

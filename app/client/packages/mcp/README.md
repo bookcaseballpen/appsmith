@@ -388,6 +388,25 @@ unaffected — the parameter is optional and ignored.
   review URL — the user reviews on the branch, merges via Appsmith's branch UI or a pull request on the remote,
   then deletes the `mcp/` branch.
 
+### Release approval (fork)
+
+The fork adds two always-on tools through the edition seam (`src/ee/extensions/{catalog,api,tools,routeContract}.ts`;
+the server side is `approvals/ApplicationApprovalController.java` and `filters/McpAllowlistExtensions.java`):
+
+- **`submit_for_approval`** (`applicationId`) — `POST /api/v1/approvals/applications/{applicationId}/submit`. Submits
+  the app's **current edit-mode version** as a frozen snapshot. The agent is told to call it only after the developer
+  has finished UAT and asked to submit. Any later change to the app (editor, import, MCP) cancels the request
+  automatically, and the app must be submitted again. A non-destructive, non-idempotent write: it publishes nothing.
+- **`get_approval_status`** (`applicationId`) — `GET /api/v1/approvals/applications/{applicationId}`. Read-only.
+
+Both return the server's approval state: `status` (`DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`), `version`,
+`submittedBy`/`submittedAt`, `reviewedBy`/`reviewedAt`, the reject `comment` and the `history` (`SUBMITTED`,
+`APPROVED`, `REJECTED`, `CANCELLED`). A 400, 403 or 404 comes back as `{ error, code, status, errorCode }` with
+guidance for the agent; like every core tool, the server's error body text itself is never forwarded.
+
+**Approving and rejecting are intentionally absent.** They are done by a human Approver in the Appsmith UI: there is
+no MCP tool for them, their routes are not in the MCP allowlist, and the server refuses them for MCP tokens.
+
 ## Adding an edition (EE) MCP tool
 
 Edition tools (EE: workflows) plug into a seam so the hourly CE→EE sync never conflicts. CE ships every

@@ -63,7 +63,8 @@ import { APPLICATIONS_URL } from "constants/routes";
 import { useNavigationMenuData } from "pages/Editor/EditorName/useNavigationMenuData";
 import useLibraryHeaderTitle from "ee/pages/AppIDE/layouts/components/Header/useLibraryHeaderTitle";
 import { AppsmithLink } from "pages/Editor/AppsmithLink";
-import DeployButton from "./DeployButton";
+// Fork: Deploy, or Submit for approval for Devs, plus the release status.
+import ReleaseControls from "ee/pages/AppIDE/layouts/components/Header/ReleaseControls";
 import { GitApplicationContextProvider } from "git-artifact-helpers/application/components";
 import ChevronMenu from "./ChevronMenu";
 import { ShowUpgradeMenuItem } from "ee/utils/licenseHelpers";
@@ -272,7 +273,7 @@ const Header = () => {
             showModal={showPublishCommunityTemplateModal}
           />
           <div className="flex items-center">
-            <DeployButton />
+            <ReleaseControls />
             <ChevronMenu deployLink={deployLink} />
           </div>
         </IDEHeader.Right>

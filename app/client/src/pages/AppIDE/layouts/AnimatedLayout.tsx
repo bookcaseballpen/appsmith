@@ -15,6 +15,7 @@ import MainPane from "./routers/MainPane";
 import RightPane from "./routers/RightPane";
 import { Areas } from "./constants";
 import { ProtectedCallout } from "../components/ProtectedCallout";
+import { EditorReadOnlyBanner } from "../components/EditorReadOnlyBanner";
 import { GlobalAISidePanel } from "ee/components/editorComponents/GlobalAISidePanel";
 
 function GitProtectedBranchCallout() {
@@ -42,6 +43,7 @@ function AnimatedLayout() {
   return (
     <>
       <GitProtectedBranchCallout />
+      <EditorReadOnlyBanner />
       <EditorWrapperContainer>
         <AnimatedGridLayout
           areas={areas}

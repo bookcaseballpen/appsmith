@@ -13,6 +13,7 @@ import {
 import type { DefaultRootState } from "react-redux";
 import { applicationArtifact } from "git-artifact-helpers/application";
 import { selectIsReviewOnlyUser } from "ee/utils/instanceRoles";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 
 export const selectGitModEnabled = createSelector(
   (state: DefaultRootState) => {
@@ -49,7 +50,11 @@ export const selectGitApplicationProtectedMode = createSelector(
   },
 );
 
-export const selectCombinedPreviewMode = createSelector(
+/**
+ * Fork: the modes in which the editor shows the canvas only, with no explorer, property pane or debugger. The IDE
+ * layout reads this one; everything else reads selectCombinedPreviewMode.
+ */
+export const selectCanvasOnlyMode = createSelector(
   // need to do this to avoid circular dependency
   (state: DefaultRootState) => state.ui.editor.isPreviewMode,
   selectGitApplicationProtectedMode,
@@ -57,6 +62,14 @@ export const selectCombinedPreviewMode = createSelector(
   selectIsReviewOnlyUser,
   (isPreviewMode, isProtectedMode, isReviewOnlyUser) =>
     isPreviewMode || isProtectedMode || isReviewOnlyUser,
+);
+
+export const selectCombinedPreviewMode = createSelector(
+  selectCanvasOnlyMode,
+  // Fork: in the read-only editor the canvas always runs as in preview (no drag, drop, resize, selection, widget
+  // names or property pane, and no layout saves), but the IDE keeps its query and JS panes.
+  selectIsEditorReadOnly,
+  (isCanvasOnlyMode, isEditorReadOnly) => isCanvasOnlyMode || isEditorReadOnly,
 );
 
 export const selectGitOpsModalOpen = createSelector(

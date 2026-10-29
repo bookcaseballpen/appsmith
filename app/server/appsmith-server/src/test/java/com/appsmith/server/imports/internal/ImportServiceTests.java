@@ -67,6 +67,7 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.ThemeRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.LayoutActionService;
 import com.appsmith.server.services.LayoutCollectionService;
@@ -1619,8 +1620,8 @@ public class ImportServiceTests {
                 .block();
 
         assert importedApplication != null;
-        Application publishedApplication = applicationPageService
-                .publishWithoutPermissionChecks(importedApplication.getId(), true)
+        Application publishedApplication = PublishApproval.asApprovedRelease(
+                        applicationPageService.publishWithoutPermissionChecks(importedApplication.getId(), true))
                 .block();
 
         Mono<List<NewPage>> pageList = Flux.fromIterable(publishedApplication.getPages().stream()
@@ -2268,7 +2269,8 @@ public class ImportServiceTests {
                                 deletedActionName[0] = actionDTO.getName();
                                 return newActionService.deleteUnpublishedAction(actionDTO.getId());
                             })
-                            .then(applicationPageService.publish(application.getId(), true));
+                            .then(PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(application.getId(), true)));
                 })
                 .cache();
 
@@ -2354,7 +2356,8 @@ public class ImportServiceTests {
                                 return actionCollectionService.deleteUnpublishedActionCollection(
                                         actionCollection.getId());
                             })
-                            .then(applicationPageService.publish(application.getId(), true));
+                            .then(PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(application.getId(), true)));
                 })
                 .cache();
 
@@ -3170,7 +3173,8 @@ public class ImportServiceTests {
                 .reorderPage(testApplication.getId(), testPage2.getId(), 1)
                 .block();
         // Deploy the current application
-        applicationPageService.publish(testApplication.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApplication.getId(), true))
+                .block();
 
         Mono<ApplicationJson> applicationJsonMono = exportService
                 .exportByArtifactIdAndBranchName(testApplication.getId(), "", APPLICATION)
@@ -3206,8 +3210,8 @@ public class ImportServiceTests {
                 .map(importableArtifact -> (Application) importableArtifact)
                 .block();
 
-        application = applicationPageService
-                .publishWithoutPermissionChecks(application.getId(), true)
+        application = PublishApproval.asApprovedRelease(
+                        applicationPageService.publishWithoutPermissionChecks(application.getId(), true))
                 .block();
 
         // Get the unpublished pages and verify the order
@@ -3394,7 +3398,8 @@ public class ImportServiceTests {
         testPage2 = applicationPageService.createPage(testPage2).block();
 
         // Deploy the current application so that edit and view mode will have different page order
-        applicationPageService.publish(testApplication.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApplication.getId(), true))
+                .block();
 
         // Set order for the newly created pages
         applicationPageService
@@ -3436,8 +3441,8 @@ public class ImportServiceTests {
                 .map(importableArtifact -> (Application) importableArtifact)
                 .block();
 
-        application = applicationPageService
-                .publishWithoutPermissionChecks(application.getId(), true)
+        application = PublishApproval.asApprovedRelease(
+                        applicationPageService.publishWithoutPermissionChecks(application.getId(), true))
                 .block();
 
         // Get the unpublished pages and verify the order
@@ -3849,8 +3854,8 @@ public class ImportServiceTests {
         gitData.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData);
 
-        Application application = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application application = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application1 -> {
                     application1.getGitApplicationMetadata().setDefaultApplicationId(application1.getId());
                     return applicationService.save(application1);
@@ -3940,8 +3945,8 @@ public class ImportServiceTests {
         gitData.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData);
 
-        Application application = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application application = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application1 -> {
                     application1.getGitApplicationMetadata().setDefaultApplicationId(application1.getId());
                     return applicationService.save(application1);
@@ -3961,8 +3966,8 @@ public class ImportServiceTests {
         gitData1.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData1);
 
-        Application branchApp = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application branchApp = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application2 -> {
                     application2.getGitApplicationMetadata().setDefaultApplicationId(application.getId());
                     return applicationService.save(application2);
@@ -4050,8 +4055,8 @@ public class ImportServiceTests {
         gitData.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData);
 
-        Application application = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application application = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application1 -> {
                     application1.getGitApplicationMetadata().setDefaultApplicationId(application1.getId());
                     return applicationService.save(application1);
@@ -4072,8 +4077,8 @@ public class ImportServiceTests {
         gitData1.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData1);
 
-        Application branchApp = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application branchApp = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application2 -> {
                     application2.getGitApplicationMetadata().setDefaultApplicationId(application.getId());
                     return applicationService.save(application2);
@@ -4161,8 +4166,8 @@ public class ImportServiceTests {
         gitData.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData);
 
-        Application application = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application application = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application1 -> {
                     application1.getGitApplicationMetadata().setDefaultApplicationId(application1.getId());
                     return applicationService.save(application1);
@@ -4183,8 +4188,8 @@ public class ImportServiceTests {
         gitData1.setDefaultBranchName("master");
         testApplication.setGitApplicationMetadata(gitData1);
 
-        Application branchApp = applicationPageService
-                .createApplication(testApplication, workspaceId)
+        Application branchApp = PublishApproval.asApprovedRelease(
+                        applicationPageService.createApplication(testApplication, workspaceId))
                 .flatMap(application2 -> {
                     application2.getGitApplicationMetadata().setDefaultApplicationId(application.getId());
                     return applicationService.save(application2);
@@ -4845,8 +4850,9 @@ public class ImportServiceTests {
         CustomJSLib jsLib = new CustomJSLib("TestLib", Set.of("accessor1"), "url", "docsUrl", "1.0", "defs_string");
         Mono<Boolean> addJSLibMonoCached = customJSLibService
                 .addJSLibsToContext(testAppId, CreatorContextType.APPLICATION, Set.of(jsLib), false)
-                .flatMap(isJSLibAdded ->
-                        Mono.zip(Mono.just(isJSLibAdded), applicationPageService.publish(testAppId, true)))
+                .flatMap(isJSLibAdded -> Mono.zip(
+                        Mono.just(isJSLibAdded),
+                        PublishApproval.asApprovedRelease(applicationPageService.publish(testAppId, true))))
                 .map(tuple2 -> {
                     Boolean isJSLibAdded = tuple2.getT1();
                     Application application = tuple2.getT2();

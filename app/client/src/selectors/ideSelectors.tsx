@@ -1,12 +1,17 @@
 import { createSelector } from "reselect";
 import type { DefaultRootState } from "react-redux";
 import { getPageActions } from "ee/selectors/entitiesSelector";
-import { EditorEntityTab } from "IDE/Interfaces/EditorTypes";
+import { EditorEntityTab, EditorViewMode } from "IDE/Interfaces/EditorTypes";
 import { getCurrentBasePageId } from "./editorSelectors";
 import type { ParentEntityIDETabs } from "../reducers/uiReducers/ideReducer";
 import { get } from "lodash";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 
-export const getIDEViewMode = (state: DefaultRootState) => state.ui.ide.view;
+// Fork: the read-only editor always shows queries and JS side by side with the running canvas.
+export const getIDEViewMode = (state: DefaultRootState) =>
+  selectIsEditorReadOnly(state)
+    ? EditorViewMode.SplitScreen
+    : state.ui.ide.view;
 
 export const getActionsCount = (pageId: string) =>
   createSelector(getPageActions(pageId), (actions) => {

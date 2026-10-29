@@ -45,6 +45,7 @@ import {
   selectGitApplicationProtectedMode,
 } from "selectors/gitModSelectors";
 import { useHotkeys } from "@blueprintjs/core";
+import { selectIsEditorReadOnly } from "ee/utils/editorReadOnly";
 import { useHotKeys as useGitHotKeys } from "git";
 import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 import { getSelectedWidgets, getLastSelectedWidget } from "selectors/ui";
@@ -52,6 +53,18 @@ import {
   previewModeSelector,
   showTabOrderOverlaySelector,
 } from "selectors/editorSelectors";
+
+const CANVAS_EDITING_HOTKEY_LABELS = new Set([
+  "Create new",
+  "Copy widget",
+  "Paste Widget",
+  "Delete widget",
+  "Cut Widget",
+  "Select all Widget",
+  "Undo change in canvas",
+  "Redo change in canvas",
+  "Cut Widgets for grouping",
+]);
 
 interface Props {
   children: React.ReactNode;
@@ -73,6 +86,7 @@ function GlobalHotKeys(props: Props) {
   const isPreviewMode = useSelector(previewModeSelector);
   const showTabOrderOverlay = useSelector(showTabOrderOverlaySelector);
   const isProtectedMode = useSelector(selectGitApplicationProtectedMode);
+  const isEditorReadOnly = useSelector(selectIsEditorReadOnly);
 
   const copySelectedWidget = useCallback(
     () => dispatch(copyWidget(true)),
@@ -453,7 +467,18 @@ function GlobalHotKeys(props: Props) {
     stopPropagationIfWidgetSelected,
   ]);
 
-  useHotkeys(hotkeys, { showDialogKeyCombo: "?" });
+  // Fork: the read-only editor drops the shortcuts that change the canvas (see ee/utils/editorReadOnly).
+  const allowedHotkeys = useMemo(
+    () =>
+      isEditorReadOnly
+        ? hotkeys.filter(
+            (hotkey) => !CANVAS_EDITING_HOTKEY_LABELS.has(hotkey.label),
+          )
+        : hotkeys,
+    [hotkeys, isEditorReadOnly],
+  );
+
+  useHotkeys(allowedHotkeys, { showDialogKeyCombo: "?" });
 
   return <div>{children}</div>;
 }

@@ -83,24 +83,29 @@ The roles work on a **fresh install only**. Nothing is migrated:
 
 ### Publishing
 
-- The Deploy button needs the publish permission: Approver or Admin.
+- Every publish goes through the release approval flow (see "Release approvals"): nobody deploys directly, Admins
+  and Approvers included. `POST /api/v1/applications/publish/{id}` is refused for every role (403); only approve
+  publishes, by calling the publish service inside `PublishApproval.asApprovedRelease` (a Reactor context marker no
+  request can set). The editor has no Deploy button.
 - The server also publishes on its own: after creating, duplicating or forking an app, after a git commit, and after
-  a git pull, merge, discard or branch checkout. For a Dev:
+  a git pull, merge, discard or branch checkout. For every signed-in role:
   - on an app that is not live yet, the publish goes ahead (Users cannot see that app) but never makes it live;
-  - on a live app, the publish is skipped: the change stays in edit mode until an Approver publishes it.
-  A Dev's git commit therefore still succeeds; it just does not deploy.
+  - on a live app, the publish is skipped: the change stays in edit mode until a release of it is approved.
+  A git commit therefore still succeeds; it just does not deploy. Publishes without a signed-in user (the server's
+  own startup work) are not limited; the fork's startup and seed code does not call the publish endpoint.
 - Forking an app (CE "fork to workspace") also needs the datasource create permission on the target workspace,
   because it may copy datasources, so only an Admin forks. Duplicating an app within the workspace is open to Devs.
 - An app is **live** once an Approver or Admin has published it manually (`lastDeployedAt` is set). Users see live
   apps only, in the app list and through every API that reads an application.
-- Importing a file over a live app, or restoring a snapshot of one, needs the publish permission. Importing a new app
-  is open to Devs; it is not live until it is published.
+- Importing a file over a live app, or restoring a snapshot of one, needs the publish permission, and takes the app
+  offline (`PublishApproval.markNotLive`), because the file's view mode was not approved; it is live again once a
+  release is approved. Importing a new app is open to Devs; it is not live until a release is approved.
 
 ### Approver read-only filter
 
 `ApproverReadOnlyWebFilter` refuses every non-GET `/api/**` call from an Approver except:
 
-- `POST /api/v1/applications/publish/{id}`;
+- submit, approve and reject a release (`POST /api/v1/approvals/applications/{id}/submit|approve|reject`);
 - `POST /api/v1/actions/execute`. This is on purpose: an Approver runs the unpublished app's queries in preview to
   test it before publishing, the same way Users run the queries of published apps. It runs saved queries against
   saved datasources and does not change the app;
@@ -109,6 +114,125 @@ The roles work on a **fresh install only**. Nothing is migrated:
 It also refuses the GET endpoints that change state: git pull, git status, git fetch, branch listing with
 `pruneRefs=true`, git commit history (it checks out a branch), deploy key generation, and the datasource OAuth
 callback. It fails closed when the caller's role cannot be resolved.
+
+## Release approvals
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/approvals/` and the domain
+`domains/ApplicationApproval.java` (collection `applicationApproval`, one document per application or git branch, its
+id is the application id). Client: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/approvals.ts`,
+`src/ee/components/approvals/`, `src/ee/pages/AppIDE/layouts/components/Header/ReleaseControls.tsx` and
+`src/ee/pages/Applications/PendingApprovals.tsx`. Notifications are in-app only (no email).
+
+### The flow
+
+| Status | Means |
+| --- | --- |
+| Draft | Nothing submitted, a request was cancelled, or the approved version has changed since. |
+| Submitted ("Waiting for approval") | A Dev, Admin or Approver submitted the current edit-mode version. |
+| Approving ("Being published") | An Approver or Admin approved it and the publish is running (the claim, see below). |
+| Approved | An Approver or Admin approved it; it is published and live. |
+| Rejected | An Approver or Admin rejected it with a comment; the Dev sees the comment until the next submit. |
+
+- **Editor header (every role that opens the editor):** "Submit for approval" and a status chip where upstream has
+  Deploy. Clicking the chip shows the reject comment, why a request was cancelled, and the last history entries.
+- **Approver / Admin:** the editor header also shows Approve while a release is waiting. The home page shows "Waiting
+  for approval" with a count badge, and per app Preview (the editor, which opens read-only for Approvers), Approve and
+  Reject (a comment is required). An Admin or Approver may approve their own submit.
+- The app keeps a history of the last 20 events (submitted, approved, rejected, cancelled): who, when and the comment.
+
+| Endpoint | Who |
+| --- | --- |
+| `GET /api/v1/approvals/applications/{applicationId}` | Anyone who can open the app in the editor |
+| `POST /api/v1/approvals/applications/{applicationId}/submit` | Dev, Admin, Approver |
+| `POST /api/v1/approvals/applications/{applicationId}/approve` | Approver, Admin; never an MCP token |
+| `POST /api/v1/approvals/applications/{applicationId}/reject` (body `{"comment": "..."}`, required) | Approver, Admin; never an MCP token |
+| `GET /api/v1/approvals/pending` | Approver, Admin |
+
+`ApproverReadOnlyWebFilter` lets Approvers call submit, approve and reject.
+
+### The frozen version and automatic cancellation
+
+Submitting stores a SHA-256 fingerprint (`ApprovalFingerprint`) of everything a publish copies from edit mode to view
+mode: the page list, every page with its layouts and DSL, every query and JS object, the app layout and settings, the
+custom JS libraries and the theme's content. Timestamps, permissions and "saved by" fields are left out and entries
+are sorted, so the same content always gives the same value. The first 12 characters are shown as the "version".
+
+- **Cancellation:** every read of the state (the editor chip, which refreshes every 15 s while a request is open, the
+  approvers' list, approve and reject) compares the stored fingerprint with the app as it is now. On a mismatch a
+  submitted request is cancelled (history: "The app changed after it was submitted") and the app is a draft again; an
+  approved app becomes a draft. Because it compares stored content rather than hooking write paths, it catches every
+  kind of change: the editor, import, git pull, AI and MCP.
+- So `GET` status and `GET /pending` may write: they cancel a stale request. Those writes are guarded by the same
+  `revision` check as every other state change, so a read that loses the race leaves the winner's state in place.
+- **Approve publishes exactly the submitted version:** it refuses when the edit-mode fingerprint no longer matches,
+  then claims the request (Submitted to Approving, bumping the revision), then publishes through the normal publish
+  path (`ApplicationPageService.publish(id, true)` inside `PublishApproval.asApprovedRelease`, so `lastDeployedAt` is
+  set and Users see the app), then checks that the view-mode copy has the submitted fingerprint. If a change landed
+  while the publish ran, the app is taken offline (`PublishApproval.markNotLive`), the request is cancelled and
+  approve answers an error, so Users never see an unapproved version. If the publish fails, the request goes back to
+  Submitted and can be approved again.
+- While the claim is held, a reject, a resubmit or a second approve fails cleanly ("not waiting for approval" or the
+  revision check), so the stored state always matches what is live. A claim older than 10 minutes (a server that
+  stopped mid-publish) goes back to Submitted on the next read.
+- State changes are compare-and-set on a `revision` field, so two reviewers (or a review and a resubmit) cannot both
+  win.
+- A DSL migration on page load after a server upgrade changes the stored DSL, so it also cancels an open request (the
+  Dev submits again).
+
+### MCP
+
+`submit_for_approval` and `get_approval_status` are MCP tools (`app/client/packages/mcp/src/ee/extensions/`), so an AI
+can submit once the Dev has finished UAT. Approve and reject are not MCP tools, the MCP allowlist
+(`filters/McpAllowlistExtensions.java`) only lets an MCP token reach the status and submit routes, and the service
+refuses approve and reject for MCP tokens as well.
+
+## Read-only editor
+
+Apps are designed and built in the separate projects repo; the AI exports and imports app JSON through the API and
+MCP. The editor is for running, testing and debugging only, for every role, Admin included. Switch:
+`APPSMITH_EDITOR_READ_ONLY` (default `true`; set `false` only in an emergency, then restart the server).
+
+Server: `EditorReadOnlyWebFilter` (`app/server/appsmith-server/src/main/java/com/appsmith/server/editorlock/`) refuses
+the editor's app-changing endpoints with a 403 and "This app is edited through the projects repo (MCP/import); the
+editor is read-only.":
+
+- every POST, PUT, PATCH and DELETE under `/api/v1/actions` (except `POST /api/v1/actions/execute`),
+  `/api/v1/collections`, `/api/v1/layouts`, `/api/v1/pages`, `/api/v1/themes`, `/api/v1/libraries` and
+  `POST /api/v1/import` (curl import): queries, APIs, JS objects, widgets and layouts, pages, themes, JS libraries;
+- app settings: `PUT /api/v1/applications/{id}`, page order and default page (`PUT .../{id}/page/**`), the app theme
+  (`PATCH .../{id}/themes/{themeId}`), navigation logo, static URL, building blocks
+  (`POST /api/v1/applications/import/partial/block`) and template merge.
+
+Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
+import), export, publish, git, datasources, app create, clone, fork, delete and snapshots, and user and admin
+settings. The Approver filter still applies on top.
+
+How MCP is told apart: the MCP service (`app/client/packages/mcp`) calls the server with `Authorization: Bearer mcp_...`
+and the `X-Appsmith-Mcp-Internal` header carrying `APPSMITH_MCP_INTERNAL_SECRET`. Only then does
+`McpTokenAuthenticationManager` authenticate the request, and it adds the `MCP_TOKEN` authority. The filter lets a
+request through when its authentication has that authority. A browser session never has it, and a raw `mcp_` token
+without the internal secret is not accepted at all, so no browser header can unlock the editor. MCP requests stay
+confined to their allowlist (`McpAllowlistWebFilter`).
+
+The server sends the switch to the client as the `fork_editor_read_only` feature flag (`FeatureFlagServiceImpl`,
+added after the cached and remote flags). Client switch: `src/ee/utils/editorReadOnly.ts`
+(`selectIsEditorReadOnly`, and a copy for the plain permission helpers kept in step by
+`src/ee/sagas/editorReadOnlySagas.ts`). When it is on:
+
+- the canvas runs as in preview (`selectCombinedPreviewMode`): no drag, drop, resize, selection, widget names or
+  layout saves; the canvas-editing shortcuts (paste, delete, cut, group, undo, redo, select all) are off;
+- the property pane is hidden (not read-only: the canvas has no selection to show one for);
+- the UI tab and the widget explorer are hidden (`SegmentSwitcher`, `UISegmentLeftPane`); the queries and JS panes
+  always open in split screen beside the running canvas (`getIDEViewMode`), and the debugger stays usable
+  (`showDebuggerFlag` reads `selectCanvasOnlyMode`, which still covers preview, protected branches and Approvers);
+- `ee/utils/BusinessFeatures/permissionPageHelpers.tsx` denies creating, changing and deleting pages, queries and JS
+  objects, so upstream's permission UI hides "new page", "new query", "new JS" and the datasource "new query" entry
+  points and makes the API, GraphQL and JS editors read-only; the DB query form (`UQIEditor/FormRender.tsx`) is
+  disabled; Run buttons keep working;
+- a banner says "Read-only: edit this app through the projects repo (MCP)." (`EditorReadOnlyBanner`).
+
+The upstream integration tests run with `appsmith.editor.read-only=false` (`application-test.properties`), because
+they change apps over HTTP as session users; `EditorReadOnlyWebFilterTest` and `EditorReadOnlyHttpTest` cover it on.
 
 ## Cherry-picking upstream fixes
 
@@ -142,6 +266,7 @@ callback. It fails closed when the caller's role cannot be resolved.
 |---|---|---|
 | `APPSMITH_CLOUD_SERVICES_ENABLED` | `false` | Kill switch for cs.appsmith.com. When false, `CloudServicesConfig` returns empty base URLs and every consumer skips its call (see below). Set `true` only to restore upstream behaviour. |
 | `APPSMITH_DISABLE_TELEMETRY` | `true` | Kept for compatibility; telemetry code is removed regardless. `docker.env.sh` now writes `true`. |
+| `APPSMITH_EDITOR_READ_ONLY` | `true` | The read-only editor (see above): the server refuses the editor's app changes unless they come through MCP or import, and the client hides the editing UI. `false` turns both off. |
 | `APPSMITH_AI_ENABLED` | `false` | Switch for the built-in AI (see "Built-in AI switch" below). MCP is not affected. Read at start-up: restart the server after changing it. |
 | `APPSMITH_GIT_ENABLED` | `false` | Switch for Appsmith's built-in Git (see "Hidden features" below). Read at start-up: restart the server after changing it. |
 
@@ -343,7 +468,9 @@ To change a flag, edit `ForkFeatureFlagDefaults` and this table together.
 
 `fork_builtin_ai_enabled` is not in `ForkFeatureFlagDefaults`: its value is `APPSMITH_AI_ENABLED`, added by
 `FeatureFlagServiceImpl` (see "Built-in AI switch"). The same goes for `fork_builtin_git_enabled`
-(`APPSMITH_GIT_ENABLED`, see "Hidden features"); the Git flags above only matter when it is on.
+(`APPSMITH_GIT_ENABLED`, see "Hidden features"); the Git flags above only matter when it is on. And for
+`fork_editor_read_only`: `FeatureFlagServiceImpl` sets it from `APPSMITH_EDITOR_READ_ONLY` on every request, whatever
+the cache or the cloud says (see "Read-only editor").
 
 ## What the fork turns off, removes or stubs
 
@@ -668,6 +795,31 @@ Server plugins (`app/server/appsmith-plugins/`):
   `services/DatasourceStorageServiceTest.java`, `services/McpTokenServiceImplTest.java`,
   `services/UserWorkspaceServiceTest.java`, `services/WorkspaceServiceTest.java`
 
+### Read-only editor files
+
+- New, server: `editorlock/EditorReadOnlySetting.java`, `editorlock/EditorReadOnlyWebFilter.java` and the tests
+  `editorlock/EditorReadOnlyWebFilterTest`, `editorlock/EditorReadOnlyHttpTest`.
+- New, client: `src/ee/utils/editorReadOnly.ts` (and `.test.ts`), `src/ee/sagas/editorReadOnlySagas.ts`,
+  `src/pages/AppIDE/components/EditorReadOnlyBanner/` (and test),
+  `src/pages/AppIDE/layouts/components/SegmentSwitcher/SegmentSwitcher.test.tsx`.
+- Edited, server: `services/FeatureFlagServiceImpl.java` (and `FeatureFlagServiceImplTest`),
+  `src/main/resources/application-ce.properties`, `src/test/resources/application-test.properties`.
+- Edited, client: `src/ce/entities/FeatureFlag.ts`, `src/ee/sagas/index.tsx`,
+  `src/ee/utils/BusinessFeatures/permissionPageHelpers.tsx` (and `.test.ts`), `src/selectors/gitModSelectors.ts`,
+  `src/selectors/debuggerSelectors.tsx`, `src/selectors/ideSelectors.tsx`,
+  `src/pages/AppIDE/layouts/hooks/useEditorStateLeftPaneWidth.ts` and `useGridLayoutTemplate.ts`,
+  `src/pages/AppIDE/layouts/AnimatedLayout.tsx` and `StaticLayout.tsx`,
+  `src/pages/AppIDE/layouts/components/SegmentSwitcher/SegmentSwitcher.tsx`,
+  `src/pages/AppIDE/layouts/components/EditorTabs/ScreenModeToggle.tsx`,
+  `src/pages/AppIDE/layouts/routers/UISegmentLeftPane/UISegmentLeftPane.tsx`,
+  `src/pages/Editor/commons/EditorWrapperContainer.tsx`, `src/pages/Editor/GlobalHotKeys/GlobalHotKeys.tsx`,
+  `src/PluginActionEditor/components/PluginActionForm/components/UQIEditor/FormRender.tsx`,
+  `src/ee/sagas/ApiCallerSagas.ts` (and `.test.ts`: when read-only, the JS-object and action syncs the
+  client sends on load stay in the client instead of hitting the server guard; until the feature flags have
+  loaded they wait for them, so an early sync is never sent),
+  `CommonEditorForm/InfoFields.tsx` and `components/EmbeddedDatasourcePathField.tsx` (the API URL field
+  follows the action's edit permission and hides "Save URL" when disabled)
+
 ### Built-in AI switch
 
 - New: server `configurations/BuiltInAiConfig.java`, tests `configurations/BuiltInAiConfigTest`,
@@ -682,6 +834,26 @@ Server plugins (`app/server/appsmith-plugins/`):
   `src/ce/sagas/AIAssistantSagas.ts` (and `.test.ts`), `src/ce/pages/AdminSettings/config/index.ts`,
   `src/pages/Editor/IntegrationEditor/AIPlugins.tsx` (and `__tests__/aiPlugins.test.tsx`),
   `src/pages/Editor/CustomWidgetBuilder/Editor/index.tsx`.
+
+### Release approvals
+
+- New server files: `approvals/` (controller, service, fingerprint, DTO, status, event),
+  `domains/ApplicationApproval.java`, `repositories/ApplicationApprovalRepository.java`,
+  `CustomApplicationApprovalRepository.java`, `CustomApplicationApprovalRepositoryImpl.java`, and the test
+  `approvals/ApplicationApprovalServiceTest`.
+- Edited server files: `constants/Url.java` (`APPROVAL_URL`), `filters/McpAllowlistExtensions.java` (the MCP rules;
+  an empty subclass upstream), `roles/ApproverReadOnlyWebFilter.java`, `roles/PublishApproval.java`
+  (`asApprovedRelease`), `services/ApplicationPageServiceImpl.java` (direct publish refused),
+  `imports/internal/ImportServiceImpl.java` (import over a live app takes it offline), and the test
+  `roles/InstanceRolePermissionsTest`.
+- New client files: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/approvals.ts` (and `.test.ts`),
+  `src/ee/components/approvals/ApprovalStatusChip.tsx`,
+  `src/ee/pages/AppIDE/layouts/components/Header/ReleaseControls.tsx` (and `.test.tsx`), `useApplicationApproval.ts`,
+  `src/ee/pages/Applications/PendingApprovals.tsx` (and `.test.tsx`).
+- Edited upstream client files: `src/pages/AppIDE/layouts/components/Header/index.tsx` (`ReleaseControls` in place of
+  `DeployButton`), `src/ce/pages/Applications/index.tsx` (`PendingApprovals` above the app list).
+- MCP: `packages/mcp/src/ee/extensions/api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts` (re-exports of `ce/`
+  upstream, now the fork's implementation), the test `approvals.test.ts`, and `packages/mcp/README.md`.
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

@@ -49,6 +49,7 @@ import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.DatasourceRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.AstService;
 import com.appsmith.server.services.LayoutActionService;
@@ -697,7 +698,8 @@ public class ActionServiceCE_Test {
                 .createSingleAction(action, Boolean.FALSE)
                 .then(layoutActionService.createSingleAction(action1, Boolean.FALSE))
                 .then(layoutActionService.createSingleAction(action2, Boolean.FALSE))
-                .then(applicationPageService.publish(testPage.getApplicationId(), true))
+                .then(PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(testPage.getApplicationId(), true)))
                 .then(newActionService.getActionsForViewMode(testApp.getId()).collectList());
 
         StepVerifier.create(actionsListMono)
@@ -753,7 +755,7 @@ public class ActionServiceCE_Test {
         Mono<ActionDTO> createActionMono = layoutActionService.createSingleAction(action, Boolean.FALSE);
         Mono<List<ActionViewDTO>> actionViewModeListMono = createActionMono
                 // Publish the application before fetching the action in view mode
-                .then(applicationPageService.publish(testApp.getId(), true))
+                .then(PublishApproval.asApprovedRelease(applicationPageService.publish(testApp.getId(), true)))
                 .then(newActionService.getActionsForViewMode(testApp.getId()).collectList());
 
         StepVerifier.create(actionViewModeListMono)

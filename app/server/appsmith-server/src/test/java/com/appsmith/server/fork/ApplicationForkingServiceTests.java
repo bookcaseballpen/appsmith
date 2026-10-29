@@ -53,6 +53,7 @@ import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.LayoutActionService;
 import com.appsmith.server.services.LayoutCollectionService;
@@ -929,7 +930,8 @@ public class ApplicationForkingServiceTests {
         final String pageId = Objects.requireNonNull(
                         applicationPageService.createPage(pageDTO).block())
                 .getId();
-        applicationPageService.publish(originalAppId, true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(originalAppId, true))
+                .block();
         applicationPageService.deleteUnpublishedPage(pageId).block();
         Application resultApplication = applicationForkingService
                 .forkApplicationToWorkspaceWithEnvironment(

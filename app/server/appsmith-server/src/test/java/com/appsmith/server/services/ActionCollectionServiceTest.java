@@ -40,6 +40,7 @@ import com.appsmith.server.repositories.ActionCollectionRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.extern.slf4j.Slf4j;
 import net.minidev.json.JSONArray;
@@ -626,7 +627,8 @@ public class ActionCollectionServiceTest {
         assert createdActionCollectionDTO.getId() != null;
         String createdActionCollectionId = createdActionCollectionDTO.getId();
 
-        applicationPageService.publish(testApp.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(testApp.getId(), true))
+                .block();
 
         actionCollectionDTO.getActions().get(0).getActionConfiguration().setBody("updatedBody");
 
@@ -699,10 +701,10 @@ public class ActionCollectionServiceTest {
                 layoutCollectionService.createCollection(actionCollectionDTO).block();
         assert createdActionCollectionDTO != null;
 
-        final Mono<List<ActionCollectionViewDTO>> viewModeCollectionsMono = applicationPageService
-                .publish(testApp.getId(), true)
+        final Mono<List<ActionCollectionViewDTO>> viewModeCollectionsMono = PublishApproval.asApprovedRelease(
+                        applicationPageService.publish(testApp.getId(), true))
                 .then(actionCollectionService.deleteUnpublishedActionCollection(createdActionCollectionDTO.getId()))
-                .then(applicationPageService.publish(testApp.getId(), true))
+                .then(PublishApproval.asApprovedRelease(applicationPageService.publish(testApp.getId(), true)))
                 .thenMany(actionCollectionService.getActionCollectionsForViewMode(testApp.getId(), null))
                 .collectList();
 

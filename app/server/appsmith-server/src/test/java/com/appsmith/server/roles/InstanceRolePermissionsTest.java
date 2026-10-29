@@ -320,7 +320,7 @@ class InstanceRolePermissionsTest {
 
     @ParameterizedTest
     @EnumSource(InstanceRole.class)
-    void should_publishOnlyAsApproverOrAdmin_when_rolePublishesApp(InstanceRole role) {
+    void should_refuseDirectPublishForEveryRole_when_rolePublishesApp(InstanceRole role) {
         // When
         WebTestClient.ResponseSpec response = clientFor(role)
                 .post()
@@ -328,11 +328,10 @@ class InstanceRolePermissionsTest {
                 .exchange();
 
         // Then
-        if (role == InstanceRole.ADMIN || role == InstanceRole.APPROVER) {
-            response.expectStatus().isOk();
-        } else {
-            response.expectStatus().is4xxClientError();
-        }
+        // Every publish goes through the release approval flow (approvals/ApplicationApprovalService#approve).
+        response.expectStatus().is4xxClientError();
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNull();
     }
 
     @ParameterizedTest
@@ -380,7 +379,7 @@ class InstanceRolePermissionsTest {
     @EnumSource(
             value = InstanceRole.class,
             names = {"ADMIN", "DEV"})
-    void should_publishInternallyOnLiveAppOnlyAsAdmin_when_serverRepublishesForRole(InstanceRole role) {
+    void should_notRepublishLiveAppForAnyRole_when_serverRepublishesForRole(InstanceRole role) {
         // Given
         makeLive(application.getId());
         Application stored = applicationRepository.findById(application.getId()).block();
@@ -395,22 +394,22 @@ class InstanceRolePermissionsTest {
         Application.AppLayout publishedLayout =
                 applicationRepository.findById(application.getId()).block().getPublishedAppLayout();
         boolean republished = publishedLayout != null && publishedLayout.getType() == Application.AppLayout.Type.MOBILE;
-        assertThat(republished).isEqualTo(role == InstanceRole.ADMIN);
+        assertThat(republished).isFalse();
     }
 
     @ParameterizedTest
     @EnumSource(
             value = InstanceRole.class,
             names = {"ADMIN", "DEV"})
-    void should_makeAppLiveOnlyAsAdmin_when_gitCommitPublishesManually(InstanceRole role) {
+    void should_notMakeAppLiveForAnyRole_when_gitCommitPublishesManually(InstanceRole role) {
         // When
-        // Git commit-and-deploy reaches the publish this way; it must not fail for a developer after the commit.
+        // Git commit-and-deploy reaches the publish this way; it must not fail after the commit.
         runAs(applicationPageService.publishWithoutPermissionChecks(application.getId(), true), users.get(role))
                 .block();
 
         // Then
         Application stored = applicationRepository.findById(application.getId()).block();
-        assertThat(stored.getLastDeployedAt() != null).isEqualTo(role == InstanceRole.ADMIN);
+        assertThat(stored.getLastDeployedAt()).isNull();
     }
 
     @ParameterizedTest
@@ -454,7 +453,9 @@ class InstanceRolePermissionsTest {
     @EnumSource(InstanceRole.class)
     void should_showAppToEveryRole_when_approverHasPublishedIt(InstanceRole role) {
         // Given
-        runAs(applicationPageService.publish(application.getId(), true), users.get(InstanceRole.APPROVER))
+        runAs(
+                        PublishApproval.asApprovedRelease(applicationPageService.publish(application.getId(), true)),
+                        users.get(InstanceRole.APPROVER))
                 .block();
 
         // When
@@ -601,7 +602,9 @@ class InstanceRolePermissionsTest {
     }
 
     private void makeLive(String applicationId) {
-        runAs(applicationPageService.publish(applicationId, true), users.get(InstanceRole.ADMIN))
+        runAs(
+                        PublishApproval.asApprovedRelease(applicationPageService.publish(applicationId, true)),
+                        users.get(InstanceRole.ADMIN))
                 .block();
     }
 

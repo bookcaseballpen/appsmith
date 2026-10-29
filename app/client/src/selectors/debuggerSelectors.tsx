@@ -12,7 +12,7 @@ import {
 } from "ee/workers/Evaluation/evaluationUtils";
 import { getDataTree } from "./dataTreeSelectors";
 import type { CanvasDebuggerState } from "reducers/uiReducers/debuggerReducer";
-import { selectCombinedPreviewMode } from "./gitModSelectors";
+import { selectCanvasOnlyMode } from "./gitModSelectors";
 
 interface ErrorObject {
   [k: string]: Log;
@@ -172,7 +172,8 @@ export const getDebuggerOpen = (state: DefaultRootState) =>
 
 export const showDebuggerFlag = createSelector(
   getDebuggerOpen,
-  selectCombinedPreviewMode,
+  // Fork: not selectCombinedPreviewMode, so the debugger stays open in the read-only editor.
+  selectCanvasOnlyMode,
   (isOpen, isPreview) => isOpen && !isPreview,
 );
 
