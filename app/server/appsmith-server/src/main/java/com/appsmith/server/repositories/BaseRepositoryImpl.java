@@ -2,16 +2,15 @@ package com.appsmith.server.repositories;
 
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.server.constants.FieldName;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Example;
+import org.reactivestreams.Publisher;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.mongodb.repository.query.MongoEntityInformation;
-import org.springframework.data.mongodb.repository.support.SimpleReactiveMongoRepository;
+import org.springframework.data.repository.core.EntityInformation;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.util.Assert;
 import reactor.core.publisher.Flux;
@@ -19,23 +18,23 @@ import reactor.core.publisher.Mono;
 
 import java.io.Serializable;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 import static com.appsmith.server.repositories.ce.BaseAppsmithRepositoryCEImpl.notDeleted;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
- * This repository implementation is the base class that will be used by Spring Data running all the default JPA queries.
- * We override the default implementation {@link SimpleReactiveMongoRepository} to filter out records marked with
- * deleted=true.
- * To enable this base implementation, it MUST be set in the annotation @EnableReactiveMongoRepositories.repositoryBaseClass.
- * This is currently defined in {@link com.appsmith.server.configurations.MongoConfig} (liable to change in the future).
+ * This repository implementation is the base class that will be used by Spring Data running all the default queries.
+ * It filters out records marked as deleted.
+ * To enable this base implementation, it is the base class of the repository factory
+ * ({@link com.appsmith.server.repositories.postgres.AppsmithRepositoryFactory}).
  * <p>
- * An implementation like this can also be used to set default query parameters based on the user's role and permissions
- * to filter out data that they are allowed to see. This is will be implemented with ACL.
+ * Fork: implemented on PostgreSQL with {@link PostgresOperations}; it used to extend Spring Data MongoDB's
+ * {@code SimpleReactiveMongoRepository}.
  *
  * @param <T>  The domain class that extends {@link BaseDomain}. This is required because we use default fields in
- *             {@link BaseDomain} such as `deleted`
+ *             {@link BaseDomain} such as `deletedAt`
  * @param <ID> The ID field that extends Serializable interface
  *             <p>
  *             In case you are wondering why we have two different repository implementation classes i.e.
@@ -43,48 +42,57 @@ import static org.springframework.data.mongodb.core.query.Criteria.where;
  *             ```
  *             BaseRepository is required for running any JPA queries. This doesn’t invoke any ACL permissions. This is used when
  *             we wish to fetch data from the DB without ACL. For eg, Fetching a user by username during login
- *             Usage example:
- *             ActionCollectionRepositoryCE extends BaseRepository to power JPA queries using the ReactiveMongoRepository.
  *             AppsmithRepository is the one that we should use by default (unless the use case demands that we don’t need ACL).
- *             It is implemented by BaseAppsmithRepositoryCEImpl and BaseAppsmithRepositoryImpl. This interface allows us to
- *             define custom Mongo queries by including the delete functionality & ACL permissions.
- *             Usage example:
- *             CustomActionCollectionRepositoryCE extends AppsmithRepository and then implements the functions defined there.
- *             I agree that the naming is a little confusing. Open to hearing better naming suggestions so that we can improve
- *             the understanding of these interfaces.
+ *             It is implemented by BaseAppsmithRepositoryCEImpl and BaseAppsmithRepositoryImpl.
  *             ```
- *             Ref: https://theappsmith.slack.com/archives/CPQNLFHTN/p1669100205502599?thread_ts=1668753437.497369&cid=CPQNLFHTN
  */
 @Slf4j
-public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable>
-        extends SimpleReactiveMongoRepository<T, ID> implements BaseRepository<T, ID> {
+public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable> implements BaseRepository<T, ID> {
 
-    protected final MongoEntityInformation<T, ID> entityInformation;
-    protected final ReactiveMongoOperations mongoOperations;
+    protected final EntityInformation<T, ID> entityInformation;
+    protected final PostgresOperations postgresOperations;
 
     public BaseRepositoryImpl(
-            @NonNull MongoEntityInformation<T, ID> entityInformation,
-            @NonNull ReactiveMongoOperations mongoOperations) {
-        super(entityInformation, mongoOperations);
+            @NonNull EntityInformation<T, ID> entityInformation, @NonNull PostgresOperations postgresOperations) {
         this.entityInformation = entityInformation;
-        this.mongoOperations = mongoOperations;
+        this.postgresOperations = postgresOperations;
     }
 
-    private Criteria getIdCriteria(Object id) {
-        return where(entityInformation.getIdAttribute()).is(id);
+    private Class<T> type() {
+        return entityInformation.getJavaType();
+    }
+
+    private static <T extends BaseDomain> BridgeQuery<T> idIs(Object id) {
+        return Bridge.equal(FieldName.ID, String.valueOf(id));
+    }
+
+    private Mono<List<T>> select(List<BridgeQuery<T>> criteria, Sort sort, int limit) {
+        return postgresOperations.read(em -> PostgresOperations.select(em, type(), criteria, sort, limit, 0));
     }
 
     @Override
     public Mono<T> findById(ID id) {
         Assert.notNull(id, "The given id must not be null!");
-        Query query = new Query(getIdCriteria(id));
-        query.addCriteria(notDeleted());
+        return select(List.of(idIs(id), notDeleted()), null, 1).flatMap(rows -> Mono.justOrEmpty(first(rows)));
+    }
 
-        return mongoOperations
-                .query(entityInformation.getJavaType())
-                .inCollection(entityInformation.getCollectionName())
-                .matching(query)
-                .one();
+    @Override
+    public Mono<T> findById(Publisher<ID> id) {
+        return Mono.from(id).flatMap(this::findById);
+    }
+
+    private static <T> T first(List<T> rows) {
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    @Override
+    public Mono<Boolean> existsById(ID id) {
+        return findById(id).hasElement();
+    }
+
+    @Override
+    public Mono<Boolean> existsById(Publisher<ID> id) {
+        return Mono.from(id).flatMap(this::existsById);
     }
 
     @Override
@@ -92,29 +100,125 @@ public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable>
         return ReactiveSecurityContextHolder.getContext()
                 .map(ctx -> ctx.getAuthentication())
                 .map(auth -> auth.getPrincipal())
-                .flatMapMany(principal -> {
-                    Query query = new Query(notDeleted());
-                    return mongoOperations.find(
-                            query.cursorBatchSize(10000),
-                            entityInformation.getJavaType(),
-                            entityInformation.getCollectionName());
-                });
+                .flatMapMany(principal -> retrieveAll());
+    }
+
+    @Override
+    public Flux<T> findAll(Sort sort) {
+        return select(List.of(notDeleted()), sort, 0).flatMapIterable(rows -> rows);
     }
 
     @Override
     public Flux<T> retrieveAll() {
-        Query query = new Query(notDeleted());
-        return mongoOperations.find(
-                query.cursorBatchSize(10000), entityInformation.getJavaType(), entityInformation.getCollectionName());
+        return select(List.of(notDeleted()), null, 0).flatMapIterable(rows -> rows);
     }
 
-    /**
-     * We don't use this today, it doesn't use our `notDeleted` criteria, and since we don't use it, we're not porting
-     * it to Postgres. Querying with `queryBuilder` or anything else is arguably more readable than this.
-     */
     @Override
-    public <S extends T> Flux<S> findAll(Example<S> example, Sort sort) {
-        return Flux.error(new UnsupportedOperationException("This method is not supported!"));
+    public Flux<T> findAllById(Iterable<ID> ids) {
+        final List<String> idList = new ArrayList<>();
+        ids.forEach(id -> idList.add(String.valueOf(id)));
+        if (idList.isEmpty()) {
+            return Flux.empty();
+        }
+        return select(List.of(Bridge.in(FieldName.ID, idList), notDeleted()), null, 0)
+                .flatMapIterable(rows -> rows);
+    }
+
+    @Override
+    public Flux<T> findAllById(Publisher<ID> idStream) {
+        return Flux.from(idStream).collectList().flatMapMany(this::findAllById);
+    }
+
+    @Override
+    public Mono<Long> count() {
+        return postgresOperations.read(em -> PostgresOperations.count(em, type(), List.of(notDeleted())));
+    }
+
+    @Override
+    public <S extends T> Mono<S> save(S entity) {
+        Assert.notNull(entity, "Entity must not be null!");
+        return postgresOperations.write(em -> PostgresOperations.save(em, entity));
+    }
+
+    @Override
+    public <S extends T> Flux<S> saveAll(Iterable<S> entities) {
+        final List<S> list = new ArrayList<>();
+        entities.forEach(list::add);
+        if (list.isEmpty()) {
+            return Flux.empty();
+        }
+        return postgresOperations
+                .write(em -> {
+                    final List<S> saved = new ArrayList<>(list.size());
+                    for (S entity : list) {
+                        saved.add(PostgresOperations.save(em, entity));
+                    }
+                    return saved;
+                })
+                .flatMapIterable(saved -> saved);
+    }
+
+    @Override
+    public <S extends T> Flux<S> saveAll(Publisher<S> entityStream) {
+        return Flux.from(entityStream).concatMap(this::save);
+    }
+
+    @Override
+    public <S extends T> Mono<S> insert(S entity) {
+        return save(entity);
+    }
+
+    @Override
+    public <S extends T> Flux<S> insert(Iterable<S> entities) {
+        return saveAll(entities);
+    }
+
+    @Override
+    public Mono<Void> deleteById(ID id) {
+        return postgresOperations
+                .write(em -> PostgresOperations.delete(em, type(), List.of(idIs(id))))
+                .then();
+    }
+
+    @Override
+    public Mono<Void> deleteById(Publisher<ID> id) {
+        return Mono.from(id).flatMap(this::deleteById);
+    }
+
+    @Override
+    public Mono<Void> delete(T entity) {
+        return deleteById(entityInformation.getRequiredId(entity));
+    }
+
+    @Override
+    public Mono<Void> deleteAllById(Iterable<? extends ID> ids) {
+        final List<String> idList = new ArrayList<>();
+        ids.forEach(id -> idList.add(String.valueOf(id)));
+        if (idList.isEmpty()) {
+            return Mono.empty();
+        }
+        return postgresOperations
+                .write(em -> PostgresOperations.delete(em, type(), List.of(Bridge.in(FieldName.ID, idList))))
+                .then();
+    }
+
+    @Override
+    public Mono<Void> deleteAll(Iterable<? extends T> entities) {
+        final List<ID> ids = new ArrayList<>();
+        entities.forEach(e -> ids.add(entityInformation.getRequiredId(e)));
+        return deleteAllById(ids);
+    }
+
+    @Override
+    public Mono<Void> deleteAll(Publisher<? extends T> entityStream) {
+        return Flux.from(entityStream).concatMap(this::delete).then();
+    }
+
+    @Override
+    public Mono<Void> deleteAll() {
+        return postgresOperations
+                .write(em -> PostgresOperations.delete(em, type(), List.of()))
+                .then();
     }
 
     @Override
@@ -127,26 +231,20 @@ public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable>
         }
 
         entity.setDeletedAt(Instant.now());
-        return mongoOperations.save(entity, entityInformation.getCollectionName());
+        return save(entity);
     }
 
     @Override
     public Mono<Boolean> archiveById(ID id) {
         Assert.notNull(id, "The given id must not be null!");
 
-        Query query = new Query(getIdCriteria(id));
-        query.addCriteria(notDeleted());
-
-        return mongoOperations
-                .updateFirst(query, getForArchive(), entityInformation.getJavaType())
-                .map(result -> result.getModifiedCount() > 0 ? true : false);
+        return postgresOperations
+                .write(em -> PostgresOperations.update(em, type(), List.of(idIs(id), notDeleted()), getForArchive(), true))
+                .map(count -> count > 0);
     }
 
-    public Update getForArchive() {
-        Update update = new Update();
-        update.set(FieldName.DELETED, true);
-        update.set(FieldName.DELETED_AT, Instant.now());
-        return update;
+    public BridgeUpdate getForArchive() {
+        return Bridge.update().set(FieldName.DELETED_AT, Instant.now());
     }
 
     @Override
@@ -154,12 +252,10 @@ public class BaseRepositoryImpl<T extends BaseDomain, ID extends Serializable>
         Assert.notNull(ids, "The given ids must not be null!");
         Assert.notEmpty(ids, "The given list of ids must not be empty!");
 
-        Query query = new Query();
-        query.addCriteria(where(FieldName.ID).in(ids));
-        query.addCriteria(notDeleted());
-
-        return mongoOperations
-                .updateMulti(query, getForArchive(), entityInformation.getJavaType())
-                .map(result -> result.getModifiedCount() > 0);
+        final List<String> idList = ids.stream().map(String::valueOf).toList();
+        return postgresOperations
+                .write(em -> PostgresOperations.update(
+                        em, type(), List.of(Bridge.in(FieldName.ID, idList), notDeleted()), getForArchive(), false))
+                .map(count -> count > 0);
     }
 }

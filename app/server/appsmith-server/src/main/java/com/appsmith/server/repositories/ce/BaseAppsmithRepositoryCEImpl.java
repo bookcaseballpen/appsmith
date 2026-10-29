@@ -1,5 +1,6 @@
 package com.appsmith.server.repositories.ce;
 
+import com.appsmith.external.helpers.AppsmithBeanUtils;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.models.Policy;
 import com.appsmith.server.acl.AclPermission;
@@ -12,20 +13,12 @@ import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
 import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.ce.params.QueryAllParams;
-import com.mongodb.client.model.UpdateOneModel;
-import com.mongodb.client.model.WriteModel;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
+import com.appsmith.server.repositories.postgres.ProjectionMapper;
+import jakarta.persistence.Transient;
 import lombok.NonNull;
-import org.bson.Document;
-import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.GenericTypeResolver;
-import org.springframework.data.annotation.Transient;
-import org.springframework.data.mongodb.core.FindAndModifyOptions;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ReflectionUtils;
@@ -36,15 +29,12 @@ import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-import static com.appsmith.external.helpers.StringUtils.dotted;
-import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
@@ -72,11 +62,14 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * additional overhead, with very little value to speak for. Hence, we are using {@code @Autowired} here.
  * <p>
  * <a href="https://theappsmith.slack.com/archives/CPQNLFHTN/p1711966160274399">Ref Slack thread</a>.
+ * <p>
+ * Fork: runs on PostgreSQL. The API is unchanged (reactive, database-neutral {@link BridgeQuery} criteria); the
+ * queries run as SQL through {@link PostgresOperations}, and the ACL check is a jsonb test on {@code policy_map}.
  */
 public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
 
     @Autowired
-    private ReactiveMongoOperations mongoOperations;
+    private PostgresOperations postgresOperations;
 
     protected final Class<T> genericDomain;
 
@@ -93,21 +86,24 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 (Class<T>) GenericTypeResolver.resolveTypeArgument(getClass(), BaseAppsmithRepositoryCEImpl.class);
     }
 
-    public static <T extends BaseDomain> BridgeQuery<T> notDeleted() {
-        return Bridge.and(
-                // Older check for deleted
-                Bridge.or(Bridge.notExists(FieldName.DELETED), Bridge.isFalse(FieldName.DELETED)),
-                // New check for deleted
-                Bridge.isNull(FieldName.DELETED_AT));
+    protected PostgresOperations getPostgresOperations() {
+        return postgresOperations;
     }
 
-    public static Criteria userAcl(Set<String> permissionGroups, AclPermission permission) {
+    public static <T extends BaseDomain> BridgeQuery<T> notDeleted() {
+        return Bridge.isNull(FieldName.DELETED_AT);
+    }
+
+    /**
+     * The ACL criteria: one of {@code permissionGroups} is granted {@code permission}. Returns null when there is no
+     * permission to check. Fork: a hook (it replaces Mongo's {@code userAcl}) so that subclasses can narrow what a
+     * group may see, see {@link com.appsmith.server.repositories.CustomApplicationRepositoryImpl}.
+     */
+    protected BridgeQuery<T> permissionCriteria(Set<String> permissionGroups, AclPermission permission) {
         if (permission == null) {
             return null;
         }
-        // Check if the permission is being provided by any of the permission groups
-        return Criteria.where(dotted(BaseDomain.Fields.policyMap, permission.getValue(), "permissionGroups"))
-                .in(permissionGroups);
+        return Bridge.<T>query().hasPermission(permission.getValue(), permissionGroups);
     }
 
     public Mono<T> findById(String id, AclPermission permission) {
@@ -136,13 +132,13 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
             AclPermission permission) {
         final QueryAllParams<T> builder = queryBuilder();
 
-        builder.criteria(Criteria.where(baseIdPath).is(baseId));
+        builder.criteria(Bridge.equal(baseIdPath, baseId));
 
         if (!isBlank(branchName)) {
-            builder.criteria(Criteria.where(branchNamePath).is(branchName));
+            builder.criteria(Bridge.equal(branchNamePath, branchName));
         }
 
-        Update update = new Update();
+        final BridgeUpdate update = Bridge.update();
         fieldNameValueMap.forEach(update::set);
 
         return builder.permission(permission).updateFirst(update);
@@ -152,9 +148,9 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
             String id, String idPath, Map<String, Object> fieldNameValueMap, AclPermission permission) {
         final QueryAllParams<T> builder = queryBuilder();
 
-        builder.criteria(Criteria.where(idPath).is(id));
+        builder.criteria(Bridge.equal(idPath, id));
 
-        Update update = new Update();
+        final BridgeUpdate update = Bridge.update();
         fieldNameValueMap.forEach(update::set);
 
         return builder.permission(permission).updateFirst(update);
@@ -183,31 +179,20 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                         : getStrictPermissionGroupsForUser(user));
     }
 
-    protected Query createQueryWithPermission(
-            List<Criteria> criterias, Set<String> permissionGroups, AclPermission aclPermission) {
-        return createQueryWithPermission(criterias, null, permissionGroups, aclPermission);
-    }
-
-    protected Query createQueryWithPermission(
-            List<Criteria> criterias,
-            List<String> projectionFieldNames,
-            Set<String> permissionGroups,
-            AclPermission aclPermission) {
-        final ArrayList<Criteria> criteriaList = new ArrayList<>(criterias);
+    /**
+     * All the criteria of a query: the caller's, not-deleted, and the ACL check.
+     */
+    protected List<BridgeQuery<T>> criteriaWithPermission(
+            List<BridgeQuery<T>> criterias, Set<String> permissionGroups, AclPermission aclPermission) {
+        final List<BridgeQuery<T>> criteriaList = new ArrayList<>(criterias);
         criteriaList.add(notDeleted());
 
-        final Criteria permissionCriteria = userAcl(permissionGroups, aclPermission);
+        final BridgeQuery<T> permissionCriteria = permissionCriteria(permissionGroups, aclPermission);
         if (permissionCriteria != null) {
             criteriaList.add(permissionCriteria);
         }
 
-        final Query query = new Query(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
-
-        if (!isEmpty(projectionFieldNames)) {
-            query.fields().include(projectionFieldNames.toArray(new String[0]));
-        }
-
-        return query;
+        return criteriaList;
     }
 
     public QueryAllParams<T> queryBuilder() {
@@ -230,26 +215,18 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 return Flux.empty();
             }
 
-            final Query query =
-                    createQueryWithPermission(params.getCriteria(), params.getFields(), permissionGroups, permission);
+            final List<BridgeQuery<T>> criteria =
+                    criteriaWithPermission(params.getCriteria(), permissionGroups, permission);
 
-            if (params.getSkip() > NO_SKIP) {
-                query.skip(params.getSkip());
-            }
-
-            if (params.getLimit() != NO_RECORD_LIMIT) {
-                query.limit(params.getLimit());
-            }
-
-            if (params.getSort() != null) {
-                query.with(params.getSort());
-            }
-
-            return mongoOperations
-                    .query(this.genericDomain)
-                    .as(projectionClass)
-                    .matching(query.cursorBatchSize(10_000))
-                    .all();
+            return postgresOperations
+                    .readMany(em -> PostgresOperations.select(
+                            em,
+                            genericDomain,
+                            criteria,
+                            params.getSort(),
+                            params.getLimit() == NO_RECORD_LIMIT ? 0 : params.getLimit(),
+                            params.getSkip()))
+                    .map(row -> ProjectionMapper.map(row, projectionClass));
         }));
     }
 
@@ -269,14 +246,20 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 return Mono.empty();
             }
 
-            final Query query =
-                    createQueryWithPermission(params.getCriteria(), params.getFields(), permissionGroups, permission);
+            final List<BridgeQuery<T>> criteria =
+                    criteriaWithPermission(params.getCriteria(), permissionGroups, permission);
 
-            return mongoOperations
-                    .query(genericDomain)
-                    .as(projectionClass)
-                    .matching(query.cursorBatchSize(10_000))
-                    .one();
+            // Like Mongo's `one()`, more than one match is an error.
+            return postgresOperations
+                    .read(em -> {
+                        final List<T> rows = PostgresOperations.select(em, genericDomain, criteria, null, 2, 0);
+                        if (rows.size() > 1) {
+                            throw new IllegalStateException("Query for one " + genericDomain.getSimpleName()
+                                    + " returned more than one result");
+                        }
+                        return rows.isEmpty() ? null : rows.get(0);
+                    })
+                    .map(row -> ProjectionMapper.map(row, projectionClass));
         }));
     }
 
@@ -291,13 +274,15 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 return Mono.empty();
             }
 
-            final Query query =
-                    createQueryWithPermission(params.getCriteria(), params.getFields(), permissionGroups, permission);
+            final List<BridgeQuery<T>> criteria =
+                    criteriaWithPermission(params.getCriteria(), permissionGroups, permission);
 
-            return mongoOperations
-                    .query(this.genericDomain)
-                    .matching(query)
-                    .first()
+            return postgresOperations
+                    .read(em -> {
+                        final List<T> rows =
+                                PostgresOperations.select(em, genericDomain, criteria, params.getSort(), 1, 0);
+                        return rows.isEmpty() ? null : rows.get(0);
+                    })
                     .flatMap(obj -> setUserPermissionsInObject(obj, permissionGroups));
         }));
     }
@@ -313,9 +298,10 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 return Mono.just(0L);
             }
 
-            final Query query = createQueryWithPermission(params.getCriteria(), permissionGroups, permission);
+            final List<BridgeQuery<T>> criteria =
+                    criteriaWithPermission(params.getCriteria(), permissionGroups, permission);
 
-            return mongoOperations.count(query, this.genericDomain);
+            return postgresOperations.read(em -> PostgresOperations.count(em, genericDomain, criteria));
         }));
     }
 
@@ -323,10 +309,8 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
         return updateExecute(params, buildUpdateFromSparseResource(resource));
     }
 
-    public Mono<Integer> updateExecute(@NonNull QueryAllParams<T> params, @NonNull UpdateDefinition update) {
-        Objects.requireNonNull(params.getCriteria());
-
-        if (!isEmpty(params.getFields())) {
+    public Mono<Integer> updateExecute(@NonNull QueryAllParams<T> params, @NonNull BridgeUpdate update) {
+        if (!CollectionUtils.isEmpty(params.getFields())) {
             // Specifying fields to update doesn't make any sense, so explicitly disallow it.
             return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "fields"));
         }
@@ -341,15 +325,14 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
                 return Mono.just(0);
             }
 
-            final Query query = createQueryWithPermission(params.getCriteria(), null, permissionGroups, permission);
+            final List<BridgeQuery<T>> criteria =
+                    criteriaWithPermission(params.getCriteria(), permissionGroups, permission);
             if (QueryAllParams.Scope.ALL.equals(params.getScope())) {
-                return mongoOperations
-                        .updateMulti(query, update, genericDomain)
-                        .map(updateResult -> Math.toIntExact(updateResult.getMatchedCount()));
+                return postgresOperations.write(
+                        em -> PostgresOperations.update(em, genericDomain, criteria, update, false));
             } else if (QueryAllParams.Scope.FIRST.equals(params.getScope())) {
-                return mongoOperations
-                        .updateFirst(query, update, genericDomain)
-                        .map(updateResult -> Math.toIntExact(updateResult.getMatchedCount()));
+                return postgresOperations.write(
+                        em -> PostgresOperations.update(em, genericDomain, criteria, update, true));
             } else {
                 return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "scope"));
             }
@@ -368,12 +351,14 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
         ReflectionUtils.doWithFields(
                 resource.getClass(),
                 field -> {
-                    if (field.isAnnotationPresent(Transient.class) || BaseDomain.Fields.id.equals(field.getName())) {
+                    if (field.isAnnotationPresent(Transient.class)
+                            || field.isAnnotationPresent(org.springframework.data.annotation.Transient.class)
+                            || BaseDomain.Fields.id.equals(field.getName())) {
                         return;
                     }
 
                     final int modifiers = field.getModifiers();
-                    if (Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers)) {
+                    if (Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers) || Modifier.isTransient(modifiers)) {
                         return;
                     }
 
@@ -401,7 +386,7 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
         }
 
         return getCurrentUserPermissionGroupsIfRequired(
-                        params.getPermission(), params.getIncludeAnonymousUserPermissions())
+                        params.getPermission(), params.isIncludeAnonymousUserPermissions())
                 .defaultIfEmpty(Collections.emptySet())
                 .map(params::permissionGroups)
                 .then();
@@ -418,7 +403,7 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
 
         Set<Policy> existingPolicies = obj.getPolicies();
         final Set<Policy> policies = new HashSet<>(existingPolicies == null ? Set.of() : existingPolicies);
-        if (CollectionUtils.isEmpty(policies) || permissionGroups.isEmpty()) {
+        if (CollectionUtils.isEmpty(policies) || CollectionUtils.isEmpty(permissionGroups)) {
             return Mono.just(obj);
         }
 
@@ -494,7 +479,6 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
 
     /**
      * Updates a document in the database that matches the provided query and returns the modified document.
-     * This method performs a find-and-modify operation internally to atomically update a document in the database.
      *
      * @param id The unique identifier of the document to be updated.
      * @param updateObj The update object specifying the modifications to be applied to the document.
@@ -502,23 +486,29 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
      * @return A Mono emitting the updated document after modification.
      *
      * @implNote
-     * The `findAndModify` method operates at the database level and does not automatically handle encryption or decryption of fields. If the document contains encrypted fields, it is the responsibility of the caller to handle encryption and decryption both before and after using this method.
-     *
-     * @see FindAndModifyOptions
+     * The update operates at the database level and does not automatically handle encryption or decryption of fields
+     * outside the JSON columns. Fork: an UPDATE and a SELECT in one transaction (Mongo's findAndModify).
      */
     public Mono<T> updateAndReturn(String id, BridgeUpdate updateObj, AclPermission permission) {
-        Query query = new Query(Criteria.where("id").is(id));
+        final Mono<Set<String>> groupsMono = permission == null
+                ? Mono.just(Set.of())
+                : getCurrentUserPermissionGroupsIfRequired(permission, true);
 
-        FindAndModifyOptions findAndModifyOptions =
-                FindAndModifyOptions.options().returnNew(Boolean.TRUE);
-
-        if (permission == null) {
-            return mongoOperations.findAndModify(query, updateObj, findAndModifyOptions, this.genericDomain);
-        }
-
-        return getCurrentUserPermissionGroupsIfRequired(permission, true).flatMap(permissionGroups -> {
-            query.addCriteria(new Criteria().andOperator(notDeleted(), userAcl(permissionGroups, permission)));
-            return mongoOperations.findAndModify(query, updateObj, findAndModifyOptions, this.genericDomain);
+        return groupsMono.flatMap(permissionGroups -> {
+            final List<BridgeQuery<T>> criteria = new ArrayList<>();
+            criteria.add(Bridge.equal(FieldName.ID, id));
+            if (permission != null) {
+                criteria.addAll(criteriaWithPermission(List.of(), permissionGroups, permission));
+            }
+            return postgresOperations.write(em -> {
+                final int matched = PostgresOperations.update(em, genericDomain, criteria, updateObj, true);
+                if (matched == 0) {
+                    return null;
+                }
+                final List<T> rows =
+                        PostgresOperations.select(em, genericDomain, List.of(Bridge.equal(FieldName.ID, id)), null, 1, 0);
+                return rows.isEmpty() ? null : rows.get(0);
+            });
         });
     }
 
@@ -527,44 +517,52 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
             return Mono.empty();
         }
 
-        // convert the list of domains to a list of DBObjects
-        List<Document> dbObjects = domainList.stream()
-                .map(domain -> {
-                    Document document = new Document();
-                    mongoOperations.getConverter().write(domain, document);
-                    return document;
-                })
-                .collect(Collectors.toList());
+        // Ensure there's no duplicated ID, as the MongoDB version of this method did.
+        final Set<String> seenIds = new HashSet<>();
+        for (T entity : domainList) {
+            if (entity.getId() != null && !seenIds.add(entity.getId())) {
+                return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "id"));
+            }
+        }
 
-        return mongoOperations
-                .getCollection(mongoOperations.getCollectionName(genericDomain))
-                .flatMapMany(documentMongoCollection -> documentMongoCollection.insertMany(dbObjects))
-                .collectList()
+        return postgresOperations
+                .write(em -> {
+                    for (T entity : domainList) {
+                        entity.prePersist();
+                        em.persist(entity);
+                    }
+                    em.flush();
+                    domainList.forEach(em::detach);
+                    return Boolean.TRUE;
+                })
                 .then();
     }
 
+    /**
+     * Writes the non-null fields of each domain over the stored row (Mongo's bulk {@code $set}).
+     */
     public Mono<Void> bulkUpdate(List<T> domainObjects) {
         if (CollectionUtils.isEmpty(domainObjects)) {
             return Mono.empty();
         }
 
-        // convert the list of new actions to a list of DBObjects
-        List<WriteModel<Document>> dbObjects = domainObjects.stream()
-                .map(actionCollection -> {
-                    assert actionCollection.getId() != null;
-                    Document document = new Document();
-                    mongoOperations.getConverter().write(actionCollection, document);
-                    document.remove("_id");
-                    return (WriteModel<Document>) new UpdateOneModel<Document>(
-                            new Document("_id", new ObjectId(actionCollection.getId())),
-                            new Document("$set", document));
-                })
-                .collect(Collectors.toList());
+        final Map<String, T> updatesById = new HashMap<>();
+        domainObjects.forEach(e -> updatesById.put(e.getId(), e));
 
-        return mongoOperations
-                .getCollection(mongoOperations.getCollectionName(genericDomain))
-                .flatMapMany(documentMongoCollection -> documentMongoCollection.bulkWrite(dbObjects))
-                .collectList()
+        return postgresOperations
+                .write(em -> {
+                    for (Map.Entry<String, T> entry : updatesById.entrySet()) {
+                        final T existing = em.find(genericDomain, entry.getKey());
+                        if (existing == null) {
+                            continue;
+                        }
+                        AppsmithBeanUtils.copyNewFieldValuesIntoOldObject(entry.getValue(), existing);
+                        existing.preUpdate();
+                    }
+                    em.flush();
+                    em.clear();
+                    return Boolean.TRUE;
+                })
                 .then();
     }
 }

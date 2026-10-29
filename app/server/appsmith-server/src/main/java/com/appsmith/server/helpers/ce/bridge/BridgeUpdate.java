@@ -1,66 +1,69 @@
 package com.appsmith.server.helpers.ce.bridge;
 
 import lombok.NonNull;
-import org.apache.commons.lang3.NotImplementedException;
-import org.bson.Document;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class BridgeUpdate implements UpdateDefinition {
-    private final Update update = new Update();
+/**
+ * Fork: a database-neutral update, a list of operations on fields (dotted keys for nested JSON fields). It no longer
+ * implements Mongo's {@code UpdateDefinition}; the PostgreSQL repositories render it to an SQL {@code UPDATE}.
+ */
+public class BridgeUpdate {
+
+    public enum Kind {
+        SET,
+        SET_FROM_FIELD,
+        PUSH,
+        ADD_TO_SET,
+        PULL,
+        INC,
+    }
+
+    public record Operation(Kind kind, String key, Object value) {}
+
+    private final List<Operation> operations = new ArrayList<>();
+
+    private BridgeUpdate add(Kind kind, String key, Object value) {
+        // Like Mongo's Update, a later operation on the same key replaces the earlier one.
+        operations.removeIf(op -> op.key().equals(key));
+        operations.add(new Operation(kind, key, value));
+        return this;
+    }
+
+    public List<Operation> getOperations() {
+        return Collections.unmodifiableList(operations);
+    }
+
+    public boolean isEmpty() {
+        return operations.isEmpty();
+    }
 
     public BridgeUpdate set(@NonNull String key, Object value) {
-        update.set(key, value);
-        return this;
+        return add(Kind.SET, key, value);
     }
 
     public BridgeUpdate push(@NonNull String key, @NonNull Object value) {
-        update.push(key, value);
-        return this;
+        return add(Kind.PUSH, key, value);
     }
 
     public BridgeUpdate addToSet(@NonNull String key, @NonNull Object value) {
-        update.addToSet(key, value);
-        return this;
+        return add(Kind.ADD_TO_SET, key, value);
     }
 
     public BridgeUpdate pull(@NonNull String key, @NonNull Object value) {
-        update.pull(key, value);
-        return this;
+        return add(Kind.PULL, key, value);
     }
 
     /**
      * Set the value of the field `key`, to the current value of the field `valueKey`.
      */
-    public BridgeUpdate setToValueFromField(String key, String valueKey) {
-        throw new NotImplementedException("Not implemented here yet, but is ready on Postgres");
+    public BridgeUpdate setToValueFromField(@NonNull String key, @NonNull String valueKey) {
+        return add(Kind.SET_FROM_FIELD, key, valueKey);
     }
 
-    @Override
-    public Boolean isIsolated() {
-        return false;
-    }
-
-    @Override
-    public Document getUpdateObject() {
-        return update.getUpdateObject();
-    }
-
-    @Override
-    public boolean modifies(@NonNull String key) {
-        return false;
-    }
-
-    @Override
     public void inc(@NonNull String key) {
-        update.inc(key);
-    }
-
-    @Override
-    public List<ArrayFilter> getArrayFilters() {
-        return Collections.emptyList();
+        add(Kind.INC, key, 1);
     }
 }

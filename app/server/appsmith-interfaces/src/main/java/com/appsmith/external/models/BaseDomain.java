@@ -1,25 +1,28 @@
 package com.appsmith.external.models;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.helpers.Identifiable;
+import com.appsmith.external.helpers.ObjectIds;
 import com.appsmith.external.views.FromRequest;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.Id;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Transient;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.bson.types.ObjectId;
+import org.hibernate.annotations.Type;
 import org.springframework.data.annotation.CreatedBy;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedBy;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.util.CollectionUtils;
 
 import java.io.Serializable;
@@ -37,21 +40,23 @@ import java.util.Set;
 @Setter
 @ToString
 @FieldNameConstants
+@MappedSuperclass
+// @EntityListeners(EncryptionEntityListener.class) // May be not needed, but keeping as we may need to revisit _very_
+// soon.
 public abstract class BaseDomain implements Persistable<String>, AppsmithDomain, Serializable, Identifiable {
 
     private static final long serialVersionUID = 7459916000501322517L;
 
     @Id
     @JsonView({Views.Public.class, FromRequest.class, Git.class})
-    private String id;
+    protected String id;
 
+    // Fork: set in preSave() rather than with Hibernate's @CreationTimestamp, which overwrites values that callers
+    // set on purpose (imports, bulk writes), as Mongo auditing never did.
     @JsonView(Views.Internal.class)
-    @Indexed
-    @CreatedDate
     protected Instant createdAt;
 
     @JsonView(Views.Internal.class)
-    @LastModifiedDate
     protected Instant updatedAt;
 
     @CreatedBy
@@ -67,8 +72,10 @@ public abstract class BaseDomain implements Persistable<String>, AppsmithDomain,
      * applications. So, instead, we keep it, deprecated, query-transient (no corresponding field in Q* class),
      * no getter/setter methods and only use it for reflection-powered services, like the git sync
      * implementation. For all other practical purposes, this field doesn't exist.
+     * Fork: not a database column on PostgreSQL.
      */
     @Deprecated(forRemoval = true)
+    @Transient
     @JsonView(Views.Internal.class)
     @Getter(AccessLevel.NONE)
     @Setter(AccessLevel.NONE)
@@ -77,9 +84,13 @@ public abstract class BaseDomain implements Persistable<String>, AppsmithDomain,
     @JsonView(Views.Public.class)
     protected Instant deletedAt = null;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Internal.class)
     protected Map<String, Policy> policyMap = new HashMap<>();
 
+    // Fork: not a column; getPolicies() derives the set from policyMap, which is the only stored form.
+    @Transient
     @JsonView({Views.Internal.class})
     @Deprecated(forRemoval = true, since = "Use policyMap instead")
     protected Set<Policy> policies = new HashSet<>();
@@ -182,12 +193,32 @@ public abstract class BaseDomain implements Persistable<String>, AppsmithDomain,
      */
     public void updateForBulkWriteOperation() {
         if (this.getId() == null) {
-            this.setId(new ObjectId().toString());
+            this.setId(ObjectIds.newId());
         }
         if (this.getCreatedAt() == null) {
             this.setCreatedAt(Instant.now());
         }
         this.setUpdatedAt(Instant.now());
+    }
+
+    /**
+     * Fork: what Mongo auditing and the driver did on save: assign an id and the created/updated timestamps.
+     */
+    @PrePersist
+    public void prePersist() {
+        if (id == null) {
+            setId(ObjectIds.newId());
+        }
+        final Instant now = Instant.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = Instant.now();
     }
 
     public static class Fields {}

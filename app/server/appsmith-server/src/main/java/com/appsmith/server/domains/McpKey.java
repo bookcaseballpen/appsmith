@@ -1,7 +1,9 @@
 package com.appsmith.server.domains;
 
 import com.appsmith.server.domains.ce.McpKeyCE;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.Entity;
+import org.hibernate.annotations.Where;
 
-@Document
+@Entity
+@Where(clause = "deleted_at IS NULL")
 public class McpKey extends McpKeyCE {}

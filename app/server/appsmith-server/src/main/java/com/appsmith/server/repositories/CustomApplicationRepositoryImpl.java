@@ -2,6 +2,8 @@ package com.appsmith.server.repositories;
 
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
 import com.appsmith.server.repositories.ce.CustomApplicationRepositoryCEImpl;
 import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.roles.InstanceRole;
@@ -9,13 +11,9 @@ import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @Component
@@ -42,11 +40,7 @@ public class CustomApplicationRepositoryImpl extends CustomApplicationRepository
      * Read access through any other group (a builder role, a public app) is unchanged.
      */
     @Override
-    protected Query createQueryWithPermission(
-            List<Criteria> criterias,
-            List<String> projectionFieldNames,
-            Set<String> permissionGroups,
-            AclPermission aclPermission) {
+    protected BridgeQuery<Application> permissionCriteria(Set<String> permissionGroups, AclPermission aclPermission) {
         String viewerGroupId = defaultWorkspaceService
                 .getResolvedIds()
                 .map(ids -> ids.groupId(InstanceRole.USER))
@@ -55,22 +49,17 @@ public class CustomApplicationRepositoryImpl extends CustomApplicationRepository
                 || viewerGroupId == null
                 || permissionGroups == null
                 || !permissionGroups.contains(viewerGroupId)) {
-            return super.createQueryWithPermission(criterias, projectionFieldNames, permissionGroups, aclPermission);
+            return super.permissionCriteria(permissionGroups, aclPermission);
         }
 
-        Criteria readAsViewer = new Criteria()
-                .andOperator(
-                        userAcl(Set.of(viewerGroupId), aclPermission),
-                        Criteria.where(Application.Fields.lastDeployedAt).ne(null));
+        BridgeQuery<Application> readAsViewer = Bridge.<Application>query()
+                .hasPermission(aclPermission.getValue(), Set.of(viewerGroupId))
+                .isNotNull(Application.Fields.lastDeployedAt);
         Set<String> otherGroups = new HashSet<>(permissionGroups);
         otherGroups.remove(viewerGroupId);
-        Criteria read = otherGroups.isEmpty()
-                ? readAsViewer
-                : new Criteria().orOperator(userAcl(otherGroups, aclPermission), readAsViewer);
-
-        List<Criteria> withRead = new ArrayList<>(criterias);
-        withRead.add(read);
-        // The permission check is in withRead already.
-        return super.createQueryWithPermission(withRead, projectionFieldNames, permissionGroups, null);
+        if (otherGroups.isEmpty()) {
+            return readAsViewer;
+        }
+        return Bridge.or(super.permissionCriteria(otherGroups, aclPermission), readAsViewer);
     }
 }

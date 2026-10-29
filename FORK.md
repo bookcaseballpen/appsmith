@@ -10,6 +10,36 @@ Appsmith hosts (no cloud services, no telemetry, no Appsmith CDN), and Git sync 
 - **Git host:** AWS CodeCommit will be the Git host later. Git sync has no private-repo limit and does not ask
   Appsmith's cloud for anything, so it works on any host.
 
+## PostgreSQL (in progress, branch `fork/postgres`)
+
+The internal database moves from MongoDB to PostgreSQL. Fresh installs only; there is no Mongo data import, and the
+Mongo path is dropped (not kept compiling): `APPSMITH_DB_URL` must be `postgresql://user:password@host:port/db`.
+
+**Rule: new code uses only the database-neutral query API** (`Bridge`, `BridgeQuery`, `BridgeUpdate`,
+`queryBuilder()`, the repository interfaces). Never import `org.springframework.data.mongodb`, `com.mongodb` or
+`org.bson`, and never write SQL outside `repositories/postgres`.
+
+Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity annotations and jsonb types are reused):
+
+- Entities are JPA/Hibernate classes; nested objects are `jsonb` columns (hypersistence-utils, `CustomJsonType`).
+  Table and column names are the quoted snake_case of class and field names (`SnakeCaseNamingStrategy`).
+- The repositories keep their **reactive API** (Mono/Flux), unlike `pg`, which rewrote ~300 service files to
+  generated "cake" wrappers. `repositories/postgres` implements the repository interfaces itself
+  (`@EnableAppsmithRepositories`): `BaseRepositoryImpl` for CRUD, the `Custom*Impl` fragments as before, and
+  `PartTreeAppsmithQuery` for derived methods (`findByEmail`, ...). Blocking JDBC runs on `boundedElastic`, one
+  transaction per call (`PostgresOperations`). So services stay as upstream wrote them and cherry-picks keep applying.
+- `BridgeQuery`/`BridgeUpdate` are plain data now; `SqlRenderer` turns them into SQL with MongoDB's matching rules
+  (array fields match on any element, negated checks match missing fields, nested keys address jsonb).
+- The ACL check is `jsonb_exists_any` on `policy_map`, built by the `permissionCriteria` hook of
+  `BaseAppsmithRepositoryCEImpl`; `CustomApplicationRepositoryImpl` overrides it for "Users see only live apps".
+- Ids keep MongoDB's 24-hex format (`ObjectIds`), so ids embedded elsewhere (MCP user keys) are unchanged.
+- Fresh-install seed data: `src/main/resources/db/seed/fresh-install.json` (plugins, themes, the organization with its
+  policies, the instance roles, the anonymous user, instance config), taken from a real fresh Mongo install of this
+  fork after all Mongock migrations.
+- Multi-document Mongo transactions (imports, git) are not atomic yet: `TransactionalOperator` is a pass-through.
+
+Status: see the commit log of `fork/postgres` and the task report; the server module does not compile yet.
+
 ## Roles (phase A)
 
 Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/roles/`.
