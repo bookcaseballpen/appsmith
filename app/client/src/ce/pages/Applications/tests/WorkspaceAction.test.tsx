@@ -90,16 +90,17 @@ describe("WorkspaceAction", () => {
     expect(onCreateNewApplication).toHaveBeenCalledWith(workspace.id);
   });
 
-  it("3. should call onStartFromTemplate when 'Start from Template' is selected", () => {
-    const { getByTestId, getByText } = renderWorkspaceActionComponent(
+  // Fork: templates are hidden (ee/utils/forkHiddenFeatures), so the menu has no "Start from Template".
+  it("3. should not have 'Start from Template'", () => {
+    const { getByText, queryByTestId } = renderWorkspaceActionComponent(
       workspace,
       workspace.id,
     );
 
     fireEvent.click(getByText(createMessage(WORKSPACE_ACTION_BUTTON)));
-    fireEvent.click(getByTestId(locators.testId.createAppFromTemplates));
 
-    expect(onStartFromTemplate).toHaveBeenCalledWith(workspace.id);
+    expect(queryByTestId(locators.testId.createAppFromTemplates)).toBeNull();
+    expect(onStartFromTemplate).not.toHaveBeenCalled();
   });
 
   it("4. should call setSelectedWorkspaceIdForImportApplication when 'Import App' is selected", () => {

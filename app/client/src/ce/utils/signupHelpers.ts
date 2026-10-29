@@ -17,6 +17,7 @@ import type {
 } from "ee/constants/SocialLogin";
 import { SocialLoginButtonPropsList } from "ee/constants/SocialLogin";
 import type { Dispatch } from "redux";
+import { isOnboardingHidden } from "ee/utils/forkHiddenFeatures";
 
 export interface RedirectUserAfterSignupProps {
   redirectUrl: string;
@@ -40,7 +41,9 @@ export const redirectUserAfterSignup = (
 
   if (redirectUrl) {
     try {
+      // Fork: no first-app onboarding screen; a new user goes straight to the redirect URL.
       if (
+        !isOnboardingHidden() &&
         window.location.pathname == SIGNUP_SUCCESS_URL &&
         shouldEnableFirstTimeUserOnboarding === "true"
       ) {

@@ -46,6 +46,7 @@ import {
 } from "selectors/gitModSelectors";
 import { useHotkeys } from "@blueprintjs/core";
 import { useHotKeys as useGitHotKeys } from "git";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 import { getSelectedWidgets, getLastSelectedWidget } from "selectors/ui";
 import {
   previewModeSelector,
@@ -63,6 +64,7 @@ function GlobalHotKeys(props: Props) {
 
   const dispatch = useDispatch();
   const isGitModEnabled = useSelector(selectGitModEnabled);
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
   const isWalkthroughOpened = useContext(WalkthroughContext)?.isOpened;
   const gitHotKeys = useGitHotKeys();
 
@@ -406,21 +408,25 @@ function GlobalHotKeys(props: Props) {
             toggleTabOrderOverlay(!showTabOrderOverlay);
           },
         },
-        ...(isGitModEnabled
-          ? gitHotKeys
-          : [
-              {
-                combo: "ctrl + shift + g",
-                global: true,
-                label: "Show git commit modal",
-                onKeyDown: showCommitModal,
-              },
-            ]),
+        // Fork: no Git shortcuts while built-in Git is off (APPSMITH_GIT_ENABLED).
+        ...(!isBuiltInGitEnabled
+          ? []
+          : isGitModEnabled
+            ? gitHotKeys
+            : [
+                {
+                  combo: "ctrl + shift + g",
+                  global: true,
+                  label: "Show git commit modal",
+                  onKeyDown: showCommitModal,
+                },
+              ]),
       ];
     }
   }, [
     isWalkthroughOpened,
     isProtectedMode,
+    isBuiltInGitEnabled,
     isGitModEnabled,
     gitHotKeys,
     showCommitModal,

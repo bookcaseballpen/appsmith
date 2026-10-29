@@ -3,6 +3,7 @@ import { Icon, Text } from "@appsmith/ads";
 import React, { useState } from "react";
 import { useHistory } from "react-router";
 import styled from "styled-components";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 export const SearchListItem = styled.div`
   display: flex;
@@ -77,6 +78,9 @@ const WorkspaceItem = ({
 
 const WorkspaceSearchItems = (props: Props) => {
   const { setIsDropdownOpen, workspacesList } = props;
+
+  // Fork: one hidden workspace, so search lists apps only.
+  if (isWorkspaceUiHidden()) return null;
 
   if (!workspacesList || workspacesList?.length === 0) return null;
 

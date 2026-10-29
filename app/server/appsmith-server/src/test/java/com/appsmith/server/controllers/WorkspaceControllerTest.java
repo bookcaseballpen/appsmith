@@ -26,6 +26,8 @@ public class WorkspaceControllerTest {
     @Autowired
     private WebTestClient webTestClient;
 
+    // Fork: creating a workspace is refused before validation (HiddenEndpointsWebFilter); upstream expected a 400
+    // validation failure here.
     @Test
     @WithMockUser
     public void getWorkspaceNoName() {
@@ -36,15 +38,15 @@ public class WorkspaceControllerTest {
                 .body(BodyInserters.fromValue("{}"))
                 .exchange()
                 .expectStatus()
-                .isEqualTo(400)
+                .isEqualTo(403)
                 .expectBody()
                 .json("{\n" + "    \"responseMeta\": {\n"
-                        + "        \"status\": 400,\n"
+                        + "        \"status\": 403,\n"
                         + "        \"success\": false,\n"
                         + "        \"error\": {\n"
-                        + "            \"code\": "
-                        + AppsmithErrorCode.VALIDATION_FAILURE.getCode() + ",\n"
-                        + "            \"message\": \"Validation Failure(s): {name=Name is mandatory}\"\n"
+                        + "            \"code\": \""
+                        + AppsmithErrorCode.FEATURE_DISABLED.getCode() + "\",\n"
+                        + "            \"message\": \"Creating or deleting workspaces is disabled on this instance.\"\n"
                         + "        }\n"
                         + "    }\n"
                         + "}");

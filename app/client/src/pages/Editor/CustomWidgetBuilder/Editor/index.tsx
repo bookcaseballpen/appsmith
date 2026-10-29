@@ -12,12 +12,17 @@ import { AIAssistant, AIAssistantTitleControls } from "./AIAssistant";
 import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import { CUSTOM_WIDGET_BUILDER_TABS } from "../constants";
+import { useSelector } from "react-redux";
+import { getIsBuiltInAiEnabled } from "ee/selectors/builtInAiSelectors";
 
 export default function Editor() {
   const { isReferenceOpen } = useContext(CustomWidgetBuilderContext);
-  const isAIEnabled = useFeatureFlag(
+  const isAIBuilderFlagEnabled = useFeatureFlag(
     FEATURE_FLAG.release_custom_widget_ai_builder,
   );
+  // Fork: no AI tab while the built-in AI is switched off (APPSMITH_AI_ENABLED).
+  const isBuiltInAiEnabled = useSelector(getIsBuiltInAiEnabled);
+  const isAIEnabled = isAIBuilderFlagEnabled && isBuiltInAiEnabled;
 
   const tabs = useMemo(() => {
     const defaultTabs = [

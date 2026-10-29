@@ -49,7 +49,9 @@ if (isSuperUser) ConfigFactory.register(BrandingConfig);
 
 if (isSuperUser) ConfigFactory.register(AuditLogsConfig);
 
-if (isSuperUser) ConfigFactory.register(AIConfig);
+// Fork: the AI settings page only exists while the built-in AI is switched on (APPSMITH_AI_ENABLED).
+if (isSuperUser && featureFlags.fork_builtin_ai_enabled)
+  ConfigFactory.register(AIConfig);
 
 if (isSuperUser && isMultiOrgEnabled)
   ConfigFactory.register(getMcpServerConfig(isMultiOrgEnabled));

@@ -45,6 +45,7 @@ import { Omnibar } from "pages/Editor/commons/Omnibar";
 import ToggleModeButton from "pages/Editor/ToggleModeButton";
 import { EditorShareButton } from "pages/Editor/EditorShareButton";
 import AppInviteUsersForm from "pages/workspace/AppInviteUsersForm";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 import { getEmbedSnippetForm } from "ee/utils/BusinessFeatures/privateEmbedHelpers";
 import CommunityTemplatesPublishInfo from "pages/Editor/CommunityTemplates/Modals/CommunityTemplatesPublishInfo";
 import PublishCommunityTemplateModal from "pages/Editor/CommunityTemplates/Modals/PublishCommunityTemplate";
@@ -210,11 +211,14 @@ const Header = () => {
           >
             <ModalContent style={{ width: "640px" }}>
               <ModalHeader>
-                {createMessage(
-                  APPLICATION_INVITE,
-                  currentWorkspace.name,
-                  !isGACEnabled,
-                )}
+                {/* Fork: no workspace invite here (AppInviteUsersForm), only the app URL. */}
+                {isWorkspaceUiHidden()
+                  ? "Share application"
+                  : createMessage(
+                      APPLICATION_INVITE,
+                      currentWorkspace.name,
+                      !isGACEnabled,
+                    )}
               </ModalHeader>
               <ModalBody>
                 <Tabs
@@ -223,7 +227,9 @@ const Header = () => {
                 >
                   <TabsList>
                     <Tab data-testid="t--tab-INVITE" value="invite">
-                      {createMessage(INVITE_TAB)}
+                      {isWorkspaceUiHidden()
+                        ? "Share"
+                        : createMessage(INVITE_TAB)}
                     </Tab>
                     <Tab data-testid="t--tab-EMBED" value="embed">
                       {createMessage(IN_APP_EMBED_SETTING.embed)}

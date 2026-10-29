@@ -493,7 +493,10 @@ function Card({
           ) : (
             <div />
           )}
-          {Boolean(moreActionItems.length) && !isMobile && contextMenu}
+          {/* Fork: also for editors with no other item; "Fork" used to keep the list non-empty for them. */}
+          {(Boolean(moreActionItems.length) || hasEditPermission) &&
+            !isMobile &&
+            contextMenu}
         </CardFooter>
       </NameWrapper>
       {showGitBadge ? gitBadge : null}

@@ -13,6 +13,8 @@ import { addGitBranchHeader as _addGitBranchHeader } from "./addGitBranchHeader"
 import { addPerformanceMonitoringHeaders } from "./addPerformanceMonitoringHeaders";
 import { addEnvironmentHeader as _addEnvironmentHeader } from "./addEnvironmentHeader";
 import { blockAirgappedRoutes as _blockAirgappedRoutes } from "./blockAirgappedRoutes";
+import { blockHiddenRoutes as _blockHiddenRoutes } from "./blockHiddenRoutes";
+import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
 
 /**
  * Note: Why can't we use store.getState() or isGapgapped() directly in the interceptor?
@@ -24,6 +26,9 @@ const blockAirgappedRoutes = (config: InternalAxiosRequestConfig) => {
 
   return _blockAirgappedRoutes(config, { isAirgapped: isAirgappedInstance });
 };
+
+const blockHiddenRoutes = (config: InternalAxiosRequestConfig) =>
+  _blockHiddenRoutes(config, { templatesHidden: areTemplatesHidden() });
 
 const addGitBranchHeader = (config: InternalAxiosRequestConfig) => {
   const state = store.getState();
@@ -50,6 +55,7 @@ const addVersionHeader = (config: InternalAxiosRequestConfig) => {
 export const apiRequestInterceptor = (config: InternalAxiosRequestConfig) => {
   const interceptorPipeline = compose<InternalAxiosRequestConfig>(
     blockAirgappedRoutes,
+    blockHiddenRoutes,
     addVersionHeader,
     addGitBranchHeader,
     increaseGitApiTimeout,

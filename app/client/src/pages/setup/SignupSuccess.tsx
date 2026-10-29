@@ -17,6 +17,7 @@ import { setUserSignedUpFlag } from "utils/storage";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { getIsAiAgentInstanceEnabled } from "ee/selectors/aiAgentSelectors";
 import { useIsCloudBillingEnabled } from "hooks/useIsCloudBillingEnabled";
+import { isOnboardingHidden } from "ee/utils/forkHiddenFeatures";
 
 export function SignupSuccess() {
   const dispatch = useDispatch();
@@ -86,7 +87,9 @@ export function SignupSuccess() {
     [redirectUsingQueryParam],
   );
 
+  // Fork: no profiling ("what will you build?") form after signup; always go on.
   const shouldAutoRedirect =
+    isOnboardingHidden() ||
     user?.isSuperUser ||
     ((user?.role || user?.proficiency) && user?.useCase) ||
     shouldEnableFirstTimeUserOnboarding !== "true" ||

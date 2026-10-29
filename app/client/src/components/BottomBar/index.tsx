@@ -22,6 +22,7 @@ import { AIAgentSupportTrigger } from "ee/components/BottomBar/AIAgentSupportTri
 import { RunHistoryTrigger } from "ee/pages/WorkflowIDE/layouts/components/BottomBar/WorkflowRunHistory/RunHistoryTrigger";
 import { getIsAiAgentApp } from "ee/selectors/aiAgentSelectors";
 import { getAppsmithConfigs } from "ee/configs";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 
 function GitActions() {
   const isGitModEnabled = useGitModEnabled();
@@ -36,7 +37,9 @@ export default function BottomBar() {
   // as they donot yet work correctly with Anvil.
   const isAnvilEnabled = useSelector(getIsAnvilEnabledInCurrentApplication);
   const isPreviewMode = useSelector(previewModeSelector);
-  const isGitEnabled = !isAnvilEnabled && !isPreviewMode;
+  // Fork: also hidden while built-in Git is off (APPSMITH_GIT_ENABLED).
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
+  const isGitEnabled = isBuiltInGitEnabled && !isAnvilEnabled && !isPreviewMode;
   const isAiAgentApp = useSelector(getIsAiAgentApp);
   const { disableHelpIcon } = getAppsmithConfigs();
 

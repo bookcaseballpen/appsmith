@@ -32,6 +32,7 @@ import type {
 } from "ce/reducers/aiAssistantReducer";
 import { buildAIRequestContext } from "sagas/AIAssistantRequestContext";
 import { getIDETypeByUrl } from "ee/entities/IDE/utils";
+import { getIsBuiltInAiEnabled } from "ee/selectors/builtInAiSelectors";
 import { getCurrentUser } from "selectors/usersSelectors";
 import { ANONYMOUS_USERNAME } from "constants/userConstants";
 import { toast } from "@appsmith/ads";
@@ -109,6 +110,17 @@ function* fetchAIResponseSaga(
 
     if (!prompt?.trim()) {
       yield put(fetchAIResponseError({ error: "Please enter a prompt." }));
+
+      return;
+    }
+
+    // Fork: the built-in AI switch (APPSMITH_AI_ENABLED). Fail at once instead of waiting for settings that never load.
+    if (!((yield select(getIsBuiltInAiEnabled)) as boolean)) {
+      yield put(
+        fetchAIResponseError({
+          error: "The built-in AI is disabled on this instance.",
+        }),
+      );
 
       return;
     }
@@ -288,6 +300,12 @@ function* loadAISettingsSaga(
     return;
   }
 
+  // Fork: with the built-in AI switched off the server refuses the AI settings, so don't ask. The settings stay
+  // unloaded, so they load once the feature flags arrive with the switch on.
+  if (!((yield select(getIsBuiltInAiEnabled)) as boolean)) {
+    return;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response: any = yield call(OrganizationApi.getAIConfig);
@@ -331,4 +349,9 @@ export default function* aiAssistantSagasListener() {
     loadAISettingsSaga,
   );
   yield takeLatest(ReduxActionTypes.LOAD_AI_SETTINGS, loadAISettingsSaga);
+  // Fork: the built-in AI switch arrives with the feature flags, which may come after the user details.
+  yield takeLatest(
+    ReduxActionTypes.FETCH_FEATURE_FLAGS_SUCCESS,
+    loadAISettingsSaga,
+  );
 }

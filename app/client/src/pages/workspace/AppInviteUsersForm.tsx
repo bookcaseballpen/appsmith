@@ -22,6 +22,7 @@ import { Button, Icon, Switch, Tooltip } from "@appsmith/ads";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 const SwitchContainer = styled.div`
   flex-basis: 220px;
@@ -58,10 +59,13 @@ function AppInviteUsersForm(props: any) {
   const currentWorkspace = useSelector(getCurrentAppWorkspace);
   const userWorkspacePermissions = currentWorkspace?.userPermissions ?? [];
   const userAppPermissions = currentApplicationDetails?.userPermissions ?? [];
-  const canInviteToApplication = hasInviteUserToApplicationPermission([
-    ...userWorkspacePermissions,
-    ...userAppPermissions,
-  ]);
+  // Fork: no workspace invite (one hidden workspace; admins manage users in Admin settings). The app URL stays.
+  const canInviteToApplication =
+    !isWorkspaceUiHidden() &&
+    hasInviteUserToApplicationPermission([
+      ...userWorkspacePermissions,
+      ...userAppPermissions,
+    ]);
   const canShareWithPublic = isPermitted(
     userAppPermissions,
     PERMISSION_TYPE.MAKE_PUBLIC_APPLICATION,
