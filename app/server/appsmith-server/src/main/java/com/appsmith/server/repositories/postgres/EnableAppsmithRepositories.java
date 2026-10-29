@@ -1,5 +1,6 @@
 package com.appsmith.server.repositories.postgres;
 
+import com.appsmith.server.repositories.BaseRepositoryImpl;
 import org.springframework.beans.factory.support.BeanNameGenerator;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Import;
@@ -43,7 +44,9 @@ public @interface EnableAppsmithRepositories {
 
     Class<?> repositoryFactoryBeanClass() default AppsmithRepositoryFactoryBean.class;
 
-    Class<?> repositoryBaseClass() default Object.class;
+    // Spring Data uses this class to find which interface methods the base class implements (save, insert, archive,
+    // ...); every other method is taken for a derived query.
+    Class<?> repositoryBaseClass() default BaseRepositoryImpl.class;
 
     Class<? extends BeanNameGenerator> nameGenerator() default BeanNameGenerator.class;
 

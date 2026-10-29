@@ -33,12 +33,22 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
 - The ACL check is `jsonb_exists_any` on `policy_map`, built by the `permissionCriteria` hook of
   `BaseAppsmithRepositoryCEImpl`; `CustomApplicationRepositoryImpl` overrides it for "Users see only live apps".
 - Ids keep MongoDB's 24-hex format (`ObjectIds`), so ids embedded elsewhere (MCP user keys) are unchanged.
-- Fresh-install seed data: `src/main/resources/db/seed/fresh-install.json` (plugins, themes, the organization with its
-  policies, the instance roles, the anonymous user, instance config), taken from a real fresh Mongo install of this
-  fork after all Mongock migrations.
+- Flyway owns the schema (schema `appsmith`): `db/migration/postgres/V1__baseline.sql` (tables generated from the
+  entities, then edited: `text` columns, no enum CHECKs, NOT NULL only on keys, the indexes the code relies on) and
+  `migrations/postgres/V2__seed_fresh_install.java`, which loads `db/seed/fresh-install.json` (plugins, themes, the
+  organization with its policies, the instance roles, the anonymous user, instance config; a snapshot of a real fresh
+  Mongo install of this fork after all Mongock migrations) and generates the `instance-id`. Mongock and its
+  changelogs are gone; later schema or data changes are new Flyway versions.
+- Mongo-only operations became SQL in `Custom*RepositoryCEImpl`: publishing pages and actions is one UPDATE that copies
+  the unpublished column, the first-admin setup lock is `INSERT ... ON CONFLICT DO NOTHING` on
+  `super_user_setup_lock`, the sequence is an upsert, `setDefaultPage` rewrites the `pages` jsonb array.
 - Multi-document Mongo transactions (imports, git) are not atomic yet: `TransactionalOperator` is a pass-through.
+- Not ported yet: the startup sync of `APPSMITH_ADMIN_EMAILS` to instance admins (Mongock's `Migration10000`), the
+  EE-downgrade guard (it read Mongock's audit log), and the plugins' own Mongo use is untouched (they talk to user
+  databases, not the internal one).
 
-Status: see the commit log of `fork/postgres` and the task report; the server module does not compile yet.
+Status (milestone 1): the server starts on PostgreSQL; first-admin signup, app and page creation, publish, read back,
+and the Dev-cannot-publish role check work end to end. Test suites are not ported yet.
 
 ## Roles (phase A)
 

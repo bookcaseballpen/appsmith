@@ -77,6 +77,9 @@ public class UserData extends BaseDomain {
     private List<RecentlyUsedEntityDTO> recentlyUsedEntityIds;
 
     // List of application IDs favorited by the user
+    // Fork: jsonb like the other lists, so that the array updates ($addToSet, $pull) work on it.
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     private List<String> favoriteApplicationIds;
 

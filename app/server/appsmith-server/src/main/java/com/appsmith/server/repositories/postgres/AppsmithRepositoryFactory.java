@@ -31,8 +31,9 @@ public class AppsmithRepositoryFactory extends ReactiveRepositoryFactorySupport 
 
     @Override
     protected Object getTargetRepository(RepositoryInformation metadata) {
+        // The base class is given explicitly: the one in the repository configuration is not set for this module.
         return getTargetRepositoryViaReflection(
-                metadata, getEntityInformation(metadata.getDomainType()), postgresOperations);
+                BaseRepositoryImpl.class, getEntityInformation(metadata.getDomainType()), postgresOperations);
     }
 
     @Override

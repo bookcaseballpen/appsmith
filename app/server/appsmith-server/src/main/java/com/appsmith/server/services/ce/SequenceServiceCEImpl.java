@@ -1,13 +1,9 @@
 package com.appsmith.server.services.ce;
 
-import com.appsmith.external.helpers.ObjectIds;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.server.repositories.postgres.PostgresOperations;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
-
-import java.sql.Timestamp;
-import java.time.Instant;
 
 @RequiredArgsConstructor
 public class SequenceServiceCEImpl implements SequenceServiceCE {
@@ -19,13 +15,10 @@ public class SequenceServiceCEImpl implements SequenceServiceCE {
      */
     private Mono<Long> getNext(String name) {
         return postgresOperations.write(em -> {
-            final Timestamp now = Timestamp.from(Instant.now());
-            final Object next = em.createNativeQuery("INSERT INTO sequence (id, name, next_number, created_at,"
-                            + " updated_at) VALUES (?1, ?2, 1, ?3, ?3) ON CONFLICT (name) DO UPDATE SET next_number"
-                            + " = COALESCE(sequence.next_number, 0) + 1, updated_at = ?3 RETURNING next_number")
-                    .setParameter(1, ObjectIds.newId())
-                    .setParameter(2, name)
-                    .setParameter(3, now)
+            final Object next = em.createNativeQuery("INSERT INTO sequence (name, next_number) VALUES (?1, 1)"
+                            + " ON CONFLICT (name) DO UPDATE SET next_number = COALESCE(sequence.next_number, 0) + 1"
+                            + " RETURNING next_number")
+                    .setParameter(1, name)
                     .getSingleResult();
             return ((Number) next).longValue();
         });
