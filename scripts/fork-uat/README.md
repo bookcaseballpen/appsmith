@@ -17,7 +17,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\down.ps1            
   `powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\up.ps1 -Port 8180`.
   It returns when the server is healthy and the login page loads. The first start in a
   new worktree takes about 30 minutes (`yarn install` about 14, then the Maven build and
-  the first webpack compile, about 15); later starts take about 5 minutes.
+  the first webpack compile, about 15); later starts take about 5 minutes. A worktree
+  with the main folder's `package.json` and `yarn.lock` skips `yarn install` (see
+  "Client dependencies from the main folder").
 - **URL:** `http://localhost:<Port>` (8080 by default). Bound to 127.0.0.1 only.
 - **Sign in** with the dev-only admin, created on the worktree's empty database:
   - email `dev-admin@example.com`
@@ -72,6 +74,7 @@ per worktree.
 | `-Fast` | off | With the server: compile only the edited `.java` files (see below). |
 | `-JavaHome` | detected | JDK 25 folder. Default: `JAVA_HOME` if it is a JDK 25, else the newest `jdk-25*` under Program Files (Microsoft, Eclipse Adoptium, Java, Zulu, Amazon Corretto). Set for the server and Maven only; the global `JAVA_HOME` stays as it is. |
 | `-NoSeed` | off | Don't create the dev admin. Use it for a human UAT on a fresh database, so the first-time setup page appears. |
+| `-NoLink` | off | Run `yarn install` in the worktree instead of linking the main folder's client dependencies; removes existing links first. |
 | `-TimeoutMinutes` | `30` | How long to wait for the server and the first client compile. |
 
 ## Server changes and rebuild times
@@ -122,6 +125,38 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\up.ps1 -Restart clie
 `up.ps1` runs `yarn install` when `yarn.lock` is newer than the last install. For client
 code only, the running dev server picks up the change by itself.
 
+## Client dependencies from the main folder
+
+When a worktree has no `app\client\node_modules` and its `app\client\package.json` and
+`yarn.lock` are identical to the main folder's (the folder above `git rev-parse
+--git-common-dir`, e.g. `C:\Projects\appsmith`), and the main folder has a finished install
+(`node_modules\.yarn-state.yml`), `up.ps1` links the main folder's dependencies instead of
+running `yarn install`, and prints a line saying so. Otherwise it installs as before.
+
+The link is not one junction for the whole folder (`client-deps.ps1`):
+
+- `app\client\node_modules` is a real folder with one junction per entry of the main
+  folder's `node_modules` (about 1,950 entries);
+- Yarn's workspace links (`@appsmith/ads`, `@appsmith/wds`, `@shared/dsl`, `@shared/ast`,
+  `appsmith-rts`, ...) are absolute junctions into the main folder's `packages\`; they are
+  pointed at the worktree's own `packages\` instead, so the worktree builds its own code;
+- `node_modules\.cache` (webpack, babel-loader and tsc caches) is the worktree's own, so two
+  running dev servers never share a cache;
+- the packages' own `node_modules` (`packages\ast`, `icons`, `mcp`, `rts`,
+  `design-system\ads`, `design-system\headless`, `design-system\widgets`) are linked the
+  same way;
+- `node_modules\.fork-uat-linked` lists the linked folders.
+
+Every `up.ps1` run checks the two files again. When they no longer match (a branch changed
+the dependencies) or with `-NoLink`, it removes the links and runs a real `yarn install`.
+Don't run `yarn install` yourself in a linked worktree: it would write through the
+junctions into the main folder. A linked worktree changes when the main folder's install
+does, so reinstall the main folder only while no linked worktree is running.
+
+`down.ps1 -DeleteData` removes the links, never what they point to. Use it, or
+`up.ps1 -NoLink`, rather than deleting `node_modules` by hand: in Windows PowerShell 5.1
+`Remove-Item -Recurse` on a junction deletes the target's contents.
+
 A branch with MongoDB migrations (e.g. roles) migrates its own worktree's database only.
 
 ## Stopping and cleaning up
@@ -129,7 +164,7 @@ A branch with MongoDB migrations (e.g. roles) migrates its own worktree's databa
 ```powershell
 .\scripts\fork-uat\down.ps1                   # stop client, proxy, server, RTS; keep databases and data
 .\scripts\fork-uat\down.ps1 -StopDatabases    # also stop this worktree's Redis (and MongoDB if no other worktree is up)
-.\scripts\fork-uat\down.ps1 -DeleteData       # also drop this worktree's database, Redis volume and settings (asks first)
+.\scripts\fork-uat\down.ps1 -DeleteData       # also drop this worktree's database, Redis volume and settings, and remove the client-dependency links (asks first)
 ```
 
 All take `-Source <worktree>` (or `-Name`) to pick the instance.

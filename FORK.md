@@ -228,8 +228,10 @@ editor is read-only.":
   (`POST /api/v1/applications/import/partial/block`) and template merge.
 
 Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
-import), export, publish, git, datasources, app create, clone, fork, delete and snapshots, and user and admin
-settings. The Approver filter still applies on top.
+import), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
+app create, clone, fork, delete and snapshots, and user and admin settings. The Approver filter still applies on top.
+This filter does not refuse `POST /api/v1/applications/publish/{id}`, but the publish service does, for every role:
+an app is published only by approving a submitted release (Submit -> Approve, see "Publishing").
 
 How MCP is told apart: the MCP service (`app/client/packages/mcp`) calls the server with `Authorization: Bearer mcp_...`
 and the `X-Appsmith-Mcp-Internal` header carrying `APPSMITH_MCP_INTERNAL_SECRET`. Only then does
@@ -462,6 +464,10 @@ yarn on the host and LF line endings in `deploy/docker/fs`.
 
 The Watchtower labels of the root `Dockerfile` are not set on the fork image: Watchtower updates from a registry,
 and the fork image is local. The hook scripts stay in the image (`/watchtower-hooks`), unused.
+
+Dev instances from source (`scripts/fork-uat/`, see its README): a worktree whose `app/client/package.json` and
+`yarn.lock` match the main folder's links the main folder's client `node_modules` (one junction per entry, workspace
+packages and `.cache` kept its own) instead of a 30-minute `yarn install`; `up.ps1 -NoLink` installs instead.
 
 ## Feature flags (local defaults)
 

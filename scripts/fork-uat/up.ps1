@@ -18,6 +18,10 @@
 
   On an empty database, a dev-only admin is created (see README.md).
 
+  Client dependencies: a worktree with the main folder's app/client package.json and
+  yarn.lock links the main folder's node_modules instead of running yarn install
+  (client-deps.ps1; -NoLink installs instead).
+
 .EXAMPLE
   .\scripts\fork-uat\up.ps1
 .EXAMPLE
@@ -61,6 +65,9 @@ param(
   [switch]$Fast,
   # Don't create the dev admin on an empty database.
   [switch]$NoSeed,
+  # Run yarn install in this worktree instead of linking the main folder's client
+  # dependencies; removes existing links first.
+  [switch]$NoLink,
   # Minutes to wait for the server (the first build downloads all Maven dependencies).
   [int]$TimeoutMinutes = 30
 )
@@ -83,6 +90,8 @@ $PostgresPassword = "appsmith-dev"
 # Windows PowerShell 5.1 doesn't set $PSScriptRoot in parameter defaults.
 if (-not $Source) { $Source = Join-Path $PSScriptRoot "..\.." }
 $started = Get-Date
+
+. (Join-Path $PSScriptRoot "client-deps.ps1")
 
 function Write-Step([string]$message) {
   Write-Host ""
@@ -338,9 +347,28 @@ if ($Only -contains "db") {
 # ---- Client dependencies and the RTS bundle (needed by server and client) -----
 
 if ($Only -contains "server" -or $Only -contains "client") {
+  # A worktree with the main folder's package.json and yarn.lock links its node_modules
+  # instead of installing (client-deps.ps1). Links that no longer match are removed first,
+  # so yarn never installs through them.
+  $mainClientDir = Get-MainClientDir $repoRoot
+  $linkBlocker = if ($NoLink) { "-NoLink" } else { Get-ClientDepsLinkBlocker $clientDir $mainClientDir }
+  if ((Test-LinkedClientDeps $clientDir) -and ($linkBlocker -or -not (Test-LinkedClientDepsComplete $clientDir))) {
+    $why = if ($linkBlocker) { $linkBlocker } else { "the last linking was interrupted" }
+    Write-Step "Removing the links to the main folder's client dependencies ($why)"
+    Remove-LinkedClientDeps $clientDir
+  }
+  if (-not (Test-Path (Join-Path $clientDir "node_modules")) -and -not $linkBlocker) {
+    Write-Step "Linking app/client dependencies from $mainClientDir"
+    $count = New-LinkedClientDeps $clientDir $mainClientDir
+    Write-Host "Same package.json and yarn.lock as the main folder: linked its node_modules ($count entries) instead of running yarn install."
+  }
   $yarnState = Join-Path $clientDir "node_modules\.yarn-state.yml"
   $lockFile = Join-Path $clientDir "yarn.lock"
-  if (-not (Test-Path $yarnState) -or (Get-Item $lockFile).LastWriteTime -gt (Get-Item $yarnState).LastWriteTime) {
+  # A linked folder was just checked against the main folder's files; its copied
+  # .yarn-state.yml can be older than this worktree's checkout of yarn.lock.
+  if ((Test-LinkedClientDeps $clientDir) -and (Test-LinkedClientDepsComplete $clientDir)) {
+    Write-Host "app/client/node_modules is linked to $mainClientDir."
+  } elseif (-not (Test-Path $yarnState) -or (Get-Item $lockFile).LastWriteTime -gt (Get-Item $yarnState).LastWriteTime) {
     Write-Step "yarn install (app/client)"
     $env:CYPRESS_INSTALL_BINARY = "0"
     $env:HUSKY = "0"
