@@ -10,6 +10,7 @@ import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.WorkspaceService;
 import lombok.extern.slf4j.Slf4j;
@@ -88,7 +89,8 @@ class CustomJSLibServiceAuthorizationTest {
                 .block();
 
         // Publish so the published-mode manifest is populated too.
-        applicationPageService.publish(createdApp.getId(), true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(createdApp.getId(), true))
+                .block();
 
         return createdApp;
     }

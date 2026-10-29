@@ -19,6 +19,7 @@ import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.ApplicationSnapshotRepository;
 import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.PagePermission;
 import lombok.extern.slf4j.Slf4j;
@@ -148,7 +149,8 @@ public class NewPageServiceTest {
                     Mono<PageDTO> pageDTOMono =
                             applicationPageService.createPage(pageDTO).cache();
                     return pageDTOMono
-                            .then(applicationPageService.publish(application1.getId(), true))
+                            .then(PublishApproval.asApprovedRelease(
+                                    applicationPageService.publish(application1.getId(), true)))
                             .then(pageDTOMono);
                 })
                 .flatMap(pageDTO -> newPageService.findApplicationPages(
@@ -338,7 +340,8 @@ public class NewPageServiceTest {
         pageDTO.setName(pageName);
         applicationPageService.createPage(pageDTO).block();
 
-        applicationPageService.publish(applicationId, true).block();
+        PublishApproval.asApprovedRelease(applicationPageService.publish(applicationId, true))
+                .block();
 
         List<NewPage> publishedPages = newPageService
                 .findNewPagesByApplicationId(applicationId, pagePermission.getReadPermission())

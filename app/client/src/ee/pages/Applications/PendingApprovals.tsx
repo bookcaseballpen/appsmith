@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { useSelector } from "react-redux";
 import {
@@ -73,17 +73,29 @@ export function PendingApprovals() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<ApplicationApproval | null>(null);
   const [comment, setComment] = useState("");
+  // Requests can finish after the home page is left; their answers are then dropped.
+  const isMounted = useRef(true);
+
+  useEffect(function trackMounted() {
+    isMounted.current = true;
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
-      setPending(
-        await callApprovalApi<ApplicationApproval[]>(
-          async () => ApprovalApi.fetchPending(),
-          "Could not load the releases waiting for approval",
-        ),
+      const approvals = await callApprovalApi<ApplicationApproval[]>(
+        async () => ApprovalApi.fetchPending(),
+        "Could not load the releases waiting for approval",
       );
+
+      if (isMounted.current) setPending(approvals);
     } catch (error) {
-      toast.show((error as Error).message, { kind: "error" });
+      if (isMounted.current) {
+        toast.show((error as Error).message, { kind: "error" });
+      }
     }
   }, []);
 
@@ -108,8 +120,10 @@ export function PendingApprovals() {
       } catch (error) {
         toast.show((error as Error).message, { kind: "error" });
       } finally {
-        setBusyId(null);
-        load();
+        if (isMounted.current) {
+          setBusyId(null);
+          load();
+        }
       }
     },
     [load],
@@ -136,7 +150,8 @@ export function PendingApprovals() {
       async () => ApprovalApi.reject(approval.applicationId, comment.trim()),
       `${approval.applicationName} rejected`,
     );
-    setComment("");
+
+    if (isMounted.current) setComment("");
   }, [comment, rejecting, review]);
 
   if (!isReviewer) return null;

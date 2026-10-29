@@ -11,6 +11,7 @@ import com.appsmith.server.dtos.PageDTO;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.newpages.base.NewPageService;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.WorkspaceService;
 import com.appsmith.server.solutions.ApplicationPermission;
@@ -117,7 +118,7 @@ class PageEditorModeReadControllerTest {
                 asEditor(applicationPageService.createApplication(application, workspace.getId()));
         assertThat(createdApplication).isNotNull();
         String pageId = createdApplication.getPages().get(0).getId();
-        asEditor(applicationPageService.publish(createdApplication.getId(), true));
+        asEditor(PublishApproval.asApprovedRelease(applicationPageService.publish(createdApplication.getId(), true)));
         NewPage publishedPage =
                 newPageService.getByIdWithoutPermissionCheck(pageId).block();
         assertThat(publishedPage).isNotNull();

@@ -61,9 +61,9 @@ describe("PendingApprovals", () => {
     expect(screen.getByTestId("t--pending-approvals-count").textContent).toBe(
       "1",
     );
-    expect(
-      screen.getByText("Preview").closest("a")?.getAttribute("href"),
-    ).toBe("/app/application/page-page-1/edit");
+    expect(screen.getByText("Preview").closest("a")?.getAttribute("href")).toBe(
+      "/app/application/page-page-1/edit",
+    );
   });
 
   it("approves and reloads the list", async () => {
@@ -81,6 +81,29 @@ describe("PendingApprovals", () => {
       ),
     );
     expect(mockedApi.approve).toHaveBeenCalledWith("app-1");
+  });
+
+  it("drops a list that arrives after the page was left", async () => {
+    let answer: (value: never) => void = () => undefined;
+
+    mockedApi.fetchPending.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as never,
+    );
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    const { unmount } = renderAs("APPROVER");
+
+    unmount();
+    answer(ok([waiting]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockedApi.fetchPending).toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("needs a comment to reject", async () => {
