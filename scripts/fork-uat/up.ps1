@@ -8,7 +8,7 @@
     db      Shared MongoDB replica set (container appsmith-dev-mongo, 127.0.0.1:27017,
             volume appsmith-dev-mongo; one database per worktree) and a Redis for this
             worktree (127.0.0.1:<Port+4>). Both restart with Docker and stay up.
-            With -Db postgres, a PostgreSQL 16 for this worktree (container
+            With -DbType postgres, a PostgreSQL 16 for this worktree (container
             appsmith-dev-<Name>-postgres, 127.0.0.1:<Port+5>) instead of MongoDB.
     server  Java server on 127.0.0.1:<Port+1> (local JDK 25 + Maven) and RTS on
             127.0.0.1:<Port+2> (local Node). The first run builds every module and the
@@ -27,7 +27,7 @@
 .EXAMPLE
   .\scripts\fork-uat\up.ps1 -Restart server -Full   # also rebuild the plugins
 .EXAMPLE
-  .\scripts\fork-uat\up.ps1 -Db postgres -Port 8280   # internal database on PostgreSQL
+  .\scripts\fork-uat\up.ps1 -DbType postgres -Port 8280   # internal database on PostgreSQL
 #>
 [CmdletBinding()]
 param(
@@ -42,8 +42,9 @@ param(
   # Internal database: mongo (the shared appsmith-dev-mongo) or postgres (a PostgreSQL 16
   # container for this instance on 127.0.0.1:<Port+5>). Default: postgres for a worktree
   # that has the PostgreSQL port (Flyway migrations in appsmith-server), otherwise mongo.
+  # (Not "-Db": PowerShell reserves that as an alias of -Debug.)
   [ValidateSet("mongo", "postgres")]
-  [string]$Db,
+  [string]$DbType,
   # Run only these steps: db, server, client.
   [ValidateSet("db", "server", "client")]
   [string[]]$Only = @("db", "server", "client"),
@@ -221,11 +222,11 @@ if ($Restart -and (Test-Path $instanceFile)) {
   $instance = Get-Content -Raw $instanceFile | ConvertFrom-Json
   if (-not $PSBoundParameters.ContainsKey("Port")) { $Port = [int]$instance.port }
   if (-not $PSBoundParameters.ContainsKey("Database")) { $Database = $instance.db }
-  if (-not $PSBoundParameters.ContainsKey("Db") -and $instance.PSObject.Properties["dbKind"]) { $Db = $instance.dbKind }
+  if (-not $PSBoundParameters.ContainsKey("DbType") -and $instance.PSObject.Properties["dbKind"]) { $DbType = $instance.dbKind }
 }
-if (-not $Db) {
+if (-not $DbType) {
   $flywayDir = Join-Path $repoRoot "app\server\appsmith-server\src\main\resources\db\migration\postgres"
-  $Db = if (Test-Path $flywayDir) { "postgres" } else { "mongo" }
+  $DbType = if (Test-Path $flywayDir) { "postgres" } else { "mongo" }
 }
 
 $ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4; postgres = $Port + 5 }
@@ -239,13 +240,13 @@ $rtsDir = Join-Path $clientDir "packages\rts"
 $node = (Get-Command node).Source
 
 # Remembered so down.ps1 and -Restart find the same instance.
-@{ source = $repoRoot; port = $Port; db = $Database; dbKind = $Db; name = $Name } | ConvertTo-Json |
+@{ source = $repoRoot; port = $Port; db = $Database; dbKind = $DbType; name = $Name } | ConvertTo-Json |
   Set-Content -Encoding UTF8 $instanceFile
 
 if ($Restart) { $Only = @($Restart) }
 
 Write-Host "Instance $Name ($branch) from $repoRoot"
-if ($Db -eq "postgres") {
+if ($DbType -eq "postgres") {
   $databaseText = "PostgreSQL {0} on 127.0.0.1:{1}" -f $Database, $ports.postgres
 } else {
   $databaseText = "MongoDB database $Database"
@@ -270,7 +271,7 @@ if ($Only -contains "db") {
   }
 }
 
-if ($Only -contains "db" -and $Db -eq "postgres") {
+if ($Only -contains "db" -and $DbType -eq "postgres") {
   if (-not (Test-Container $postgresContainer)) {
     Invoke-Native docker @("run", "--detach", "--name", $postgresContainer, "--network", $Network,
       "--restart", "unless-stopped", "--publish", "127.0.0.1:$($ports.postgres):5432",
@@ -293,7 +294,7 @@ if ($Only -contains "db" -and $Db -eq "postgres") {
   Write-Host "PostgreSQL is up on 127.0.0.1:$($ports.postgres) (database $Database; the server creates the schema)."
 }
 
-if ($Only -contains "db" -and $Db -eq "mongo") {
+if ($Only -contains "db" -and $DbType -eq "mongo") {
   if (-not (Test-Container $MongoContainer)) {
     Invoke-Native docker @("run", "--detach", "--name", $MongoContainer, "--network", $Network,
       "--restart", "unless-stopped", "--publish", "127.0.0.1:27017:27017",
@@ -430,7 +431,7 @@ if ($Only -contains "server") {
   }
   $localEnv.PORT = $ports.server
   $localEnv.APPSMITH_RTS_PORT = $ports.rts
-  if ($Db -eq "postgres") {
+  if ($DbType -eq "postgres") {
     $localEnv.APPSMITH_DB_URL = "postgresql://${PostgresUser}:${PostgresPassword}@127.0.0.1:$($ports.postgres)/$Database"
   } else {
     $localEnv.APPSMITH_DB_URL = "mongodb://127.0.0.1:27017/${Database}?directConnection=true"

@@ -44,13 +44,37 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
 - Mongo-only operations became SQL in `Custom*RepositoryCEImpl`: publishing pages and actions is one UPDATE that copies
   the unpublished column, the first-admin setup lock is `INSERT ... ON CONFLICT DO NOTHING` on
   `super_user_setup_lock`, the sequence is an upsert, `setDefaultPage` rewrites the `pages` jsonb array.
-- Multi-document Mongo transactions (imports, git) are not atomic yet: `TransactionalOperator` is a pass-through.
-- Not ported yet: the startup sync of `APPSMITH_ADMIN_EMAILS` to instance admins (Mongock's `Migration10000`), the
-  EE-downgrade guard (it read Mongock's audit log), and the plugins' own Mongo use is untouched (they talk to user
-  databases, not the internal one).
+- Transactions: the `TransactionalOperator` bean is `PostgresTransactionalOperator`. `transactional(...)` opens one JPA
+  transaction on a thread of its own and puts it in the Reactor context; every `PostgresOperations` call inside runs on
+  that thread and joins it, so an import (or any other upstream `transactional` block) commits or rolls back as a
+  whole. It commits when the publisher completes, rolls back on error or cancel; a nested `transactional` joins the
+  outer one.
+- Unique violations (SQLSTATE 23505) become Spring's `DuplicateKeyException` with the constraint name in the message,
+  and a failed insert gives back the id `save` generated, as on MongoDB. Services find name clashes by Mongo index
+  name, so `V3__unique_name_indexes.sql` creates `workspace_app_deleted_gitApplicationMetadata` and
+  `workspace_datasource_deleted_compound_index` under those names (`NULLS NOT DISTINCT`, PostgreSQL 15+). This keeps
+  "App (1)" naming on fork and import.
+- Soft delete: entities have no Hibernate `@Where(deleted_at IS NULL)`; every repository query filters `deleted_at`
+  itself. With the filter, saving an archived row could not see it and inserted it again (duplicate primary key).
+- `APPSMITH_ADMIN_EMAILS` is applied at every start by `migrations/SuperUserSync` (an `ApplicationRunner`, replacing
+  Mongock's `Migration10000`): the listed users become exactly the instance and organization admins, missing users are
+  created disabled, and an empty value removes every admin, as upstream did.
+- Release approvals are the `application_approval` table (`V4__application_approval.sql`).
+- Not ported: the EE-downgrade guard (it read Mongock's audit log). The plugins' own Mongo use is untouched (they talk
+  to user databases, not the internal one).
+- `scripts/fork-uat/up.ps1 -DbType postgres` (the default in a worktree that has `db/migration/postgres`) runs the instance
+  on its own PostgreSQL 16 container, `appsmith-dev-<Name>-postgres` on `127.0.0.1:<Port+5>`.
 
-Status (milestone 1): the server starts on PostgreSQL; first-admin signup, app and page creation, publish, read back,
-and the Dev-cannot-publish role check work end to end. Test suites are not ported yet.
+Status (milestone 2): on a `-DbType postgres` fork-uat database the server applies V1–V4 and passes an end-to-end check
+over HTTP: first-admin signup, app creation, export, import as a new app, direct publish refused, submit and approve
+publishes, an admin import onto the live app turns the approval back to draft, a Dev cannot import over the live app,
+publish or approve but can submit, the admin rejects, and the published version stays as approved. Tested on Testcontainers PostgreSQL: the repository tests,
+imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial import/export 4 + 4,
+`ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
+(`ApplicationApprovalServiceTest` 38, `InstanceRolePermissionsTest` 78, `EditorReadOnlyHttpTest` 5) and the Postgres
+tests (transactions, unique names, soft delete, admin sync). The datasource plugins postgres, mysql, mssql and REST API
+and JS objects run on a live server in edit and view mode. The rest of the server suite has not been run on PostgreSQL.
+The REST API plugin refuses loopback hosts (SSRF filter); for local tests only, `APPSMITH_DISABLE_SSRF_FILTER=true`.
 
 ## Roles (phase A)
 
