@@ -87,7 +87,7 @@ package. Classes, not test methods:
 |---|---|---|---|---|
 | 1 | 27 small packages (acl … widgets, controllers, domains, imports, exports), `ServerApplicationTests` | 66 | 2 | 0 |
 | 2 | `repositories`, `configurations` | 31 | 0 | 1 |
-| 3 | `helpers` | | | |
+| 3 | `helpers` | 32 | 0 | 0 |
 | 4 | `solutions` | | | |
 | 5 | `git` | | | |
 | 6 | `services` | | | |
