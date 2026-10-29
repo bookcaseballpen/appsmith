@@ -115,7 +115,10 @@ public class SeedMongoData {
                     log.debug("Create plugin: {}", plugin);
                     return plugin;
                 })
-                .flatMap(pluginRepository::save);
+                // Fork: every test context of the run shares one PostgreSQL container, so seed only what is missing.
+                .flatMap(plugin -> pluginRepository
+                        .findByPackageName(plugin.getPackageName())
+                        .switchIfEmpty(Mono.defer(() -> pluginRepository.save(plugin))));
 
         Organization defaultOrganization = new Organization();
         defaultOrganization.setDisplayName("Default");
@@ -130,6 +133,10 @@ public class SeedMongoData {
 
         Flux<User> userFlux = Flux.just(userData)
                 .zipWith(defaultOrganizationIdMono.repeat())
+                .filterWhen(tuple -> userRepository
+                        .findByEmailAndOrganizationId((String) tuple.getT1()[1], tuple.getT2())
+                        .hasElement()
+                        .map(exists -> !exists))
                 .flatMap(tuple -> {
                     Object[] array = tuple.getT1();
                     String organizationId = tuple.getT2();

@@ -20,7 +20,6 @@ import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.services.WorkspaceService;
 import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,10 +44,6 @@ import static org.mockito.ArgumentMatchers.any;
 
 // All the test case are for failure or exception. Test cases for valid json file is already present in
 // ImportExportApplicationServiceTest class
-
-// Fork: imports are not atomic on PostgreSQL yet (TransactionalOperator is a pass-through, see FORK.md); these tests
-// assert the rollback, so they wait for that milestone.
-@Disabled("Fork: imports are not atomic on PostgreSQL yet")
 @SpringBootTest
 @TestPropertySource(properties = "property=C")
 @DirtiesContext

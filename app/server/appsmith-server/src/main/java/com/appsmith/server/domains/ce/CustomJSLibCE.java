@@ -6,15 +6,16 @@ import com.appsmith.external.models.RefAwareDomain;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
 import com.appsmith.server.helpers.CollectionUtils;
+import com.appsmith.server.repositories.postgres.NulSafeTextConverter;
 import com.fasterxml.jackson.annotation.JsonView;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.Type;
 
 import java.util.ArrayList;
@@ -66,18 +67,8 @@ public class CustomJSLibCE extends BaseDomain {
     /* `Tern` tool definitions - it defines the methods exposed by the library. It helps us with auto-complete
     feature i.e. the function name showing up as suggestion when user has partially typed it. */
     @JsonView({Views.Public.class, Git.class})
-    @ColumnTransformer(
-            // This is a `bytea` type column in Postgres, because there's a not-so-rare chance that this value can
-            // contain
-            // the NUL character. But Postgres doesn't allow `text` columns to contain the NUL character, so we have to
-            // use
-            // a `bytea` column type. But since everything else (client, git, rest of the backend code, MongoDB version)
-            // needs this field to be a `String`, we keep it to `String`, but apply read/write converters when
-            // interacting
-            // with the database.
-            // We also assume UTF8 here, since this value is known to always be valid JSON, which is UTF8-only.
-            read = "convert_from(defs, 'utf8')",
-            write = "convert_to(?, 'utf8')")
+    // Fork: a text column; the value is JSON, so a raw NUL (which text can't hold) is stored escaped.
+    @Convert(converter = NulSafeTextConverter.class)
     String defs;
 
     public CustomJSLibCE(String name, Set<String> accessor, String url, String docsUrl, String version, String defs) {

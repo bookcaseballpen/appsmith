@@ -7,6 +7,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -16,13 +17,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Function;
 
 /**
  * Fork: runs the blocking JPA/JDBC work of the repositories on {@code boundedElastic}, each call in its own
- * transaction, and offers the SQL statements the reactive repositories are built from. Callers keep the reactive
+ * transaction unless a {@link PostgresTransactionalOperator} wraps it, and offers the SQL statements the reactive repositories are built from. Callers keep the reactive
  * API they had on MongoDB.
  */
 @Slf4j
@@ -43,8 +45,7 @@ public class PostgresOperations {
     }
 
     public <R> Mono<R> read(Function<EntityManager, R> work) {
-        return Mono.fromCallable(() -> readTemplate.execute(status -> work.apply(entityManager)))
-                .subscribeOn(Schedulers.boundedElastic());
+        return run(readTemplate, work);
     }
 
     public <R> Flux<R> readMany(Function<EntityManager, List<R>> work) {
@@ -52,13 +53,49 @@ public class PostgresOperations {
     }
 
     public <R> Mono<R> write(Function<EntityManager, R> work) {
-        return Mono.fromCallable(() -> writeTemplate.execute(status -> work.apply(entityManager)))
-                .subscribeOn(Schedulers.boundedElastic());
+        return run(writeTemplate, work);
+    }
+
+    /**
+     * Runs {@code work} in its own transaction, or, inside {@link PostgresTransactionalOperator}, on the thread of the
+     * surrounding transaction, which it then joins. The result is handed back on {@code boundedElastic}, so the
+     * transaction thread only ever runs statements.
+     */
+    private <R> Mono<R> run(TransactionTemplate template, Function<EntityManager, R> work) {
+        return Mono.deferContextual(context -> {
+            final Mono<R> call = Mono.fromCallable(() -> template.execute(status -> work.apply(entityManager)))
+                    .onErrorMap(PostgresOperations::isUniqueViolation, PostgresOperations::toDuplicateKey);
+            final PostgresTransaction tx = context.getOrDefault(PostgresTransaction.CONTEXT_KEY, null);
+            if (tx == null) {
+                return call.subscribeOn(Schedulers.boundedElastic());
+            }
+            return call.subscribeOn(tx.scheduler()).publishOn(Schedulers.boundedElastic());
+        });
     }
 
     /** Runs {@code work} in a transaction on the calling thread; for code that is already blocking. */
     public <R> R writeBlocking(Function<EntityManager, R> work) {
         return writeTemplate.execute(status -> work.apply(entityManager));
+    }
+
+    /** SQLSTATE of a unique constraint violation. */
+    private static final String UNIQUE_VIOLATION = "23505";
+
+    static boolean isUniqueViolation(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException && UNIQUE_VIOLATION.equals(sqlException.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The services catch Spring's {@link DuplicateKeyException}, as Spring Data MongoDB threw it, and some look for the
+     * index name in its message; the message of the Hibernate exception names the constraint.
+     */
+    private static Throwable toDuplicateKey(Throwable error) {
+        return error instanceof DuplicateKeyException ? error : new DuplicateKeyException(error.getMessage(), error);
     }
 
     // ---- Statements (call inside read/write) -------------------------------------------------------------------
@@ -149,10 +186,20 @@ public class PostgresOperations {
     public static <T extends BaseDomain> T save(EntityManager em, T entity) {
         final BaseDomain existing = entity.getId() == null ? null : em.find(entity.getClass(), entity.getId());
         if (existing == null) {
+            final boolean idGenerated = entity.getId() == null;
             // Assigns the id before Hibernate looks at it.
             entity.prePersist();
-            em.persist(entity);
-            em.flush();
+            try {
+                em.persist(entity);
+                em.flush();
+            } catch (RuntimeException e) {
+                // Like Mongo, a failed insert leaves the object without an id, so that callers which retry (for
+                // example with a suffixed name after a duplicate key) insert it again rather than look it up.
+                if (idGenerated) {
+                    entity.setId(null);
+                }
+                throw e;
+            }
             em.detach(entity);
             return entity;
         }
