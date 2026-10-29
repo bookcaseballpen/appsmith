@@ -52,7 +52,6 @@ import static com.appsmith.external.constants.AnalyticsConstants.GOAL;
 import static com.appsmith.external.constants.AnalyticsConstants.IP;
 import static com.appsmith.external.constants.AnalyticsConstants.IP_ADDRESS;
 import static com.appsmith.external.constants.AnalyticsConstants.SUBSCRIBE_MARKETING;
-import static com.appsmith.server.constants.Appsmith.DEFAULT_ORIGIN_HEADER;
 import static com.appsmith.server.constants.EnvVariables.APPSMITH_ADMIN_EMAILS;
 import static com.appsmith.server.constants.EnvVariables.APPSMITH_DISABLE_TELEMETRY;
 import static com.appsmith.server.constants.ce.FieldNameCE.EMAIL;
@@ -416,7 +415,8 @@ public class UserSignupCEImpl implements UserSignupCE {
                 .onErrorResume(error -> {
                     String referer = exchange.getRequest().getHeaders().getFirst("referer");
                     if (referer == null) {
-                        referer = DEFAULT_ORIGIN_HEADER;
+                        // Fork: this instance's own login page, not app.appsmith.com (was DEFAULT_ORIGIN_HEADER).
+                        referer = "/user/login";
                     }
                     final URIBuilder redirectUriBuilder =
                             new URIBuilder(URI.create(referer)).setParameter("error", error.getMessage());

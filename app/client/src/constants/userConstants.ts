@@ -12,6 +12,8 @@ export interface User {
   photoId?: string;
   isSuperUser: boolean;
   role?: string;
+  // Fork: the single workspace every app lives in; the home page lists its apps.
+  defaultWorkspaceId?: string;
   proficiency?: string;
   useCase?: string;
   isConfigurable: boolean;

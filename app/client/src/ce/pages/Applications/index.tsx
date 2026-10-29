@@ -158,6 +158,12 @@ import OrganizationDropdown from "components/OrganizationDropdown";
 import { fetchMyOrganizations } from "ee/actions/organizationActions";
 import type { Organization } from "ee/api/OrganizationApi";
 import { useIsCloudBillingEnabled } from "hooks";
+import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
+import {
+  areTemplatesHidden,
+  isOnboardingHidden,
+  isWorkspaceUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 
 function GitModals() {
   const isGitModEnabled = useGitModEnabled();
@@ -587,7 +593,8 @@ export function LeftPane(props: LeftPaneProps) {
   const isMobile = useIsMobileDevice();
   const isCloudBillingEnabled = useIsCloudBillingEnabled();
 
-  if (isMobile) return null;
+  // Fork: no workspace list or "create workspace"; the home page shows the default workspace's apps.
+  if (isMobile || isWorkspaceUiHidden()) return null;
 
   return (
     <LeftPaneWrapper isBannerVisible={isBannerVisible}>
@@ -666,8 +673,14 @@ export const ApplicationsWrapper = styled.div<{
 }>`
   height: calc(100vh - ${(props) => props.theme.homePage.search.height - 40}px);
   overflow: auto;
-  margin-left: ${(props) => props.theme.homePage.leftPane.width}px;
-  width: calc(100% - ${(props) => props.theme.homePage.leftPane.width}px);
+  /* Fork: full width when the workspace list (LeftPane) is hidden. */
+  margin-left: ${(props) =>
+    isWorkspaceUiHidden() ? 0 : props.theme.homePage.leftPane.width}px;
+  width: calc(
+    100% -
+      ${(props) =>
+        isWorkspaceUiHidden() ? 0 : props.theme.homePage.leftPane.width}px
+  );
   scroll-behavior: smooth;
   ${({ isBannerVisible, isMobile }) =>
     isBannerVisible
@@ -711,6 +724,7 @@ export function ApplicationsSection(props: any) {
   const isAiAgentFlowEnabled = useSelector(getIsAiAgentFlowEnabled);
   const isAiAgentInstanceEnabled = useSelector(getIsAiAgentInstanceEnabled);
   const isAnvilEnabled = useSelector(getIsAnvilLayoutEnabled);
+  const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
   const currentUser = useSelector(getCurrentUser);
   const isMobile = useIsMobileDevice();
   const urlParams = new URLSearchParams(location.search);
@@ -909,10 +923,13 @@ export function ApplicationsSection(props: any) {
       activeWorkspace.userPermissions,
       PERMISSION_TYPE.MANAGE_WORKSPACE,
     );
-    const canInviteToWorkspace = isPermitted(
-      activeWorkspace.userPermissions,
-      PERMISSION_TYPE.INVITE_USER_TO_WORKSPACE,
-    );
+    // Fork: no workspace invite (one hidden workspace; admins manage users in Admin settings).
+    const canInviteToWorkspace =
+      !isWorkspaceUiHidden() &&
+      isPermitted(
+        activeWorkspace.userPermissions,
+        PERMISSION_TYPE.INVITE_USER_TO_WORKSPACE,
+      );
     const canDeleteWorkspace = hasDeleteWorkspacePermission(
       activeWorkspace?.userPermissions || [],
     );
@@ -943,11 +960,13 @@ export function ApplicationsSection(props: any) {
       }
     };
 
+    // Fork: no workspace settings, rename, delete, leave or members.
     const showWorkspaceMenuOptions =
-      canInviteToWorkspace ||
-      hasManageWorkspacePermissions ||
-      (canDeleteWorkspace && applications.length === 0) ||
-      renderManageEnvironmentMenu;
+      !isWorkspaceUiHidden() &&
+      (canInviteToWorkspace ||
+        hasManageWorkspacePermissions ||
+        (canDeleteWorkspace && applications.length === 0) ||
+        renderManageEnvironmentMenu);
 
     const handleResetMenuState = () => {
       setWorkspaceToOpenMenu(null);
@@ -995,14 +1014,16 @@ export function ApplicationsSection(props: any) {
                 workspaceId={selectedWorkspaceIdForImportApplication}
               />
             )}
-            <CreateNewAppFromTemplatesWrapper
-              currentWorkspaceId={activeWorkspaceId}
-              isOpen={isCreateAppFromTemplateModalOpen}
-              onModalClose={onCreateAppFromTemplatesModalClose}
-            />
+            {!areTemplatesHidden() && (
+              <CreateNewAppFromTemplatesWrapper
+                currentWorkspaceId={activeWorkspaceId}
+                isOpen={isCreateAppFromTemplateModalOpen}
+                onModalClose={onCreateAppFromTemplatesModalClose}
+              />
+            )}
             {!isLoadingResources && (
               <WorkspaceShareUsers>
-                <SharedUserList />
+                {!isWorkspaceUiHidden() && <SharedUserList />}
                 {canInviteToWorkspace && !isMobile && (
                   <FormDialogComponent
                     Form={WorkspaceInviteUsersForm}
@@ -1140,7 +1161,7 @@ export function ApplicationsSection(props: any) {
       isMobile={isMobile}
     >
       {workspacesListComponent}
-      <GitModals />
+      {isBuiltInGitEnabled && <GitModals />}
       <ReconnectDatasourceModal />
     </ApplicationContainer>
   );
@@ -1167,6 +1188,7 @@ export const ApplictionsMainPage = (props: any) => {
   const currentOrganizationId = useSelector(activeOrganizationId);
   const isCloudBillingEnabled = useIsCloudBillingEnabled();
   const hasFavorites = useSelector(getHasFavorites);
+  const currentUser = useSelector(getCurrentUser);
 
   // TODO: Fix this the next time the file is edited
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1183,17 +1205,31 @@ export const ApplictionsMainPage = (props: any) => {
   }
 
   // Inject virtual Favorites workspace at the top if user has favorites or URL is Favorites (e.g. after 404 redirect)
+  // Fork: not with the workspace list hidden, where it would replace the apps as the default view.
   if (
+    !isWorkspaceUiHidden() &&
     (hasFavorites || workspaceIdFromQueryParams === FAVORITES_KEY) &&
     !isFetchingWorkspaces
   ) {
     workspaces = [DEFAULT_FAVORITES_WORKSPACE, ...workspaces];
   }
 
+  // Fork: with the workspace list hidden, the home page shows the default workspace ("Apps") the server reports.
+  const defaultWorkspaceId = (
+    (isWorkspaceUiHidden() &&
+      workspaces.find(
+        (workspace: Workspace) =>
+          workspace.id === currentUser?.defaultWorkspaceId,
+      )) ||
+    workspaces[0]
+  )?.id;
+
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<
     string | undefined
   >(
-    workspaceIdFromQueryParams ? workspaceIdFromQueryParams : workspaces[0]?.id,
+    workspaceIdFromQueryParams
+      ? workspaceIdFromQueryParams
+      : defaultWorkspaceId,
   );
 
   useEffect(() => {
@@ -1206,7 +1242,7 @@ export const ApplictionsMainPage = (props: any) => {
     setActiveWorkspaceId(
       workspaceIdFromQueryParams
         ? workspaceIdFromQueryParams
-        : workspaces[0]?.id,
+        : defaultWorkspaceId,
     );
 
     if (
@@ -1263,7 +1299,7 @@ export const ApplictionsMainPage = (props: any) => {
             isBannerVisible={!!isBannerVisible}
             isMobile={matches}
           >
-            {!isFetchingWorkspaces && matches && (
+            {!isFetchingWorkspaces && matches && !isWorkspaceUiHidden() && (
               <WorkspaceSelectorWrapper>
                 <Select
                   onSelect={(val) =>
@@ -1357,7 +1393,11 @@ export class Applications<
   }
 
   public render() {
-    if (this.props.currentApplicationIdForCreateNewApp) {
+    // Fork: no first-app onboarding screen; the app list is always shown.
+    if (
+      this.props.currentApplicationIdForCreateNewApp &&
+      !isOnboardingHidden()
+    ) {
       // FOR NEW USER
       // Workspace id condition is added to ensure that we have workspace id present before we show 3 options
       // as workspace id is required to fetch plugins

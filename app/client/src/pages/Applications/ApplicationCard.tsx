@@ -56,6 +56,7 @@ import {
   createMessage,
 } from "ee/constants/messages";
 import ForkApplicationModal from "./ForkApplicationModal";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 import { getExportAppAPIRoute } from "ee/constants/ApiConstants";
 import { builderURL, viewerURL } from "ee/RouteBuilder";
 import history from "utils/history";
@@ -248,7 +249,8 @@ export function ApplicationCard(props: ApplicationCardProps) {
     }
 
     // add fork app option to menu
-    if (hasEditPermission) {
+    // Fork: forking copies the app into a workspace picked from a list; there is only one hidden workspace.
+    if (hasEditPermission && !isWorkspaceUiHidden()) {
       moreActionItems.push({
         onSelect: forkApplicationInitiate,
         children: "Fork",

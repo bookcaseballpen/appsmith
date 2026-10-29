@@ -17,6 +17,7 @@ import FormDialogComponent from "components/editorComponents/form/FormDialogComp
 import { getCurrentAppWorkspace } from "ee/selectors/selectedWorkspaceSelectors";
 import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 interface ShareButtonProps {
   currentApplicationDetails?: ApplicationPayload;
@@ -82,11 +83,16 @@ const ShareButton = (props: ShareButtonProps) => {
           hideDefaultTrigger
           isOpen={showModal}
           onClose={() => setShowModal(false)}
-          title={createMessage(
-            APPLICATION_INVITE,
-            currentWorkspace?.name,
-            !isGACEnabled,
-          )}
+          // Fork: no workspace invite (AppInviteUsersForm), only the app URL.
+          title={
+            isWorkspaceUiHidden()
+              ? createMessage(SHARE_APP)
+              : createMessage(
+                  APPLICATION_INVITE,
+                  currentWorkspace?.name,
+                  !isGACEnabled,
+                )
+          }
           workspace={currentWorkspace}
         />
       )}

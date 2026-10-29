@@ -65,6 +65,10 @@ import CustomWidgetBuilderLoader from "pages/Editor/CustomWidgetBuilder/loader";
 import { getIsConsolidatedPageLoading } from "selectors/ui";
 import { useFeatureFlagOverride } from "utils/hooks/useFeatureFlagOverride";
 import { SentryRoute } from "components/SentryRoute";
+import {
+  areTemplatesHidden,
+  isWorkspaceUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 
 export const loadingIndicator = <PageLoadingBar />;
 
@@ -80,7 +84,10 @@ export function Routes() {
       <SentryRoute component={LandingScreen} exact path={BASE_URL} />
       <Redirect exact from={BASE_LOGIN_URL} to={AUTH_LOGIN_URL} />
       <Redirect exact from={BASE_SIGNUP_URL} to={SIGN_UP_URL} />
-      <SentryRoute component={WorkspaceLoader} path={WORKSPACE_URL} />
+      {/* Fork: no workspace settings, members or invite pages (one hidden workspace). */}
+      {!isWorkspaceUiHidden() && (
+        <SentryRoute component={WorkspaceLoader} path={WORKSPACE_URL} />
+      )}
       <SentryRoute component={Users} exact path={USERS_URL} />
       <SentryRoute component={UserAuth} path={USER_AUTH_URL} />
       <SentryRoute
@@ -90,7 +97,10 @@ export function Routes() {
       />
       <SentryRoute component={SignupSuccess} exact path={SIGNUP_SUCCESS_URL} />
       <SentryRoute component={Setup} exact path={SETUP} />
-      <SentryRoute component={TemplatesListLoader} path={TEMPLATES_PATH} />
+      {/* Fork: no template gallery. */}
+      {!areTemplatesHidden() && (
+        <SentryRoute component={TemplatesListLoader} path={TEMPLATES_PATH} />
+      )}
       <Redirect
         exact
         from={ADMIN_SETTINGS_PATH}
