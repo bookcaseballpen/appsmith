@@ -88,13 +88,21 @@ package. Classes, not test methods:
 | 1 | 27 small packages (acl … widgets, controllers, domains, imports, exports), `ServerApplicationTests` | 66 | 2 | 0 |
 | 2 | `repositories`, `configurations` | 31 | 0 | 1 |
 | 3 | `helpers` | 32 | 0 | 0 |
-| 4 | `solutions` | | | |
+| 4 | `solutions` | 18 | 1 | 0 |
 | 5 | `git` | | | |
 | 6 | `services` | | | |
 
 Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
 alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
-default-workspace config of another context).
+default-workspace config of another context). `ActionExecutionSolutionCETest` (1 test,
+`executeAction_actionOnMockDatasource_success`) needs the cloud's mock datasources, which tests point at
+`127.0.0.1:1`; it fails on MongoDB too.
+
+Fixed from the suite: `V5__remaining_unique_indexes.sql` adds the unique indexes Mongo had beyond names (one cached
+structure per datasource and environment, storages, snapshot chunks, custom JS libraries, reset tokens, URL slugs).
+V2 now names the seed's columns with `SnakeCaseNamingStrategy`; its own function had turned `generateCRUDPageComponent`
+and `isDependentOnCS` into columns that do not exist, so the plugins lost them and "generate CRUD page" was refused.
+`V6__plugin_seed_acronym_columns.sql` fills them in on databases seeded before the fix.
 
 Skipped: `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
 endpoint).

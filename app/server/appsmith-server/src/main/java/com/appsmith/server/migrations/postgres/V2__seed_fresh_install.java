@@ -1,6 +1,7 @@
 package com.appsmith.server.migrations.postgres;
 
 import com.appsmith.external.helpers.ObjectIds;
+import com.appsmith.server.repositories.postgres.SnakeCaseNamingStrategy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +24,9 @@ import java.util.Map;
  * of a fresh install on MongoDB, after all Mongock migrations had run; see FORK.md, "PostgreSQL".
  * <p>
  * Keys are table names and each row's field names are the entity's field names; they map to the snake_case columns
- * of V1. Each value is cast to its column's type (objects and arrays to jsonb). Fields without a column are skipped,
- * so the snapshot may hold more than the schema does.
+ * of V1, named by {@link SnakeCaseNamingStrategy} as the entities' columns are. Each value is cast to its column's
+ * type (objects and arrays to jsonb). Fields without a column are skipped, so the snapshot may hold more than the
+ * schema does.
  */
 @Slf4j
 public class V2__seed_fresh_install extends BaseJavaMigration {
@@ -80,10 +82,6 @@ public class V2__seed_fresh_install extends BaseJavaMigration {
         return types;
     }
 
-    static String snake(String name) {
-        return name.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
-    }
-
     private static void insert(Connection connection, String table, Map<String, String> columnTypes, JsonNode row)
             throws Exception {
         final List<String> columns = new ArrayList<>();
@@ -92,7 +90,7 @@ public class V2__seed_fresh_install extends BaseJavaMigration {
         final Iterator<Map.Entry<String, JsonNode>> fields = row.fields();
         while (fields.hasNext()) {
             final Map.Entry<String, JsonNode> field = fields.next();
-            final String column = snake(field.getKey());
+            final String column = SnakeCaseNamingStrategy.snake(field.getKey());
             final String type = columnTypes.get(column);
             if (type == null) {
                 log.debug("Seed: no column {}.{}, skipped", table, column);
