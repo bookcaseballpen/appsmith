@@ -731,6 +731,7 @@ export function ApplicationsSection(props: any) {
   const isBuiltInGitEnabled = useSelector(getIsBuiltInGitEnabled);
   const currentUser = useSelector(getCurrentUser);
   const isMobile = useIsMobileDevice();
+  const isCatalogShown = isWorkspaceUiHidden();
   const urlParams = new URLSearchParams(location.search);
   const openImportModal = urlParams.get("openImportModal");
   const deleteApplication = (applicationId: string) => {
@@ -1091,7 +1092,7 @@ export function ApplicationsSection(props: any) {
             <>
               <PendingApprovals />
               {/* Fork: a flat catalog of the apps the user can open, searched, filtered and paged on the server. */}
-              {isWorkspaceUiHidden() && (
+              {isCatalogShown && (
                 <CatalogSection
                   deleteApplication={deleteApplication}
                   enableImportExport={enableImportExport}
@@ -1101,7 +1102,7 @@ export function ApplicationsSection(props: any) {
                   workspaceId={activeWorkspace.id}
                 />
               )}
-              {!isWorkspaceUiHidden() && !isAiAgentInstanceEnabled && (
+              {!isCatalogShown && !isAiAgentInstanceEnabled && (
                 <ApplicationCardList
                   applications={nonAnvilApplications}
                   canInviteToWorkspace={canInviteToWorkspace}

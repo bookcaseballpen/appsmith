@@ -157,7 +157,10 @@ export interface EditConsolidatedApi {
 
 export type InitConsolidatedApi = DeployConsolidatedApi | EditConsolidatedApi;
 
-/** Fork: the server answers the edit-mode pages with 404 when the caller may not edit the app. */
+/**
+ * Fork: the server answers the edit-mode pages with 404 when the caller may not edit the app. An app that doesn't
+ * exist answers the same, so this alone doesn't say the app is there.
+ */
 export const isEditModeRefused = (responses?: InitConsolidatedApi) =>
   responses?.pages?.responseMeta?.status === 404;
 
@@ -362,10 +365,6 @@ export function* startAppEngine(
       const isDevWithoutEdit =
         role === "DEV" && isEditModeRefused(allResponses);
 
-      if (isDevWithoutEdit) {
-        toast.show(NO_EDIT_ACCESS_MESSAGE, { kind: "info" });
-      }
-
       if (isViewOnlyRole(role) || isDevWithoutEdit) {
         history.replace({
           pathname: getViewerPathForBuilderPath(window.location.pathname),
@@ -382,7 +381,16 @@ export function* startAppEngine(
         });
 
         yield put(viewerAction);
-        yield call(startAppEngine, viewerAction);
+        // The edit-mode 404 is the same for an app that doesn't exist, so the message waits for the viewer to
+        // open it. The viewer's init is in PUBLISHED mode and never comes back here.
+        const isViewerOpened: boolean = yield call(
+          startAppEngine,
+          viewerAction,
+        );
+
+        if (isDevWithoutEdit && isViewerOpened) {
+          toast.show(NO_EDIT_ACCESS_MESSAGE, { kind: "info" });
+        }
 
         return;
       }
@@ -423,6 +431,8 @@ export function* startAppEngine(
     yield call(engine.loadGit, applicationId, rootSpan);
     yield call(engine.completeChore, rootSpan);
     yield put(generateAutoHeightLayoutTreeAction(true, false));
+
+    return true;
   } catch (e) {
     log.error(e);
 

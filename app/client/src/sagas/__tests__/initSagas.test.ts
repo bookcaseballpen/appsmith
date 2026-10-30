@@ -11,8 +11,11 @@ import {
 import { toast } from "@appsmith/ads";
 import { initAppViewerAction } from "actions/initActions";
 import { NO_EDIT_ACCESS_MESSAGE } from "ee/utils/instanceRoles";
-import type { AppEnginePayload } from "entities/Engine";
-import { testSaga } from "redux-saga-test-plan";
+import { PageNotFoundError, type AppEnginePayload } from "entities/Engine";
+import { expectSaga, testSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
+import { dynamic } from "redux-saga-test-plan/providers";
+import { getFavoriteApplicationIds } from "ee/selectors/applicationSelectors";
 import { generateAutoHeightLayoutTreeAction } from "actions/autoHeightActions";
 import mockResponse from "./mockConsolidatedApiResponse.json";
 import { startRootSpan } from "instrumentation/generateTraces";
@@ -182,7 +185,7 @@ describe("tests the sagas in initSagas", () => {
       .put(viewerAction)
       .next()
       .call(startAppEngine, viewerAction)
-      .next()
+      .next(true)
       .isDone();
 
     expect(show).toHaveBeenCalledWith(NO_EDIT_ACCESS_MESSAGE, {
@@ -195,6 +198,137 @@ describe("tests the sagas in initSagas", () => {
     expect(engine.loadAppData).not.toHaveBeenCalled();
     replace.mockRestore();
     show.mockRestore();
+  });
+
+  describe("runs the init once per mode, with no loop", () => {
+    const refused = {
+      ...mockResponse.data,
+      pages: { responseMeta: { status: 404, success: false } },
+    };
+    let engines: Record<string, ReturnType<typeof makeEngine>>;
+    let replace: jest.SpyInstance;
+    let show: jest.SpyInstance;
+
+    function makeEngine() {
+      return {
+        setupEngine: jest.fn(),
+        loadAppData: jest.fn().mockReturnValue({
+          applicationId: "applicationId",
+          toLoadPageId: pageId,
+          toLoadBasePageId: basePageId,
+        }),
+        loadAppURL: jest.fn(),
+        loadAppEntities: jest.fn(),
+        loadGit: jest.fn(),
+        completeChore: jest.fn(),
+      };
+    }
+
+    // Runs startAppEngine for real, recursion included; responses are given per mode.
+    function run(
+      role: string,
+      responses: Partial<Record<APP_MODE, unknown>>,
+    ): ReturnType<typeof expectSaga> {
+      return expectSaga(startAppEngine, action).provide([
+        [
+          matchers.call.fn(getInitResponses),
+          dynamic(({ args: [payload] }) => {
+            const response = responses[payload.mode as APP_MODE];
+
+            if (response instanceof Error) throw response;
+
+            return response;
+          }),
+        ],
+        [
+          matchers.select(getCurrentUserSelector),
+          { ...DefaultCurrentUserDetails, role },
+        ],
+        [matchers.select(getFavoriteApplicationIds), []],
+      ]);
+    }
+
+    beforeEach(() => {
+      engines = {
+        [APP_MODE.EDIT]: makeEngine(),
+        [APP_MODE.PUBLISHED]: makeEngine(),
+      };
+      (AppEngineFactory.create as jest.Mock)
+        .mockReset()
+        .mockImplementation((mode: APP_MODE) => engines[mode]);
+      replace = jest.spyOn(history, "replace").mockImplementation(jest.fn());
+      show = jest.spyOn(toast, "show").mockImplementation(jest.fn());
+      window.history.pushState({}, "", "/app/my-app/page1-abc/edit");
+    });
+
+    afterEach(() => {
+      replace.mockRestore();
+      show.mockRestore();
+    });
+
+    it("gives a Dev with Edit one edit init and no viewer init", async () => {
+      await run("DEV", { [APP_MODE.EDIT]: mockResponse.data })
+        .not.put(viewerAction)
+        .run();
+
+      expect(AppEngineFactory.create).toHaveBeenCalledTimes(1);
+      expect(AppEngineFactory.create).toHaveBeenCalledWith(
+        APP_MODE.EDIT,
+        APP_MODE.EDIT,
+      );
+      expect(engines[APP_MODE.EDIT].loadAppData).toHaveBeenCalledTimes(1);
+      expect(replace).not.toHaveBeenCalled();
+      expect(show).not.toHaveBeenCalled();
+    });
+
+    it("gives a User one viewer init after the editor's, and stops", async () => {
+      await run("USER", {
+        [APP_MODE.EDIT]: mockResponse.data,
+        [APP_MODE.PUBLISHED]: mockResponse.data,
+      })
+        .put(viewerAction)
+        .run();
+
+      // One engine per init: the editor's, then the viewer's.
+      expect(
+        (AppEngineFactory.create as jest.Mock).mock.calls.map(([mode]) => mode),
+      ).toEqual([APP_MODE.EDIT, APP_MODE.PUBLISHED]);
+      expect(engines[APP_MODE.EDIT].loadAppData).not.toHaveBeenCalled();
+      expect(engines[APP_MODE.PUBLISHED].loadAppData).toHaveBeenCalledTimes(1);
+      expect(replace).toHaveBeenCalledTimes(1);
+      expect(show).not.toHaveBeenCalled();
+    });
+
+    it("gives a Dev without Edit one viewer init and the message once", async () => {
+      await run("DEV", {
+        [APP_MODE.EDIT]: refused,
+        [APP_MODE.PUBLISHED]: mockResponse.data,
+      })
+        .put(viewerAction)
+        .run();
+
+      expect(
+        (AppEngineFactory.create as jest.Mock).mock.calls.map(([mode]) => mode),
+      ).toEqual([APP_MODE.EDIT, APP_MODE.PUBLISHED]);
+      expect(engines[APP_MODE.PUBLISHED].loadAppData).toHaveBeenCalledTimes(1);
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(show).toHaveBeenCalledWith(NO_EDIT_ACCESS_MESSAGE, {
+        kind: "info",
+      });
+    });
+
+    it("leaves out the message when the app doesn't exist", async () => {
+      await run("DEV", {
+        [APP_MODE.EDIT]: refused,
+        [APP_MODE.PUBLISHED]: new PageNotFoundError("Cannot find page"),
+      })
+        .put(viewerAction)
+        .run();
+
+      expect(AppEngineFactory.create).toHaveBeenCalledTimes(2);
+      expect(engines[APP_MODE.PUBLISHED].loadAppData).not.toHaveBeenCalled();
+      expect(show).not.toHaveBeenCalled();
+    });
   });
 
   it("tells a refused edit-mode load from a normal one", () => {
