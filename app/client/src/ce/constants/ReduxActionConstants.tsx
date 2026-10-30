@@ -1359,7 +1359,19 @@ const DeferRenderingAppViewerActionTypes = {
   IS_FIRST_PAGE_LOAD: "IS_FIRST_PAGE_LOAD",
 };
 
+// Fork: the home page catalog (ee/sagas/catalogSagas.ts).
+const CatalogActionTypes = {
+  SET_CATALOG_QUERY: "SET_CATALOG_QUERY",
+  FETCH_CATALOG_INIT: "FETCH_CATALOG_INIT",
+  FETCH_CATALOG_SUCCESS: "FETCH_CATALOG_SUCCESS",
+  FETCH_CATALOG_ERROR: "FETCH_CATALOG_ERROR",
+  FETCH_CATALOG_TAGS_INIT: "FETCH_CATALOG_TAGS_INIT",
+  FETCH_CATALOG_TAGS_SUCCESS: "FETCH_CATALOG_TAGS_SUCCESS",
+  CURRENT_APPLICATION_TAGS_UPDATE: "CURRENT_APPLICATION_TAGS_UPDATE",
+};
+
 export const ReduxActionTypes = {
+  ...CatalogActionTypes,
   ...DeferRenderingAppViewerActionTypes,
   ...ActionActionTypes,
   ...AdminSettingsActionTypes,

@@ -86,6 +86,8 @@ interface ApplicationCardProps {
     canInviteToWorkspace?: boolean;
   };
   workspaceId: string;
+  // Fork: more context-menu items (the Admin's "Access" on the home page catalog).
+  extraMenuItems?: ModifiedMenuItemProps[];
 }
 
 const DescriptionEditorWrapper = styled.div`
@@ -259,6 +261,8 @@ export function ApplicationCard(props: ApplicationCardProps) {
         "data-testid": "t--fork-app",
       });
     }
+
+    moreActionItems.push(...(props.extraMenuItems ?? []));
 
     if (!!props.enableImportExport && hasExportPermission) {
       moreActionItems.push({

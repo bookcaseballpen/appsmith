@@ -86,6 +86,7 @@ import {
   normalizeAppDescription,
 } from "utils/appDescription";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+import AppTagsSetting from "ee/pages/AppSettings/AppTagsSetting";
 
 const IconSelectorWrapper = styled.div`
   position: relative;
@@ -607,6 +608,9 @@ function GeneralSettings() {
           value={appDescription}
         />
       </div>
+
+      {/* Fork: tags for the home page catalog; editable while the editor is read-only. */}
+      <AppTagsSetting />
 
       <Text kind="action-m">
         {createMessage(GENERAL_SETTINGS_APP_ICON_LABEL)}

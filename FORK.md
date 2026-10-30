@@ -138,6 +138,10 @@ their apps (`PUT /api/v1/applications/{applicationId}/grants`, below).
 All of them are Admin only (403 otherwise); the Approver filter refuses the non-GET ones for Approvers anyway, and
 they are not on the MCP allowlist.
 
+Client: **Admin settings > Teams** (`src/pages/AdminSettings/Teams/index.tsx`, next to "User roles") creates,
+renames and deletes teams and adds or removes members; grants are given per app from the **Access** item of the app
+card's menu on the home page (see "The home page" under "App tags and catalog").
+
 ## Release approvals
 
 Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/approvals/` and the domain
@@ -322,8 +326,8 @@ key clears them (the importer keeps stored values a file leaves out).
 
 ## App tags and catalog
 
-Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/catalog/`. Data for the home page (the
-client page is a later task).
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/catalog/`. Client: the home page (see
+"The home page" below) and the Tags field in the app settings.
 
 **Tags** (`Application.tags`, a list) are free text. Every write normalises them (`ApplicationTags`): trimmed,
 lower-cased, inner white space collapsed to one space, empty tags and repeats dropped, first-seen order kept; at most
@@ -343,7 +347,7 @@ lock off, `PUT /api/v1/applications/{id}` also takes `tags` (clamped by the sett
 
 | Endpoint | What |
 | --- | --- |
-| `GET /api/v1/applications/catalog?search=&tags=&tagMode=any\|all&sort=name\|lastDeployedAt\|updatedAt\|createdAt&order=asc\|desc&page=&size=` | One page of the apps the caller can read: `{items, total, page, size}`. Every filter, the sort and the paging are part of the repository query with the caller's read permission, so grants decide what each user sees and a User gets only live apps (`CustomApplicationRepositoryImpl`). `search` (at most 100 characters) matches name, description or a tag, case-insensitively and literally (regex characters are quoted). `tags` (`tags=a,b` or repeated, normalised, at most 10): `any` (default) or `all`. `sort` defaults to `name` ascending; the dates default to newest first; the id breaks ties. `page` starts at 0; `size` 1 to 100 (default 20). Anything else is refused (400). |
+| `GET /api/v1/applications/catalog?search=&tags=&tagMode=any\|all&sort=name\|lastDeployedAt\|updatedAt\|createdAt&order=asc\|desc&page=&size=` | One page of the apps the caller can read: `{items, total, page, size}`. Every filter, the sort and the paging are part of the repository query with the caller's read permission, so grants decide what each user sees and a User gets only live apps (`CustomApplicationRepositoryImpl`). `search` (at most 100 characters) matches name, description or a tag, case-insensitively and literally (regex characters are quoted); it matches part of a tag (`search=fin` finds an app tagged `finance`). `tags` (`tags=a,b` or repeated, normalised, at most 10) matches whole tags only (`tags=fin` does not find `finance`): `any` (default) or `all`. `sort` defaults to `name` ascending; the dates default to newest first; the id breaks ties. `page` starts at 0; `size` 1 to 100 (default 20). Anything else is refused (400). |
 | `GET /api/v1/applications/tags` | Every tag on an app the caller can read, sorted, for the filter chips |
 | `PUT /api/v1/app-tags/applications/{applicationId}` | Set the tags, see above; answers `{applicationId, tags}` |
 
@@ -356,6 +360,33 @@ Edit grant). Name sort is by stored text (upper case before lower case); there i
 
 Indexes: `application_tags_deleted` (`tags`, `deletedAt`; `Migration077AddApplicationTagsIndex`); name search and
 sort use the existing `name` + `deletedAt` index (Migration037).
+
+### The home page
+
+The home page is a flat catalog of the apps the user can open (`src/ee/pages/Applications/Catalog/CatalogSection.tsx`,
+in place of the workspace's app list): a search box (the server's `search`, sent 300 ms after the typing stops), tag
+chips from `GET /api/v1/applications/tags` (several can be selected; with two or more, "Any tag" / "All tags" sets
+`tagMode`), a sort (name, last published, last updated) and pages of 24 cards. Every change asks the server again; the
+query and the current page live in the `ui.catalog` store (`src/ee/sagas/catalogSagas.ts`,
+`src/ee/reducers/uiReducers/catalogReducer.ts`, `src/ee/api/CatalogApi.ts`); a rename or delete from a card reloads
+it. The header's search box is hidden with the workspace UI (it searched workspaces and apps on the client).
+
+- The cards are upstream's `ApplicationCard`, fed from the catalog item (`src/ee/utils/catalog.ts`): Edit only when
+  the item's `canEdit` is true; otherwise Launch only. The tags show under each card.
+- "Create new" (new app, import) is for Devs and Admins only (`WorkspaceAction.tsx`), whatever the workspace
+  permissions say.
+- Admins get Delete and an **Access** item in each card's menu: who holds View or Edit on the app (a team or a
+  single Dev or User), change the level, remove it, or give it to someone else
+  (`src/ee/pages/Applications/Catalog/AppAccessModal.tsx`, `src/ee/api/TeamsApi.ts`). Admins and Approvers are not
+  offered there, since they see every app through their role.
+- **Tags in the app settings** (General, `src/ee/pages/AppSettings/AppTagsSetting.tsx`): a Dev with Edit on the app
+  or an Admin adds a tag (Enter or comma; normalised and limited as the server does) or removes one, also while the
+  editor is read-only. Others see the tags only.
+- **An editor URL without Edit:** the edit-mode load answers 404 for a Dev without an Edit grant on the app
+  (`isEditModeRefused` in `src/sagas/InitSagas.ts`), so the Dev gets the toast "You don't have edit access to this
+  app. Ask an Admin for Edit access." and the same page in view mode (or the not-found page when they can't view the
+  app either), as a User does. The editor's init goes on as the viewer's: the init watcher takes the leading init
+  only (`takeLeading`), so the init the viewer dispatches when it mounts would be dropped while the editor's runs.
 
 ## Cherry-picking upstream fixes
 
@@ -451,11 +482,13 @@ There is one workspace, "Apps" (see "Roles"), and users never see it as a worksp
 
 - Hidden: the workspace list and "create workspace" on the home page (also on mobile), the workspace menu (settings,
   rename, delete, leave, members, invite), the member avatars and the invite button, the `/workspace/...` settings and
-  members pages, the "Workspaces" section of the home search, "Fork" on the app card (it copies an app into a workspace
+  members pages, the header's search box (it searched workspaces and apps; the home page catalog has its own search),
+  "Fork" on the app card (it copies an app into a workspace
   picked from a list; "Duplicate" stays), and the invite form in the editor's and the viewer's Share dialog (the app URL
   and the public toggle stay; the dialog is titled "Share application").
-- The home page shows the apps of the default workspace directly, picked by `defaultWorkspaceId` from `/users/me`; the
-  "Create new" menu (new app, import) stays. Favourites are not listed separately.
+- The home page shows the apps directly, as a catalog (see "App tags and catalog"), under the default workspace picked
+  by `defaultWorkspaceId` from `/users/me`; the "Create new" menu (new app, import) stays for Devs and Admins.
+  Favourites are not listed separately.
 - Kept for the Admin: users and roles live in **Admin settings > User roles** (`GET /api/v1/admin/users`,
   `PUT /api/v1/admin/users/{userId}/role`). New users join by signing up (they become User); nobody is invited into a
   workspace any more.
@@ -1033,6 +1066,21 @@ Server plugins (`app/server/appsmith-plugins/`):
   filter, `get_application_context` tags) and `src/builder/capabilities.ts` (their summaries), and `README.md`.
 - cab-sync: `src/layout.ts` (canonical tags), `src/commands.ts` (tag-only push message), `src/template.ts`,
   `README.md` and the tests.
+- New client files: `src/ee/api/CatalogApi.ts`, `src/ee/api/TeamsApi.ts`, `src/ee/actions/catalogActions.ts`,
+  `src/ee/reducers/uiReducers/catalogReducer.ts` (and `.test.ts`), `src/ee/sagas/catalogSagas.ts` (and `.test.ts`),
+  `src/ee/selectors/catalogSelectors.ts`, `src/ee/utils/catalog.ts`, `src/ee/pages/Applications/Catalog/`
+  (`CatalogSection`, `AppAccessModal` and their tests), `src/ee/pages/AppSettings/AppTagsSetting.tsx` (and test),
+  `src/ce/pages/AdminSettings/config/teams.ts`, `src/pages/AdminSettings/Teams/` (page and test).
+- Edited upstream client files (`Fork:` comments): `src/ce/constants/ReduxActionConstants.tsx` (catalog actions),
+  `src/ce/reducers/index.tsx` and `uiReducers/index.tsx` (`ui.catalog`), `uiReducers/applicationsReducer.tsx`
+  (`CURRENT_APPLICATION_TAGS_UPDATE`), `src/entities/Application/types.ts` (`tags`),
+  `src/ce/pages/Applications/index.tsx` (the catalog in place of the app list),
+  `src/pages/Applications/ApplicationCard.tsx` (`extraMenuItems`), `src/pages/common/SearchBar/EntitySearchBar.tsx`
+  (header search hidden), `src/pages/AppIDE/components/AppSettings/components/GeneralSettings.tsx` (Tags), and the test
+  `src/ce/pages/Applications/tests/hiddenFeatures.test.tsx`.
+- Edited fork files: `src/ce/utils/instanceRoles.ts` (and `.test.ts`), `src/ce/pages/AdminSettings/config/index.ts`,
+  `src/ce/pages/Applications/WorkspaceAction.tsx` (and test), `src/ee/sagas/index.tsx`, `src/sagas/InitSagas.ts`
+  (and `__tests__/initSagas.test.ts`).
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

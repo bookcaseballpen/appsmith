@@ -16,6 +16,8 @@ import { config as AuditLogsConfig } from "ee/pages/AdminSettings/config/auditlo
 import { config as AIConfig } from "ce/pages/AdminSettings/config/ai";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- fork-owned page, no ee/ variant.
 import { config as RolesConfig } from "ce/pages/AdminSettings/config/roles";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- fork-owned page, no ee/ variant.
+import { config as TeamsConfig } from "ce/pages/AdminSettings/config/teams";
 
 import { selectFeatureFlags } from "ee/selectors/featureFlagsSelectors";
 import store from "store";
@@ -58,6 +60,8 @@ if (isSuperUser && isMultiOrgEnabled)
 
 // User management categories
 if (isSuperUser) ConfigFactory.register(RolesConfig);
+
+if (isSuperUser) ConfigFactory.register(TeamsConfig);
 
 if (isSuperUser) ConfigFactory.register(UserSettings);
 

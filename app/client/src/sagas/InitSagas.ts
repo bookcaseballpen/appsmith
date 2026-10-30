@@ -11,6 +11,7 @@ import {
   takeLatest,
   takeLeading,
 } from "redux-saga/effects";
+import type { SagaIterator } from "redux-saga";
 import type {
   ReduxAction,
   ReduxActionWithoutPayload,
@@ -25,6 +26,7 @@ import {
   initAppViewerAction,
   initEditorAction,
   resetEditorSuccess,
+  type InitAppViewerPayload,
 } from "actions/initActions";
 import {
   getCurrentPageId,
@@ -70,6 +72,7 @@ import {
   getInstanceRole,
   getViewerPathForBuilderPath,
   isViewOnlyRole,
+  NO_EDIT_ACCESS_MESSAGE,
 } from "ee/utils/instanceRoles";
 import { APPLICATIONS_URL } from "constants/routes";
 import { FAVORITES_KEY } from "ee/constants/workspaceConstants";
@@ -153,6 +156,13 @@ export interface EditConsolidatedApi {
 }
 
 export type InitConsolidatedApi = DeployConsolidatedApi | EditConsolidatedApi;
+
+/**
+ * Fork: the server answers the edit-mode pages with 404 when the caller may not edit the app. An app that doesn't
+ * exist answers the same, so this alone doesn't say the app is there.
+ */
+export const isEditModeRefused = (responses?: InitConsolidatedApi) =>
+  responses?.pages?.responseMeta?.status === 404;
 
 export function* failFastApiCalls(
   triggerActions: Array<ReduxAction<unknown> | ReduxActionWithoutPayload>,
@@ -313,7 +323,9 @@ export function* getInitResponses({
   return rest;
 }
 
-export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
+export function* startAppEngine(
+  action: ReduxAction<AppEnginePayload>,
+): SagaIterator {
   const rootSpan = startRootSpan("startAppEngine", {
     mode: action.payload.mode,
     pageId: action.payload.basePageId,
@@ -344,21 +356,41 @@ export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
 
     endSpan(getInitResponsesSpan);
 
-    // Fork: the server hides the editor from Users, so an editor URL opens the same page in view mode instead.
+    // Fork: the server hides the editor from Users, and from Devs on apps they hold no Edit grant on (the edit-mode
+    // pages answer 404), so an editor URL opens the same page in view mode instead.
     if (action.payload.mode === APP_MODE.EDIT) {
       const currentUser: ReturnType<typeof getCurrentUserSelector> =
         yield select(getCurrentUserSelector);
+      const role = getInstanceRole(currentUser);
+      const isDevWithoutEdit =
+        role === "DEV" && isEditModeRefused(allResponses);
 
-      if (isViewOnlyRole(getInstanceRole(currentUser))) {
-        yield call(
-          executeActionDuringUserDetailsInitialisation,
-          ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
-          action.payload.shouldInitialiseUserDetails,
-        );
+      if (isViewOnlyRole(role) || isDevWithoutEdit) {
         history.replace({
           pathname: getViewerPathForBuilderPath(window.location.pathname),
           search: window.location.search,
         });
+
+        // This init goes on as the viewer's: the watcher takes the leading init only, so the init the viewer
+        // dispatches when it mounts is dropped while this one runs, and the page would stay blank.
+        const viewerAction = initAppViewerAction({
+          // The editor's init carries the same ids as the viewer's (initEditorAction).
+          ...(action.payload as Partial<InitAppViewerPayload>),
+          branch: action.payload.branch ?? "",
+          mode: APP_MODE.PUBLISHED,
+        });
+
+        yield put(viewerAction);
+        // The edit-mode 404 is the same for an app that doesn't exist, so the message waits for the viewer to
+        // open it. The viewer's init is in PUBLISHED mode and never comes back here.
+        const isViewerOpened: boolean = yield call(
+          startAppEngine,
+          viewerAction,
+        );
+
+        if (isDevWithoutEdit && isViewerOpened) {
+          toast.show(NO_EDIT_ACCESS_MESSAGE, { kind: "info" });
+        }
 
         return;
       }
@@ -399,6 +431,8 @@ export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
     yield call(engine.loadGit, applicationId, rootSpan);
     yield call(engine.completeChore, rootSpan);
     yield put(generateAutoHeightLayoutTreeAction(true, false));
+
+    return true;
   } catch (e) {
     log.error(e);
 

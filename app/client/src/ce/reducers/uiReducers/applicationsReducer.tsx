@@ -158,6 +158,17 @@ export const handlers = {
       description: action.payload,
     },
   }),
+  // Fork: tags set in the app settings (ee/pages/AppSettings/AppTagsSetting).
+  [ReduxActionTypes.CURRENT_APPLICATION_TAGS_UPDATE]: (
+    state: ApplicationsReduxState,
+    action: ReduxAction<string[]>,
+  ) => ({
+    ...state,
+    currentApplication: state.currentApplication && {
+      ...state.currentApplication,
+      tags: action.payload,
+    },
+  }),
   [ReduxActionTypes.CURRENT_APPLICATION_ICON_UPDATE]: (
     state: ApplicationsReduxState,
     action: ReduxAction<IconNames>,

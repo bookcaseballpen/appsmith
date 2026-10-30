@@ -2,7 +2,9 @@ import type { User } from "constants/userConstants";
 import { DefaultCurrentUserDetails } from "constants/userConstants";
 import {
   canPublishRole,
+  createsAppsRole,
   getInstanceRole,
+  isAdminRole,
   getViewerPathForBuilderPath,
   isReviewOnlyRole,
   isViewOnlyRole,
@@ -55,5 +57,15 @@ describe("instanceRoles", () => {
     expect(
       getViewerPathForBuilderPath("/app/my-app/editor-page-abc123/edit"),
     ).toBe("/app/my-app/editor-page-abc123");
+  });
+
+  it("lets only Devs and Admins create apps, and only Admins manage access", () => {
+    expect(createsAppsRole("DEV")).toBe(true);
+    expect(createsAppsRole("ADMIN")).toBe(true);
+    expect(createsAppsRole("APPROVER")).toBe(false);
+    expect(createsAppsRole("USER")).toBe(false);
+    expect(createsAppsRole(undefined)).toBe(false);
+    expect(isAdminRole("ADMIN")).toBe(true);
+    expect(isAdminRole("DEV")).toBe(false);
   });
 });

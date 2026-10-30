@@ -37,6 +37,7 @@ import Fuse from "fuse.js";
 import { useOutsideClick } from "ee/hooks";
 import type { PageDefaultMeta } from "ee/api/ApplicationApi";
 import log from "loglevel";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 const HeaderSection = styled.div`
   display: flex;
@@ -254,7 +255,9 @@ function EntitySearchBar(props: any) {
           )}
         </HeaderSection>
       </div>
+      {/* Fork: the home page catalog has its own server-side search (ee/pages/Applications/Catalog). */}
       {!isCreateNewAppFlow &&
+        !isWorkspaceUiHidden() &&
         (isMobile ? (
           <Button
             isIconButton
