@@ -386,10 +386,11 @@ public class FilterDataServiceCE implements IFilterDataServiceCE {
                         sortType = SortType.valueOf(
                                 sortCondition.get(SORT_BY_TYPE_KEY).toUpperCase());
                     } catch (IllegalArgumentException e) {
+                        // Fork: no Appsmith name in user-visible messages.
                         throw new AppsmithPluginException(
                                 AppsmithPluginError.PLUGIN_ERROR,
-                                "Appsmith server failed "
-                                        + "to parse the type of sort condition. Please reach out to Appsmith customer support "
+                                "The server failed "
+                                        + "to parse the type of sort condition. Please contact your administrator "
                                         + "to resolve this.");
                     }
                     sb.append(" `" + escapeBacktickIdentifier(columnName) + "` " + sortType + ",");

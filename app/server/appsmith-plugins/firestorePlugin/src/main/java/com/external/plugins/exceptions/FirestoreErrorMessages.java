@@ -31,21 +31,22 @@ public class FirestoreErrorMessages extends BasePluginErrorMessages {
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG =
             "Firestore query has failed to execute. To know more please check the error details.";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String UNEXPECTED_PROPERTY_DELETE_KEY_PATH_ERROR_MSG =
-            "Appsmith has found an unexpected query form property - 'Delete Key Value Pair Path'. Please "
-                    + "reach out to Appsmith customer support to resolve this.";
+            "The server has found an unexpected query form property - 'Delete Key Value Pair Path'. Please "
+                    + "contact your administrator to resolve this.";
 
     public static final String UNEXPECTED_PROPERTY_TIMESTAMP_ERROR_MSG =
-            "Appsmith has found an unexpected query form property - 'Timestamp Value Path'. Please reach "
-                    + "out to Appsmith customer support to resolve this.";
+            "The server has found an unexpected query form property - 'Timestamp Value Path'. Please contact "
+                    + "your administrator to resolve this.";
 
     public static final String FAILED_TO_PARSE_DELETE_KEY_PATH_ERROR_MSG =
-            "Appsmith failed to parse the query editor form field 'Delete Key Value Pair Path'. "
-                    + "Please check out Appsmith's documentation to find the correct syntax.";
+            "The server failed to parse the query editor form field 'Delete Key Value Pair Path'. "
+                    + "Please check the syntax of this field.";
 
     public static final String FAILED_TO_PARSE_TIMESTAMP_VALUE_PATH_ERROR_MSG =
-            "Appsmith failed to parse the query editor form field 'Timestamp Value Path'. "
-                    + "Please check out Appsmith's documentation to find the correct syntax.";
+            "The server failed to parse the query editor form field 'Timestamp Value Path'. "
+                    + "Please check the syntax of this field.";
 
     public static final String INVALID_DOCUMENT_LEVEL_METHOD_ERROR_MSG = "Invalid document-level method %s";
 
@@ -65,12 +66,12 @@ public class FirestoreErrorMessages extends BasePluginErrorMessages {
     public static final String OBJECT_SERIALIZATION_FAILED_ERROR_MSG = "Unable to serialize object of type %s.";
 
     public static final String WHERE_CONDITIONAL_NULL_QUERY_ERROR_MSG =
-            "Appsmith server has found null query object when applying where conditional on Firestore "
-                    + "query. Please contact Appsmith's customer support to resolve this.";
+            "The server has found null query object when applying where conditional on Firestore "
+                    + "query. Please contact your administrator to resolve this.";
 
     public static final String WHERE_CONDITION_INVALID_OPERATOR_ERROR_MSG =
-            "Appsmith server has encountered an invalid operator for Firestore query's where conditional."
-                    + " Please contact Appsmith's customer support to resolve this.";
+            "The server has encountered an invalid operator for Firestore query's where conditional."
+                    + " Please contact your administrator to resolve this.";
 
     public static final String WHERE_CONDITION_UNPARSABLE_AS_JSON_LIST_ERROR_MSG =
             "Unable to parse condition value as a JSON list.";

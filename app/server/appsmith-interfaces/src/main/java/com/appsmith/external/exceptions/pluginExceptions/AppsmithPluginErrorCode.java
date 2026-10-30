@@ -8,7 +8,8 @@ public enum AppsmithPluginErrorCode {
     JSON_PROCESSING_ERROR("PE-JSN-4000", "JSON processing error either at serializing or deserializing"),
     SMART_SUBSTITUTION_VALUE_MISSING("PE-SST-5000", "Missing required binding parameter's value"),
     GENERIC_PLUGIN_ERROR("PE-PLG-5000", "A generic plugin error"),
-    PLUGIN_IN_MEMORY_FILTERING_ERROR("PE-PLG-5002", "Appsmith in-memory filtering failed"),
+    // Fork: no Appsmith name in user-visible messages.
+    PLUGIN_IN_MEMORY_FILTERING_ERROR("PE-PLG-5002", "In-memory filtering failed"),
     INCOMPATIBLE_FILE_FORMAT("PE-PLG-5003", "Incompatible file format"),
     PLUGIN_GET_STRUCTURE_ERROR("PE-DSE-5000", "Failure in getting datasource structure"),
     PLUGIN_GET_STRUCTURE_TIMEOUT_ERROR("PE-DSE-5001", "Timed out when fetching datasource structure"),

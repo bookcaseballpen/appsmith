@@ -116,9 +116,10 @@ public class GraphQLPaginationUtils {
 
         Map<String, String> paginationDataMap = getPaginationData(actionConfiguration);
         if (isEmpty(paginationDataMap)) {
+            // Fork: no Appsmith name in user-visible messages.
             throw new AppsmithPluginException(
                     AppsmithPluginError.PLUGIN_EXECUTE_ARGUMENT_ERROR,
-                    "Appsmith "
+                    "The "
                             + "server could not find any GraphQL pagination data even though pagination is toggled on. Please "
                             + "provide pagination data by editing relevant fields in the pagination tab.");
         }
@@ -235,9 +236,9 @@ public class GraphQLPaginationUtils {
         } else {
             throw new AppsmithPluginException(
                     GraphQLPluginError.QUERY_EXECUTION_FAILED,
-                    "Appsmith server encountered an unexpected error: unrecognized pagination type: "
+                    "The server encountered an unexpected error: unrecognized pagination type: "
                             + actionConfiguration.getPaginationType()
-                            + ". Please reach out to our customer support to resolve this.");
+                            + ". Please contact your administrator to resolve this.");
         }
 
         setValueSafelyInPropertyList(properties, QUERY_VARIABLES_INDEX, queryVariablesJson.toString());

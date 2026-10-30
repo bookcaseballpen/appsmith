@@ -49,10 +49,11 @@ public class ApiKeyAuthentication extends APIConnection {
                 requestBuilder.headers(header -> header.set(label, this.getHeaderValue()));
                 break;
             default:
+                // Fork: no Appsmith name in user-visible messages.
                 return Mono.error(new AppsmithPluginException(
                         AppsmithPluginError.PLUGIN_ERROR,
-                        "Appsmith server has found an unsupported api key authentication type. Please reach "
-                                + "out to Appsmith customer support to resolve this."));
+                        "The server has found an unsupported api key authentication type. Please contact "
+                                + "your administrator to resolve this."));
         }
 
         return Mono.justOrEmpty(requestBuilder.build())

@@ -24,8 +24,9 @@ public class ErrorMessages extends BasePluginErrorMessages {
 
     public static final String MISSING_GSHEETS_METHOD_ERROR_MSG = "Missing Google Sheets method.";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String UNSUCCESSFUL_RESPONSE_ERROR_MSG =
-            "Appsmith server has received unsuccessful response from GoogleSheets.";
+            "The server has received unsuccessful response from GoogleSheets.";
 
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG = "Your GoogleSheets query failed to execute";
 
@@ -56,7 +57,7 @@ public class ErrorMessages extends BasePluginErrorMessages {
             "Unexpected value for table header index. Please use a number starting from 1";
 
     public static final String RESPONSE_DATA_MAPPING_FAILED_ERROR_MSG =
-            "Could not map response to existing data. Appsmith server has either received an empty response or an unexpected response.";
+            "Could not map response to existing data. The server has either received an empty response or an unexpected response.";
 
     public static final String UNKNOWN_SHEET_NAME_ERROR_MSG = "Invalid sheet name";
 

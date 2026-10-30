@@ -80,10 +80,11 @@ public enum AppsmithPluginError implements BasePluginError {
             ErrorType.INTERNAL_ERROR,
             "{1}",
             "{2}"),
+    // Fork: no Appsmith name in user-visible messages.
     PLUGIN_DATASOURCE_TEST_GENERIC_ERROR(
             500,
             AppsmithPluginErrorCode.PLUGIN_DATASOURCE_TEST_GENERIC_ERROR.getCode(),
-            "Plugin failed to test with the given configuration. Please reach out to Appsmith customer support to report this",
+            "Plugin failed to test with the given configuration. Please contact your administrator to report this",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Datasource configuration is invalid",
             ErrorType.INTERNAL_ERROR,
@@ -130,14 +131,14 @@ public enum AppsmithPluginError implements BasePluginError {
             AppsmithPluginErrorCode.PLUGIN_IN_MEMORY_FILTERING_ERROR.getCode(),
             "{0}",
             AppsmithErrorAction.LOG_EXTERNALLY,
-            "Appsmith In Memory Filtering Failed",
+            "In Memory Filtering Failed",
             ErrorType.INTERNAL_ERROR,
             "{1}",
             "{2}"),
     PLUGIN_UQI_WHERE_CONDITION_UNKNOWN(
             500,
             AppsmithPluginErrorCode.PLUGIN_UQI_WHERE_CONDITION_UNKNOWN.getCode(),
-            "{0} is not a known conditional operator. Please reach out to Appsmith customer support to report this",
+            "{0} is not a known conditional operator. Please contact your administrator to report this",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Where condition could not be parsed",
             ErrorType.INTERNAL_ERROR,
@@ -167,7 +168,7 @@ public enum AppsmithPluginError implements BasePluginError {
             500,
             AppsmithPluginErrorCode.SMART_SUBSTITUTION_VALUE_MISSING.getCode(),
             "Uh oh! This is unexpected. " + "Did not receive any information for the binding " + "{0}"
-                    + ". Please contact customer support at Appsmith.",
+                    + ". Please contact your administrator.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Smart substitution error",
             ErrorType.INTERNAL_ERROR,
@@ -194,7 +195,7 @@ public enum AppsmithPluginError implements BasePluginError {
     PLUGIN_DATASOURCE_RATE_LIMIT_ERROR(
             429,
             AppsmithPluginErrorCode.PLUGIN_RATE_LIMIT_ERROR.getCode(),
-            "Rate limit reached for Appsmith AI. Please contact support@appsmith.com to increase this limit.",
+            "Rate limit reached for Appsmith AI. Please contact your administrator.",
             AppsmithErrorAction.DEFAULT,
             "Datasource rate limit error",
             ErrorType.RATE_LIMIT_ERROR,

@@ -8,8 +8,9 @@ import lombok.NoArgsConstructor;
 public class RedisErrorMessages extends BasePluginErrorMessages {
     public static final String BODY_IS_NULL_OR_EMPTY_ERROR_MSG = "Body is null or empty [%s]";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String QUERY_PARSING_FAILED_ERROR_MSG =
-            "Appsmith server has failed to parse your Redis query. Are you sure it's" + " been formatted correctly.";
+            "The server has failed to parse your Redis query. Are you sure it's" + " been formatted correctly.";
 
     public static final String INVALID_REDIS_COMMAND_ERROR_MSG = "Not a valid Redis command: %s";
 
@@ -22,7 +23,7 @@ public class RedisErrorMessages extends BasePluginErrorMessages {
             "Error occurred while executing Redis query. To know more about the error please check the error details.";
 
     public static final String DS_UNEXPECTED_SSL_OPTION_ERROR_MSG =
-            "Appsmith server has found an unexpected SSL option: %s. Please reach out to Appsmith customer support"
+            "The server has found an unexpected SSL option: %s. Please contact your administrator"
                     + " to resolve this.";
 
     /*

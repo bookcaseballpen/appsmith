@@ -7,14 +7,15 @@ public class MongoPluginErrorMessages {
 
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG = "Your Mongo query failed to execute.";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String CONNECTION_STRING_PARSING_FAILED_ERROR_MSG =
-            "The Appsmith server has failed to parse the Mongo connection string URI.";
+            "The server has failed to parse the Mongo connection string URI.";
 
     public static final String NO_CONNECTION_STRING_URI_ERROR_MSG = "Could not find any Mongo connection string URI.";
 
     public static final String UNEXPECTED_SSL_OPTION_ERROR_MSG =
-            "The Appsmith server has found an unexpected SSL option: %s. Please reach out to"
-                    + " Appsmith customer support to resolve this.";
+            "The server has found an unexpected SSL option: %s. Please contact"
+                    + " your administrator to resolve this.";
 
     public static final String UNPARSABLE_FIELDNAME_ERROR_MSG = "%s has an invalid JSON format.";
 
@@ -57,7 +58,7 @@ public class MongoPluginErrorMessages {
                     + "been filled correctly.";
 
     public static final String DS_GET_STRUCTURE_ERROR_MSG =
-            "Appsmith has failed to get database structure. Please provide read permission on"
+            "The server has failed to get database structure. Please provide read permission on"
                     + " the database to fix this.";
 
     public static final String DS_DEFAULT_DATABASE_NAME_INVALID_ERROR_MSG =
@@ -81,7 +82,7 @@ public class MongoPluginErrorMessages {
     public static final String DS_USING_URI_BUT_EXPECTED_FORM_FIELDS_ERROR_MSG =
             "It seems that you are trying to use a mongo connection string URI. Please "
                     + "extract relevant fields and fill the form with extracted values. For "
-                    + "details, please check out the Appsmith's documentation for Mongo database. "
+                    + "details, please check the MongoDB documentation. "
                     + "Alternatively, you may use 'Import from connection string URI' option from the "
                     + "dropdown labelled 'Use mongo connection string URI' to use the URI connection string"
                     + " directly.";
@@ -89,6 +90,6 @@ public class MongoPluginErrorMessages {
     public static final String DS_INVALID_AUTH_TYPE_ERROR_MSG = "Invalid authType. Must be one of %s";
 
     public static final String DS_SSL_CONFIGURATION_FETCHING_ERROR_MSG =
-            "Appsmith server has failed to fetch SSL configuration from datasource configuration "
-                    + "form. Please reach out to Appsmith customer support to resolve this.";
+            "The server has failed to fetch SSL configuration from datasource configuration "
+                    + "form. Please contact your administrator to resolve this.";
 }

@@ -418,7 +418,12 @@ added after the cached and remote flags). Client switch: `src/ee/utils/editorRea
   objects, so upstream's permission UI hides "new page", "new query", "new JS" and the datasource "new query" entry
   points and makes the API, GraphQL and JS editors read-only; the DB query form (`UQIEditor/FormRender.tsx`) is
   disabled; Run buttons keep working;
-- a banner says "Read-only: edit this app through the projects repo (MCP)." (`EditorReadOnlyBanner`).
+- a banner says "Read-only: edit this app through the projects repo (MCP)." (`EditorReadOnlyBanner`);
+- the main pane runs the canvas, except that **Admins** still get the datasource pages there (new datasource, a
+  datasource's page with Edit, the list; `pages/AppIDE/layouts/routers/MainPane/MainPane.tsx`). This is where an
+  Admin adds and changes datasources, and completes the password of one MCP created. Devs and Approvers keep the
+  canvas, and the Data pane tells them an Admin manages datasources (`ee/components/DatasourceManagedNote.tsx`);
+  an Admin with no datasources is told to add one with "Bring your data".
 
 The upstream integration tests run with `appsmith.editor.read-only=false` (`application-test.properties`), because
 they change apps over HTTP as session users; `EditorReadOnlyWebFilterTest` and `EditorReadOnlyHttpTest` cover it on.
@@ -532,8 +537,11 @@ it. The header's search box is hidden with the workspace UI (it searched workspa
 
 - The cards are upstream's `ApplicationCard`, fed from the catalog item (`src/ee/utils/catalog.ts`): Edit only when
   the item's `canEdit` is true; otherwise Launch only. The tags show under each card.
-- "Create new" (new app, import) is for Devs and Admins only (`WorkspaceAction.tsx`), whatever the workspace
-  permissions say.
+- No "Create new" menu (new app, import) for anyone, and `?openImportModal=true` opens nothing
+  (`isAppCreationUiHidden`, see "Hidden features"): apps are created and imported through MCP and the projects repo.
+  The server's create and import APIs stay. (Before, it was for Devs and Admins only, `WorkspaceAction.tsx`.)
+- The app name is plain text on the card, in its menu, in the editor header (no "Rename") and in the app settings
+  (read-only field) (`isAppRenameUiHidden`); MCP and import rename apps.
 - Admins get Delete and an **Access** item in each card's menu: who holds View or Edit on the app (a team or a
   single Dev or User), change the level, remove it, or give it to someone else
   (`src/ee/pages/Applications/Catalog/AppAccessModal.tsx`, `src/ee/api/TeamsApi.ts`). Admins and Approvers are not
@@ -632,8 +640,26 @@ refuses its endpoints. Where to look:
   `AE-APP-4030`, "{feature} is disabled on this instance."). It runs after Spring Security, so an anonymous caller still
   gets 401 first.
 - **Client:** `ce/utils/forkHiddenFeatures.ts` (`isWorkspaceUiHidden`, `areTemplatesHidden`, `isOnboardingHidden`,
-  `areAppsmithLinksHidden`, always true) and, for Git, `ce/selectors/builtInGitSelectors.ts` (`getIsBuiltInGitEnabled`).
-  Every hidden entry point checks one of them, with a `Fork:` comment.
+  `areAppsmithLinksHidden`, `isAppCreationUiHidden`, `isAppRenameUiHidden`, `isViewerEditButtonHidden`,
+  `isEmbedUiHidden`, `areUpsellsHidden`, always true) and, for Git, `ce/selectors/builtInGitSelectors.ts`
+  (`getIsBuiltInGitEnabled`). Every hidden entry point checks one of them, with a `Fork:` comment.
+
+### UI only: create, import, rename, embed, the viewer's pencil, upsells
+
+These are hidden in the UI only; the server APIs stay (MCP, cab-sync and import use them).
+
+- Create new and Import on the home page, and app rename: see "The home page".
+- The app viewer has no pencil ("Edit app") button (`PrimaryCTA.tsx`); in the editor's own preview it stays, to leave
+  the preview.
+- No embedding: the app settings have no "Share & embed" section and the editor's Share dialog no Embed tab. The app
+  URL and the public toggle stay in the Share dialog.
+- No Business or Enterprise upsell (`areUpsellsHidden`). Upstream marks a paid page or field with
+  `isFeatureEnabled: false`; `ConfigFactory.register` drops those pages and fields
+  (`ee/pages/AdminSettings/config/upsells.ts`), and their URLs lead to General. Gone: the Audit logs, Access control,
+  Provisioning, Branding and User settings pages, the Connection pool size field, the SAML and OIDC cards on
+  Authentication, the locked "Staging" environment (bottom bar and datasource editor, `ee/selectors/rampSelectors.tsx`
+  turns off every product ramp), the premium "upcoming integrations" and their star badge. A query whose plugin is not
+  installed no longer says "Upgrade your plan". Git's upsells only show with built-in Git switched on.
 
 ### Workspaces: one hidden workspace
 
@@ -646,7 +672,7 @@ There is one workspace, "Apps" (see "Roles"), and users never see it as a worksp
   picked from a list; "Duplicate" stays), and the invite form in the editor's and the viewer's Share dialog (the app URL
   and the public toggle stay; the dialog is titled "Share application").
 - The home page shows the apps directly, as a catalog (see "App tags and catalog"), under the default workspace picked
-  by `defaultWorkspaceId` from `/users/me`; the "Create new" menu (new app, import) stays for Devs and Admins.
+  by `defaultWorkspaceId` from `/users/me`; there is no "Create new" menu (see "The home page").
   Favourites are not listed separately.
 - Kept for the Admin: users and roles live in **Admin settings > User roles** (`GET /api/v1/admin/users`,
   `PUT /api/v1/admin/users/{userId}/role`). New users join by signing up (they become User); nobody is invited into a
@@ -716,9 +742,9 @@ keep their names; nothing else needs to change. The Creative logos come from the
 
 | File | What | Size | Used by |
 | --- | --- | --- | --- |
-| `creative-logo-colour.svg` | "CREATIVE" wordmark, teal `#00aab5` letters, orange `#f7941e` A and bar. Made from the mono SVG's paths, coloured as the colour PNG (no colour SVG exists). | 276.4 x 50 viewBox | Light backgrounds: login, signup, home header, error pages, `404.html` |
+| `creative-logo-colour.svg` | "CREATIVE" wordmark, teal `#00aab5` letters, orange `#f7941e` A and bar. Made from the mono SVG's paths, coloured as the colour PNG (no colour SVG exists). | 276.4 x 50 viewBox | Not referenced (light backgrounds use the mono wordmark since #91) |
 | `creative-logo-white.svg` | Official white wordmark (`landingpages/revamp-temp/images/logo-creative-white.svg`), copied as is. It has `width`/`height` but no `viewBox`; Chromium-based browsers scale it anyway. | 93.3 x 16.9 | Dark backgrounds (`components/BrandLogo` with `onDark`, or the theme mode `DARK`) |
-| `creative-logo-mono.svg` | Original grey `#4c4c4d` wordmark (`content2/Images/common/logo_creative.svg`), source of the colour SVG's paths | 276.4 x 50 | Not referenced |
+| `creative-logo-mono.svg` | Original grey `#4c4c4d` wordmark (`content2/Images/common/logo_creative.svg`), source of the colour SVG's paths | 276.4 x 50 | Light backgrounds: login, signup, home and settings header, error pages, `404.html` |
 | `creative-logo-colour.png` | Original colour PNG (`content2/contactus/images/creative_logo.png`), the colour reference | 171 x 31 | Not referenced |
 | `favicon-lightmode.png` | Square "A" mark (triangle outline over a bar), dark grey `#3c3c3c` on transparent: **source** of the light-mode icons | 512 x 512 | `fork-brand-icons.js` |
 | `favicon-darkmode.png` | Same mark, light grey `#efefef`: **source** of the dark-mode icons | 512 x 512 | `fork-brand-icons.js` |
@@ -730,9 +756,11 @@ keep their names; nothing else needs to change. The Creative logos come from the
 After replacing the source PNGs, regenerate the ICO and PNG sizes with `node app/client/scripts/fork-brand-icons.js`
 (renders with the installed Microsoft Edge through the client's Playwright) and replace the two SVGs, then commit.
 
-The wordmark carries no product name, so `components/BrandLogo.tsx` shows "App Builder" beside it (the colour
-wordmark on light backgrounds, the white one on dark ones; the product UI has no dark mode today, so every current
-use is light). The client constants are in `src/constants/Brand.ts` (`PRODUCT_NAME`, the asset URLs); the server's
+The wordmark carries no product name, so `components/BrandLogo.tsx` shows "App Builder" beside it, after a thin
+divider (the mono wordmark on light backgrounds, the white one on dark ones; the product UI has no dark mode today, so
+every current use is light). Neither part may shrink, so the text is never cut. A custom favicon (organization config
+`brandFaviconUrl`; no admin setting sets it in CE) replaces the href of every icon link of `index.html`
+(`useBrandingTheme.ts`, `setFavicon`), since a link added after them did not reliably win. The client constants are in `src/constants/Brand.ts` (`PRODUCT_NAME`, the asset URLs); the server's
 in `constants/Brand.java`. `utils/BrandingUtils.ts` points the default logo and favicon (the organization config's
 `brandLogoUrl` / `brandFaviconUrl`) at these files.
 
@@ -771,6 +799,21 @@ Appsmith host: docs, community, Discord, Appsmith's GitHub, the blog, support ma
   more", widget callout links (Chart's FusionCharts blog post), the forgot-password callout, the SMTP test toast's
   "Troubleshoot", the JSON form's "Learn more" toast, the static URL "?" button, the JS library installer's links, the
   Map widget's docs link, the custom widget "Read more" links, builder Documentation button and console text.
+
+## Admin settings
+
+The settings pages share one shell (`ee/pages/AdminSettings/SettingsShell.tsx`): the home page header, a calm left nav
+(small uppercase groups, no icons, no tier badges, the current page in teal; a select above the page below 860px),
+each page with a title, a subtitle and its fields in a card (label left, field and help right), and a sticky footer
+with Reset and Save, both disabled until something changes. Save says "Save & Restart" and the footer "Saving restarts
+the server" only when the page's settings need a restart; organization settings (such as the instance name) save
+without one ("Save Changes"). Styles: `pages/AdminSettings/LeftPane.tsx`, `components.tsx`, `SaveSettings.tsx`,
+`SettingsForm.tsx`, `Profile/`.
+
+- **General** holds only the instance name (moved from Instance settings; `ee/pages/AdminSettings/config/general.tsx`,
+  `instanceSettings.tsx`). "Anonymous usage data" is gone (telemetry is removed anyway); the server still reads
+  `APPSMITH_DISABLE_TELEMETRY`, with no effect.
+- The paid-plan pages and fields are not offered (see "Hidden features").
 
 ## Build and deploy
 
@@ -1396,3 +1439,29 @@ Server plugins (`app/server/appsmith-plugins/`):
   `solutions/ce/DatasourceStructureSolutionCEImpl.java`, `solutions/ce/EnvManagerCEImpl.java`, the email templates in
   `resources/email/ce/`, test `helpers/ce/EmailServiceHelperCETest.java`; plugins `restApiPlugin` and `graphqlPlugin`
   `form.json` (signature header label).
+
+### UI/UX round 1 (#91: upsells, logo, create/import/rename/embed, settings shell)
+
+- New client files: `src/ee/pages/AdminSettings/SettingsShell.tsx`, `src/ee/pages/AdminSettings/config/upsells.ts`
+  (and test), `src/ee/components/DatasourceManagedNote.tsx`, tests `src/pages/AdminSettings/SaveSettings.test.tsx`,
+  `src/utils/hooks/useBrandingTheme.test.ts`, `src/ce/constants/approvedErrorMessages.test.ts`,
+  `src/pages/AppIDE/layouts/routers/MainPane/MainPane.test.tsx`.
+- Edited fork files: `src/ce/utils/forkHiddenFeatures.ts` (and test), `src/constants/Brand.ts`,
+  `src/components/BrandLogo.tsx` (and test), `src/ee/constants/messages.ts` (`DATA_PANE_TITLE`, `PLUGIN_NOT_INSTALLED`),
+  `src/ee/pages/AdminSettings/config/general.tsx`, `instanceSettings.tsx`, `src/ee/selectors/rampSelectors.tsx`.
+- Edited upstream client files (`Fork:` comments): `public/404.html`; `src/ce/pages/AdminSettings/config/authentication.tsx`,
+  `src/ce/pages/Applications/WorkspaceAction.tsx` (and test), `src/ce/pages/Applications/index.tsx`,
+  `src/components/editorComponents/PremiumFeatureTag.tsx`, `src/pages/AdminSettings/` (`index.tsx`, `LeftPane.tsx`,
+  `Main.tsx`, `SettingsForm.tsx`, `SaveSettings.tsx`, `components.tsx`, `config/ConfigFactory.ts`, `FormGroup/Common.tsx`,
+  `Profile/index.tsx`, `Profile/StyledComponents.tsx`), `src/pages/AppIDE/components/AppSettings/AppSettings.tsx`,
+  `components/GeneralSettings.tsx`, `src/pages/AppIDE/layouts/components/Header/index.tsx`,
+  `src/pages/AppIDE/layouts/routers/MainPane/MainPane.tsx`, `src/pages/AppViewer/PrimaryCTA.tsx` (and test),
+  `src/pages/Applications/ApplicationCard.tsx` (and test), `src/pages/Editor/DataSidePane/DataSidePane.tsx` (and test),
+  `src/pages/Editor/DataSourceEditor/DSFormHeader.tsx`, `src/pages/Editor/EditorName/useNavigationMenuData.ts`,
+  `src/pages/Editor/IntegrationEditor/PremiumDatasources/Constants.ts`, `src/pages/common/SearchBar/EntitySearchBar.tsx`,
+  `src/utils/hooks/useBrandingTheme.ts`; Cypress `AdminSettings/Email_settings_Spec.ts` (rebranded texts).
+- Edited upstream server files (plugin messages without Appsmith's name or support, `Fork:` comments):
+  `appsmith-interfaces` `AppsmithPluginError`, `AppsmithPluginErrorCode`, `BasePluginErrorMessages`, `PluginUtils`,
+  `ApiKeyAuthentication`, `FilterDataServiceCE`; the error messages of the S3, ArangoDB, Databricks, Firestore, Google
+  Sheets, GraphQL, Mongo, MSSQL, MySQL, Oracle, Postgres, Redis, Redshift and Snowflake plugins; tests that expect
+  them (S3 characterization JSON, Mongo, MySQL, Snowflake, server `DatasourceServiceTest`, `LayoutActionServiceTest`).
