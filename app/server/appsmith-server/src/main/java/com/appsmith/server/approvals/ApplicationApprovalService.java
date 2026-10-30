@@ -65,6 +65,9 @@ public class ApplicationApprovalService {
 
     private static final int VERSION_LENGTH = 12;
 
+    // The longest note a submitter may leave for the approver (it is kept in the history).
+    static final int MAX_NOTE_LENGTH = 500;
+
     private final ApplicationApprovalRepository repository;
     private final ApplicationRepository applicationRepository;
     private final ApplicationPermission applicationPermission;
@@ -100,6 +103,15 @@ public class ApplicationApprovalService {
     }
 
     public Mono<ApplicationApprovalDTO> submit(String applicationId) {
+        return submit(applicationId, null);
+    }
+
+    /** Submits with an optional note for the approver, kept as the comment of the SUBMITTED history event. */
+    public Mono<ApplicationApprovalDTO> submit(String applicationId, String note) {
+        String trimmedNote = StringUtils.hasText(note) ? note.trim() : null;
+        if (trimmedNote != null && trimmedNote.length() > MAX_NOTE_LENGTH) {
+            return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "note"));
+        }
         return instanceRoleService
                 .requireCurrentUserRole(
                         "Submit for approval", InstanceRole.ADMIN, InstanceRole.DEV, InstanceRole.APPROVER)
@@ -132,7 +144,7 @@ public class ApplicationApprovalService {
                             return transition(
                                     state,
                                     update,
-                                    new ApprovalEvent(ApprovalEvent.Type.SUBMITTED, tuple.getT3(), now, null));
+                                    new ApprovalEvent(ApprovalEvent.Type.SUBMITTED, tuple.getT3(), now, trimmedNote));
                         })
                         .map(state -> toDTO(application, state)));
     }

@@ -13,7 +13,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\down.ps1            
 ## For AI tasks
 
 - **Start** from the task's worktree, with a port set no other worktree uses
-  (8080, 8180, 8280, ...; each instance uses its port and the next four):
+  (8080, 8180, 8280, ...; each instance uses its port and the next six):
   `powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\up.ps1 -Port 8180`.
   It returns when the server is healthy and the login page loads. The first start in a
   new worktree takes about 30 minutes (`yarn install` about 14, then the Maven build and
@@ -28,11 +28,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\down.ps1            
   Local use only; never use these on a shared or public instance.
 - **Client changes** (`app/client/src`) show in the browser by themselves (hot reload).
   **Server changes** need `up.ps1 -Restart server` (see timings below).
+- **MCP** (the AI's way in, and `tools/cab-sync`'s): enable it once as the admin
+  (`PUT /api/v1/tenants` with `{"mcpConfig":{"enabled":true}}` and the header
+  `X-Requested-By: Appsmith`; the server writes `APPSMITH_MCP_INTERNAL_SECRET` into
+  `.work\<Name>\docker.env`), then `up.ps1 -Restart mcp`. Every later `up.ps1` starts it too.
+  It listens on `127.0.0.1:<Port+6>` and the proxy serves it at `http://localhost:<Port>/mcp`;
+  an MCP client sends only the user's `mcp_` key (profile > MCP keys). A proxy started
+  before this existed has no `/mcp` route: `up.ps1 -Restart client`.
 - **Stop:** `powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\down.ps1`.
-  This stops the client, server and proxy, and keeps MongoDB, Redis and all data.
-  Don't delete data (`-DeleteData`) of an instance you didn't create.
+  This stops the client, server, RTS, MCP server and proxy, and keeps MongoDB, Redis and
+  all data. Don't delete data (`-DeleteData`) of an instance you didn't create.
 - **Logs:** `scripts\fork-uat\.work\<Name>\` (`server.log`, `build.log`, `build-all.log`,
-  `rts.log`, `client.log`).
+  `rts.log`, `client.log`, `mcp.log`).
 
 ## What runs where
 
@@ -43,12 +50,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fork-uat\down.ps1            
 | Server (Spring Boot) | local JDK 25, built with local Maven | `127.0.0.1:<Port+1>` | settings in `.work\<Name>\docker.env`, Git repos in `.work\<Name>\git-storage` |
 | RTS | local Node | `127.0.0.1:<Port+2>` | |
 | Client (webpack dev server, hot reload) | local Node, the repo's Yarn 3 | `127.0.0.1:<Port+3>` | |
+| MCP server | local Node (`app/client/packages/mcp`, built with its `build.js`) | `127.0.0.1:<Port+6>` | sessions in the worktree's Redis |
 | Proxy (nginx) | container `appsmith-dev-<Name>-proxy` | `127.0.0.1:<Port>` | |
 
 `<Name>` is the worktree folder name, lower-cased (e.g. `fork-roles-phase-a`), so
 `C:\Projects\appsmith-wt\<branch>` worktrees each get their own instance. The proxy has the
 routes of `app/client/start-https.sh` (`/api`, `/oauth2`, `/login` to the server, `/rts` to
-RTS, the rest to webpack), over plain http.
+RTS, the rest to webpack), plus `/mcp` to the MCP server, over plain http. Like the image's
+Caddy, it drops any `X-Appsmith-Mcp-Internal` header a client sends. `<Port+5>` is left for
+a PostgreSQL instance (`fork/postgres`).
 
 MongoDB and Redis restart with Docker Desktop (`--restart unless-stopped`) and stay up
 when the rest is stopped. The client, server and RTS run as hidden processes and stop
@@ -64,12 +74,12 @@ per worktree.
 | Parameter | Default | |
 |---|---|---|
 | `-Source` | repo containing the script | Repo or worktree folder to run. |
-| `-Port` | `8080` | Browser port; the instance also uses the next four. |
+| `-Port` | `8080` | Browser port; the instance also uses the next four, and +6 for MCP. |
 | `-Name` | worktree folder name | Instance name (containers, volumes, `.work\<Name>`). |
 | `-Database` | `appsmith_<Name>` | MongoDB or PostgreSQL database. |
 | `-DbType` | `postgres` if the worktree has `db/migration/postgres` in appsmith-server, else `mongo` | Internal database. `postgres` runs a PostgreSQL 16 container for this instance (`appsmith-dev-<Name>-postgres`, `127.0.0.1:<Port+5>`, volume of the same name, dev-only user `appsmith` / password `appsmith-dev`); the server creates its schema on first start. MongoDB is then not used. Kept for `-Restart`; `down.ps1` handles both. |
-| `-Only` | `db, server, client` | Run only some steps, e.g. `-Only db`. |
-| `-Restart` | | `server` or `client`: rebuild and restart that part only. Keeps the port and database the instance was started with. |
+| `-Only` | `db, server, client, mcp` | Run only some steps, e.g. `-Only db`. |
+| `-Restart` | | `server`, `client` or `mcp`: rebuild and restart that part only. Keeps the port and database the instance was started with. |
 | `-Full` | off | With the server: rebuild every module and the plugins. |
 | `-Fast` | off | With the server: compile only the edited `.java` files (see below). |
 | `-JavaHome` | detected | JDK 25 folder. Default: `JAVA_HOME` if it is a JDK 25, else the newest `jdk-25*` under Program Files (Microsoft, Eclipse Adoptium, Java, Zulu, Amazon Corretto). Set for the server and Maven only; the global `JAVA_HOME` stays as it is. |
@@ -162,7 +172,7 @@ A branch with MongoDB migrations (e.g. roles) migrates its own worktree's databa
 ## Stopping and cleaning up
 
 ```powershell
-.\scripts\fork-uat\down.ps1                   # stop client, proxy, server, RTS; keep databases and data
+.\scripts\fork-uat\down.ps1                   # stop client, proxy, server, RTS, MCP; keep databases and data
 .\scripts\fork-uat\down.ps1 -StopDatabases    # also stop this worktree's Redis (and MongoDB if no other worktree is up)
 .\scripts\fork-uat\down.ps1 -DeleteData       # also drop this worktree's database, Redis volume and settings, and remove the client-dependency links (asks first)
 ```

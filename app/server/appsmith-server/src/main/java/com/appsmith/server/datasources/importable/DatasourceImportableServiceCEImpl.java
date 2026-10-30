@@ -263,7 +263,20 @@ public class DatasourceImportableServiceCEImpl implements ImportableServiceCE<Da
                                     return Flux.empty();
                                 }
 
-                                if (!canCreate) {
+                                // Fork: a storage whose name and plugin match an existing datasource reuses it
+                                // below and creates nothing, so only a real creation needs the create permission
+                                // (a DEV imports apps that use the workspace's datasources).
+                                boolean createsDatasource = incomingStoragesForDsCreation.stream()
+                                        .anyMatch(dsStorage -> {
+                                            Datasource sameName = dsStorage.getName() == null
+                                                    ? null
+                                                    : nameToDbDatasourceMap.get(dsStorage.getName());
+                                            String pluginId = pluginMap.get(dsStorage.getPluginId());
+                                            return sameName == null
+                                                    || pluginId == null
+                                                    || !pluginId.equals(sameName.getPluginId());
+                                        });
+                                if (!canCreate && createsDatasource) {
                                     log.error(
                                             "Unauthorized to create datasource in workspace: {}", workspace.getName());
                                     return Flux.error(new AppsmithException(

@@ -6,8 +6,10 @@ import com.appsmith.server.authentication.tokens.McpTokenAuthentication;
 import com.appsmith.server.constants.ArtifactType;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.ApplicationApproval;
+import com.appsmith.server.domains.NewPage;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.dtos.ApplicationJson;
+import com.appsmith.server.dtos.ArtifactExchangeJson;
 import com.appsmith.server.dtos.PageDTO;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
@@ -16,6 +18,7 @@ import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.repositories.ApplicationApprovalRepository;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
+import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.roles.InstanceRole;
@@ -47,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,7 +74,7 @@ class ApplicationApprovalServiceTest {
     @Autowired
     ApplicationApprovalService approvalService;
 
-    @Autowired
+    @MockitoSpyBean
     ApprovalFingerprint fingerprint;
 
     @Autowired
@@ -102,6 +106,9 @@ class ApplicationApprovalServiceTest {
 
     @Autowired
     ImportService importService;
+
+    @Autowired
+    NewPageRepository newPageRepository;
 
     WebTestClient webTestClient;
     Map<InstanceRole, User> users;
@@ -149,6 +156,33 @@ class ApplicationApprovalServiceTest {
         } else {
             assertThat(error).contains(AppsmithError.ACTION_IS_NOT_AUTHORIZED);
         }
+    }
+
+    @Test
+    void should_keepTrimmedNoteInHistory_when_devSubmitsWithNote() {
+        // When
+        ApplicationApprovalDTO submitted =
+                runAs(approvalService.submit(application.getId(), "  New order filter  "), InstanceRole.DEV);
+
+        // Then
+        assertThat(submitted.history()).last().satisfies(event -> {
+            assertThat(event.getType()).isEqualTo(ApprovalEvent.Type.SUBMITTED);
+            assertThat(event.getComment()).isEqualTo("New order filter");
+        });
+    }
+
+    @Test
+    void should_refuseSubmit_when_noteIsTooLong() {
+        // When
+        Optional<AppsmithError> error = errorOf(
+                approvalService.submit(application.getId(), "x".repeat(ApplicationApprovalService.MAX_NOTE_LENGTH + 1)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).contains(AppsmithError.INVALID_PARAMETER);
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.DRAFT);
     }
 
     @Test
@@ -503,7 +537,10 @@ class ApplicationApprovalServiceTest {
 
         // When
         Throwable failure = runAs(
-                approvalService.approve(application.getId()).then(Mono.<Throwable>empty()).onErrorResume(Mono::just),
+                approvalService
+                        .approve(application.getId())
+                        .then(Mono.<Throwable>empty())
+                        .onErrorResume(Mono::just),
                 InstanceRole.APPROVER);
 
         // Then
@@ -559,34 +596,207 @@ class ApplicationApprovalServiceTest {
                 .isNull();
     }
 
-    @Test
-    void should_takeLiveAppOffline_when_adminImportsOverIt() {
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"ADMIN", "DEV"})
+    void should_replaceOnlyEditCopyAndStayLive_when_builderImportsOverLiveApp(InstanceRole role) {
         // Given
         runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
         runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
-        ApplicationJson export = runAs(
-                exportService
-                        .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
-                        .map(json -> (ApplicationJson) json),
-                InstanceRole.ADMIN);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        String deployedAt =
+                applicationRepository.findById(application.getId()).block().getLastDeployedAt();
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(
+                        workspaceId, application.getId(), exportWithMobileLayout(true)),
+                role);
+
+        // Then
+        assertThat(error).isEmpty();
+        Application stored = applicationRepository.findById(application.getId()).block();
+        assertThat(stored.getLastDeployedAt()).isEqualTo(deployedAt);
+        assertThat(stored.getUnpublishedAppLayout().getType()).isEqualTo(Application.AppLayout.Type.MOBILE);
+        assertThat(stored.getPublishedAppLayout() == null
+                        || stored.getPublishedAppLayout().getType() != Application.AppLayout.Type.MOBILE)
+                .isTrue();
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isNotEqualTo(editModeBefore);
+        List<String> visibleToUser = runAs(
+                applicationService
+                        .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                        .map(Application::getId)
+                        .collectList(),
+                InstanceRole.USER);
+        assertThat(visibleToUser).contains(application.getId());
+    }
+
+    @Test
+    void should_keepPublishedCopyAndStayLive_when_devImportsFileWithDifferentViewMode() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        String deployedAt =
+                applicationRepository.findById(application.getId()).block().getLastDeployedAt();
+        List<String> publishedPageNames = publishedPageNames();
+        ApplicationJson file = exportWithMobileLayout(true);
+        file.getExportedApplication().setLastDeployedAt(Instant.EPOCH);
+        file.getPageList().forEach(page -> page.getPublishedPage().setName("Renamed in the file"));
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), file),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).isEmpty();
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(publishedPageNames()).isEqualTo(publishedPageNames);
+        Application stored = applicationRepository.findById(application.getId()).block();
+        assertThat(stored.getLastDeployedAt()).isEqualTo(deployedAt);
+        assertThat(stored.getUnpublishedAppLayout().getType()).isEqualTo(Application.AppLayout.Type.MOBILE);
+    }
+
+    @Test
+    void should_takeAppOffline_when_importChangesViewModeAnyway() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        ApplicationJson file = exportWithMobileLayout(false);
+        // The importers keep the published copy, so only a changed reading can stand for an import that changed it.
+        AtomicInteger reads = new AtomicInteger();
+        doAnswer(invocation ->
+                        reads.getAndIncrement() == 0 ? invocation.callRealMethod() : Mono.just("changed by the import"))
+                .when(fingerprint)
+                .ofViewMode(application.getId());
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), file),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).isEmpty();
+        assertThat(reads.get()).isEqualTo(2);
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNull();
+        List<String> visibleToUser = runAs(
+                applicationService
+                        .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                        .map(Application::getId)
+                        .collectList(),
+                InstanceRole.USER);
+        assertThat(visibleToUser).doesNotContain(application.getId());
+    }
+
+    @Test
+    void should_refuseImportAndKeepAppAsApproved_when_liveAppGetsFileThatIsNotAnAppFile() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        ArtifactExchangeJson notAnAppFile = Mockito.mock(ArtifactExchangeJson.class);
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), notAnAppFile),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).contains(AppsmithError.UNSUPPORTED_OPERATION);
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNotNull();
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void should_cancelPendingRequest_when_devImportsChangedEditCopy() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        ApplicationJson changed = exportWithMobileLayout(false);
+        addPage(InstanceRole.DEV);
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
 
         // When
         runAs(
-                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), export),
-                InstanceRole.ADMIN);
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), changed),
+                InstanceRole.DEV);
 
         // Then
+        ApplicationApprovalDTO status = runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV);
+        assertThat(status.status()).isEqualTo(ApprovalStatus.DRAFT);
+        assertThat(status.history()).last().satisfies(event -> {
+            assertThat(event.getType()).isEqualTo(ApprovalEvent.Type.CANCELLED);
+            assertThat(event.getComment()).isEqualTo(ApplicationApprovalService.CHANGED_AFTER_SUBMIT);
+        });
         assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
-                .isNull();
+                .isNotNull();
+    }
+
+    @Test
+    void should_stillRefuseDirectPublish_when_devImportedOverLiveApp() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        runAs(
+                importService.updateNonGitConnectedArtifactFromJson(
+                        workspaceId, application.getId(), exportWithMobileLayout(true)),
+                InstanceRole.DEV);
+
+        // When
+        Optional<AppsmithError> error =
+                errorOf(applicationPageService.publish(application.getId(), true), InstanceRole.DEV);
+
+        // Then
+        assertThat(error).contains(AppsmithError.ACTION_IS_NOT_AUTHORIZED);
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+    }
+
+    @Test
+    void should_publishImportedEditCopy_when_approverApprovesItsRelease() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        runAs(
+                importService.updateNonGitConnectedArtifactFromJson(
+                        workspaceId, application.getId(), exportWithMobileLayout(false)),
+                InstanceRole.DEV);
+        String submitted = runAs(approvalService.submit(application.getId()), InstanceRole.DEV)
+                .version();
+
+        // When
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+
+        // Then
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).startsWith(submitted);
+        assertThat(applicationRepository
+                        .findById(application.getId())
+                        .block()
+                        .getPublishedAppLayout()
+                        .getType())
+                .isEqualTo(Application.AppLayout.Type.MOBILE);
     }
 
     @Test
     void should_releaseClaimBackToSubmitted_when_claimIsStale() {
         // Given
         runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
-        ApplicationApproval stored = approvalRepository.findById(application.getId()).block();
+        ApplicationApproval stored =
+                approvalRepository.findById(application.getId()).block();
         stored.setStatus(ApprovalStatus.APPROVING);
-        stored.setReviewedAt(Instant.now().minus(ApplicationApprovalService.STALE_CLAIM).minusSeconds(1));
+        stored.setReviewedAt(
+                Instant.now().minus(ApplicationApprovalService.STALE_CLAIM).minusSeconds(1));
         approvalRepository.save(stored).block();
 
         // When
@@ -600,6 +810,26 @@ class ApplicationApprovalServiceTest {
     }
 
     @Test
+    void should_readViewModeFingerprint_when_pageHasNoPublishedCopy() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        NewPage page =
+                newPageRepository.findByApplicationId(application.getId()).blockFirst();
+        page.setPublishedPage(null);
+        newPageRepository.save(page).block();
+
+        // When
+        String viewMode = fingerprint.ofViewMode(application.getId()).block();
+
+        // Then
+        assertThat(viewMode).hasSize(64);
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.APPROVED);
+    }
+
+    @Test
     void should_giveSameFingerprint_when_unchangedAppIsReadTwice() {
         // When
         String first = fingerprint.ofEditMode(application.getId()).block();
@@ -607,6 +837,35 @@ class ApplicationApprovalServiceTest {
 
         // Then
         assertThat(first).hasSize(64).isEqualTo(second);
+    }
+
+    /**
+     * The app as a file, with a mobile layout in its edit copy and, if {@code inViewModeToo}, in its published copy as
+     * well, as a file from another instance or a hand-edited one could carry.
+     */
+    private ApplicationJson exportWithMobileLayout(boolean inViewModeToo) {
+        // The file export needs the export permission, which only ADMIN has (the projects repo exports the edit copy
+        // with the edit permission instead, see ProjectsRepoService).
+        ApplicationJson export = runAs(
+                exportService
+                        .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                        .map(json -> (ApplicationJson) json),
+                InstanceRole.ADMIN);
+        Application exported = export.getExportedApplication();
+        exported.setUnpublishedAppLayout(new Application.AppLayout(Application.AppLayout.Type.MOBILE));
+        if (inViewModeToo) {
+            exported.setPublishedAppLayout(new Application.AppLayout(Application.AppLayout.Type.MOBILE));
+        }
+        return export;
+    }
+
+    private List<String> publishedPageNames() {
+        return newPageRepository
+                .findByApplicationId(application.getId())
+                .map(page -> page.getPublishedPage().getName())
+                .sort()
+                .collectList()
+                .block();
     }
 
     private void addPage(InstanceRole role) {

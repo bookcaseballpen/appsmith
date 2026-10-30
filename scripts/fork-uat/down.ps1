@@ -3,7 +3,8 @@
   Stops a worktree's dev instance started by up.ps1. Databases and data are kept.
 
 .DESCRIPTION
-  By default stops the client (webpack), the proxy, the server and RTS of one worktree.
+  By default stops the client (webpack), the proxy, the server, RTS and the MCP server of
+  one worktree.
   MongoDB (or the worktree's PostgreSQL) and the worktree's Redis keep running, and no data
   is deleted.
     -StopDatabases  also stops the worktree's Redis and PostgreSQL, and the shared MongoDB
@@ -87,6 +88,7 @@ $postgresContainer = "$prefix-postgres"
 Stop-Detached (Join-Path $workDir "client.pid") "the webpack dev server"
 Stop-Detached (Join-Path $workDir "server.pid") "the server"
 Stop-Detached (Join-Path $workDir "rts.pid") "RTS"
+Stop-Detached (Join-Path $workDir "mcp.pid") "the MCP server"
 Remove-Container "$prefix-proxy"
 # Left over from the earlier container-based setup.
 Remove-Container "$prefix-server"

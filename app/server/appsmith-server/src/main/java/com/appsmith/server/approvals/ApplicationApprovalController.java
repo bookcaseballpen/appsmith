@@ -36,8 +36,11 @@ public class ApplicationApprovalController {
     }
 
     @PostMapping("/applications/{applicationId}/submit")
-    public Mono<ResponseDTO<ApplicationApprovalDTO>> submit(@PathVariable String applicationId) {
-        return applicationApprovalService.submit(applicationId).map(dto -> new ResponseDTO<>(HttpStatus.OK, dto));
+    public Mono<ResponseDTO<ApplicationApprovalDTO>> submit(
+            @PathVariable String applicationId, @RequestBody(required = false) SubmitRequest request) {
+        return applicationApprovalService
+                .submit(applicationId, request == null ? null : request.note())
+                .map(dto -> new ResponseDTO<>(HttpStatus.OK, dto));
     }
 
     @PostMapping("/applications/{applicationId}/approve")
@@ -54,4 +57,7 @@ public class ApplicationApprovalController {
     }
 
     public record RejectRequest(String comment) {}
+
+    /** An optional note for the approver. */
+    public record SubmitRequest(String note) {}
 }

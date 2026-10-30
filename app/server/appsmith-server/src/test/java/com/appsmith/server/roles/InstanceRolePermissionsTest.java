@@ -4,10 +4,12 @@ import com.appsmith.external.models.ActionConfiguration;
 import com.appsmith.external.models.ActionDTO;
 import com.appsmith.external.models.Datasource;
 import com.appsmith.external.models.DatasourceConfiguration;
+import com.appsmith.external.models.DatasourceStorage;
 import com.appsmith.external.models.DatasourceStorageDTO;
 import com.appsmith.external.models.Property;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.applications.base.ApplicationService;
+import com.appsmith.server.constants.ArtifactType;
 import com.appsmith.server.datasources.base.DatasourceService;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.Plugin;
@@ -16,6 +18,7 @@ import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.dtos.ApplicationJson;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.exports.internal.ExportService;
 import com.appsmith.server.fork.internal.ApplicationForkingService;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
@@ -35,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -122,6 +126,9 @@ class InstanceRolePermissionsTest {
 
     @Autowired
     ImportService importService;
+
+    @Autowired
+    ExportService exportService;
 
     @MockBean
     PluginExecutorHelper pluginExecutorHelper;
@@ -416,25 +423,123 @@ class InstanceRolePermissionsTest {
     @EnumSource(
             value = InstanceRole.class,
             names = {"ADMIN", "DEV"})
-    void should_refuseImportOverLiveAppOnlyForDev_when_roleImportsOverIt(InstanceRole role) {
+    void should_importOverLiveAppAndKeepItLive_when_builderImportsOverIt(InstanceRole role) {
         // Given
         makeLive(application.getId());
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
 
         // When
-        // An empty export is enough: the role check comes before the import reads it.
         Optional<AppsmithError> error = runAs(
                         importService
-                                .updateNonGitConnectedArtifactFromJson(
-                                        workspaceId, application.getId(), new ApplicationJson())
+                                .updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), export)
                                 .map(imported -> Optional.<AppsmithError>empty()),
                         users.get(role))
                 .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
-                .onErrorResume(exception -> Mono.just(Optional.empty()))
                 .block();
 
         // Then
-        assertThat(error.filter(AppsmithError.ACTION_IS_NOT_AUTHORIZED::equals).isPresent())
-                .isEqualTo(role == InstanceRole.DEV);
+        assertThat(error).isEmpty();
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNotNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void should_letDevImportOnlyAppsUsingExistingDatasources_when_devImportsApp(boolean datasourceExists) {
+        // Given
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        DatasourceStorage reference = new DatasourceStorage();
+        reference.setName(datasourceExists ? datasource.getName() : unique("missing-datasource"));
+        reference.setPluginId("restapi-plugin");
+        export.setDatasourceList(List.of(reference));
+        export.getExportedApplication().setName(unique("imported-by-dev"));
+
+        // When
+        Optional<AppsmithError> error = runAs(
+                        importService
+                                .importNewArtifactInWorkspaceFromJson(workspaceId, export)
+                                .map(imported -> Optional.<AppsmithError>empty()),
+                        users.get(InstanceRole.DEV))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .block();
+
+        // Then
+        if (datasourceExists) {
+            assertThat(error).isEmpty();
+            String adminView = new String(clientFor(InstanceRole.ADMIN)
+                    .get()
+                    .uri("/api/v1/datasources?workspaceId={workspaceId}", workspaceId)
+                    .exchange()
+                    .expectBody()
+                    .returnResult()
+                    .getResponseBodyContent());
+            assertThat(adminView).contains(SECRET_HOST);
+        } else {
+            assertThat(error).isPresent();
+        }
+    }
+
+    @Test
+    void should_refuseDevImportAndCreateNothing_when_appUsesExistingAndNewDatasource() {
+        // Given
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        DatasourceStorage existing = new DatasourceStorage();
+        existing.setName(datasource.getName());
+        existing.setPluginId("restapi-plugin");
+        DatasourceStorage missing = new DatasourceStorage();
+        String missingName = unique("missing-datasource");
+        missing.setName(missingName);
+        missing.setPluginId("restapi-plugin");
+        export.setDatasourceList(List.of(existing, missing));
+        String appName = unique("imported-by-dev");
+        export.getExportedApplication().setName(appName);
+
+        // When
+        Optional<AppsmithException> error = runAs(
+                        importService
+                                .importNewArtifactInWorkspaceFromJson(workspaceId, export)
+                                .map(imported -> Optional.<AppsmithException>empty()),
+                        users.get(InstanceRole.DEV))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception)))
+                .block();
+
+        // Then
+        // The importer wraps the datasource step's ACTION_IS_NOT_AUTHORIZED in its own error, keeping the message.
+        assertThat(error).hasValueSatisfying(exception -> {
+            assertThat(exception.getError()).isEqualTo(AppsmithError.GENERIC_JSON_IMPORT_ERROR);
+            assertThat(exception.getMessage()).contains("create datasource");
+        });
+        String datasources = new String(clientFor(InstanceRole.ADMIN)
+                .get()
+                .uri("/api/v1/datasources?workspaceId={workspaceId}", workspaceId)
+                .exchange()
+                .expectBody()
+                .returnResult()
+                .getResponseBodyContent());
+        assertThat(datasources).contains(datasource.getName()).doesNotContain(missingName);
+        List<String> appNames = runAs(
+                        applicationService
+                                .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                                .map(Application::getName)
+                                .collectList(),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        assertThat(appNames).doesNotContain(appName);
     }
 
     @ParameterizedTest

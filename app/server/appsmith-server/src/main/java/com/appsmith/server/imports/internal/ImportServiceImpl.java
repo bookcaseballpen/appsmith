@@ -1,6 +1,7 @@
 package com.appsmith.server.imports.internal;
 
 import com.appsmith.external.models.Datasource;
+import com.appsmith.server.approvals.ApprovalFingerprint;
 import com.appsmith.server.converters.ArtifactExchangeJsonAdapter;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.Artifact;
@@ -13,26 +14,40 @@ import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.imports.importable.ImportableService;
 import com.appsmith.server.imports.internal.artifactbased.ArtifactBasedImportService;
 import com.appsmith.server.migrations.JsonSchemaMigration;
+import com.appsmith.server.projectsrepo.EditCopyJson;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.SessionUserService;
 import com.appsmith.server.services.WorkspaceService;
 import com.google.gson.GsonBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 /**
- * An exported app carries its view mode with it, so importing over an app replaces what its users see. Over a live app
- * (see {@link PublishApproval}) that needs the publish permission, which DEV lacks. Importing a new app stays open: it
- * is not live until an approver publishes it.
+ * Importing a file over an existing app replaces its edit copy only. The published side of the file (what a publish
+ * would copy: published pages, queries, JS objects, app settings and theme) is dropped before the import
+ * ({@link EditCopyJson#dropPublishedSide}), and the importers keep the stored published copy wherever the file has
+ * none; any other kind of file over an existing artifact is refused. So a DEV, or an AI through MCP, may import over
+ * a live app: its users keep seeing the approved version, which changes only through Submit -> Approve (see
+ * {@link PublishApproval}). A pending request is cancelled by the approval fingerprint once the edit copy differs.
+ *
+ * <p>Over a live app the view-mode fingerprint is compared before and after the import; if the import changed what
+ * users see anyway, the app is taken offline (as approve does), so users never see an unapproved version.
+ *
+ * <p>Restoring a snapshot still carries the snapshot's view mode: over a live app it needs the publish permission,
+ * which DEV lacks, and takes the app offline until a release of it is approved. Importing a new app stays open: it is
+ * not live until an approver publishes it.
  */
+@Slf4j
 @Service
 public class ImportServiceImpl extends ImportServiceCEImpl implements ImportService {
 
     private final PublishApproval publishApproval;
+    private final ApprovalFingerprint approvalFingerprint;
 
     public ImportServiceImpl(
             ArtifactBasedImportService<Application, ApplicationImportDTO, ApplicationJson> applicationImportService,
@@ -46,7 +61,8 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
             GsonBuilder gsonBuilder,
             ArtifactExchangeJsonAdapter artifactExchangeJsonAdapter,
             JsonSchemaMigration jsonSchemaMigration,
-            PublishApproval publishApproval) {
+            PublishApproval publishApproval,
+            ApprovalFingerprint approvalFingerprint) {
         super(
                 applicationImportService,
                 sessionUserService,
@@ -60,16 +76,27 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
                 artifactExchangeJsonAdapter,
                 jsonSchemaMigration);
         this.publishApproval = publishApproval;
+        this.approvalFingerprint = approvalFingerprint;
     }
 
     @Override
     public Mono<? extends Artifact> updateNonGitConnectedArtifactFromJson(
             String workspaceId, String artifactId, ArtifactExchangeJson artifactExchangeJson) {
-        return requirePublishIfLive(artifactId, "Import over a published application")
-                .flatMap(wasLive -> takeOfflineIf(
-                        wasLive,
-                        artifactId,
-                        super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson)));
+        if (!StringUtils.hasText(artifactId)) {
+            return super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson);
+        }
+        // Only an app file has a published side this class knows how to drop; any other kind could write it.
+        if (!(artifactExchangeJson instanceof ApplicationJson applicationJson)) {
+            log.warn("Refused importing a file that is not an app file over artifact {}", artifactId);
+            return Mono.error(new AppsmithException(AppsmithError.UNSUPPORTED_OPERATION));
+        }
+        EditCopyJson.dropPublishedSide(applicationJson);
+        Mono<Artifact> imported = Mono.defer(
+                () -> super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson)
+                        .map(artifact -> (Artifact) artifact));
+        return publishApproval
+                .isLive(artifactId)
+                .flatMap(isLive -> isLive ? keepingViewMode(artifactId, imported) : imported);
     }
 
     @Override
@@ -82,23 +109,45 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
                         super.restoreSnapshot(workspaceId, branchedArtifactId, artifactExchangeJson)));
     }
 
+    /** Runs the import of a live app and takes the app offline if what its users see changed after all. */
+    private Mono<Artifact> keepingViewMode(String applicationId, Mono<Artifact> imported) {
+        return approvalFingerprint
+                .ofViewMode(applicationId)
+                .defaultIfEmpty("")
+                .flatMap(before -> imported.flatMap(artifact -> approvalFingerprint
+                        .ofViewMode(applicationId)
+                        .defaultIfEmpty("")
+                        .flatMap(after -> {
+                            if (before.equals(after)) {
+                                return Mono.just(artifact);
+                            }
+                            log.warn(
+                                    "Import over live application {} changed its published copy; taking it offline",
+                                    applicationId);
+                            return publishApproval.markNotLive(applicationId).thenReturn(artifact);
+                        })));
+    }
+
     /** Answers whether the app is live, after refusing a caller without the publish permission on a live app. */
     private Mono<Boolean> requirePublishIfLive(String applicationId, String action) {
         if (!StringUtils.hasText(applicationId)) {
             return Mono.just(false);
         }
-        return publishApproval.isLive(applicationId).flatMap(isLive -> !isLive
-                ? Mono.just(false)
-                : publishApproval
-                        .canPublish(applicationId)
-                        .flatMap(allowed -> allowed
-                                ? Mono.just(true)
-                                : Mono.error(new AppsmithException(AppsmithError.ACTION_IS_NOT_AUTHORIZED, action))));
+        return publishApproval
+                .isLive(applicationId)
+                .flatMap(isLive -> !isLive
+                        ? Mono.just(false)
+                        : publishApproval
+                                .canPublish(applicationId)
+                                .flatMap(allowed -> allowed
+                                        ? Mono.just(true)
+                                        : Mono.error(new AppsmithException(
+                                                AppsmithError.ACTION_IS_NOT_AUTHORIZED, action))));
     }
 
     /**
-     * The import carries the file's view mode with it, which nobody approved, so a live app is taken out of users'
-     * sight until a release of it is approved.
+     * A snapshot carries its own view mode, which nobody approved, so a live app is taken out of users' sight until a
+     * release of it is approved.
      */
     private Mono<Artifact> takeOfflineIf(boolean wasLive, String applicationId, Mono<? extends Artifact> imported) {
         return imported.flatMap(artifact -> wasLive
