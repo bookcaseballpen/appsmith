@@ -13,12 +13,14 @@ import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.services.ArtifactCopyAudit;
 import com.google.gson.Gson;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Fork: moves apps between the instance and the projects repo (tools/cab-sync, through the MCP tools export_application
@@ -31,6 +33,7 @@ import java.util.Objects;
  * <p>The import is the normal app import: a new app, or the edit copy of an existing one (the published copy and its
  * live state stay as they are, see {@code ImportServiceImpl}).
  */
+@Slf4j
 @Service
 public class ProjectsRepoService {
 
@@ -50,8 +53,12 @@ public class ProjectsRepoService {
         this.gson = gson;
     }
 
-    /** The app's edit copy as an app JSON tree, as the import reads it. */
+    /** The app's edit copy as an app JSON tree, as the import reads it, its secret values stripped. */
     public Mono<Object> exportEditCopy(String applicationId) {
+        return exportTree(applicationId, true);
+    }
+
+    private Mono<Object> exportTree(String applicationId, boolean stripSecretValues) {
         if (!StringUtils.hasText(applicationId)) {
             return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "applicationId"));
         }
@@ -61,48 +68,65 @@ public class ProjectsRepoService {
                     ApplicationJson json = (ApplicationJson) exported;
                     EditCopyJson.dropPublishedSide(json);
                     // Through Gson, as the file export does, so the tree has the field names the import reads.
-                    return EditCopyJson.withoutDatasourceDetails(gson.fromJson(gson.toJson(json), Object.class));
+                    return EditCopyJson.withoutDatasourceDetails(
+                            gson.fromJson(gson.toJson(json), Object.class), stripSecretValues);
                 });
     }
 
     /**
-     * Imports an app JSON as a new app, or over the edit copy of {@code applicationId}. An app JSON identical to the
-     * app's current edit copy (as {@link #exportEditCopy} gives it) is not imported: an import always writes new
-     * layout ids, which would count as an edit and send an approved app back to draft.
+     * Imports an app JSON as a new app, or over the edit copy of {@code applicationId}. The secret values the export
+     * stripped are put back from the stored edit copy first ({@link EditCopyJson#putBackStoredValues}); one with no
+     * stored value refuses the import. An app JSON identical to the app's current edit copy is then not imported: an
+     * import always writes new layout ids, which would count as an edit and send an approved app back to draft.
      */
     public Mono<ImportResult> importEditCopy(String workspaceId, String applicationId, String appJson) {
         if (!StringUtils.hasText(appJson)) {
             return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "app JSON"));
         }
-        if (!StringUtils.hasText(applicationId)) {
-            return importJson(workspaceId, applicationId, appJson);
-        }
-        return isEditCopy(applicationId, appJson)
-                .flatMap(unchanged -> unchanged
-                        ? applicationRepository
-                                .findById(applicationId)
-                                .map(application -> new ImportResult(
-                                        application.getId(),
-                                        application.getWorkspaceId(),
-                                        application.getName(),
-                                        List.of(),
-                                        true))
-                        : importJson(workspaceId, applicationId, appJson));
-    }
-
-    /** Answers whether the app JSON is the app's edit copy as it is now; any doubt answers false (import it). */
-    private Mono<Boolean> isEditCopy(String applicationId, String appJson) {
         Object incoming;
         try {
-            incoming = EditCopyJson.withoutDatasourceDetails(gson.fromJson(appJson, Object.class));
+            incoming = gson.fromJson(appJson, Object.class);
         } catch (RuntimeException e) {
-            return Mono.just(false);
+            // Not JSON: the import reports it.
+            return importJson(workspaceId, applicationId, appJson);
         }
-        // Map equality ignores key order; list order is content.
-        return exportEditCopy(applicationId)
-                .map(current -> current.equals(incoming))
-                .onErrorReturn(false)
-                .defaultIfEmpty(false);
+        if (!StringUtils.hasText(applicationId)) {
+            return Mono.fromCallable(() -> EditCopyJson.putBackStoredValues(incoming, null))
+                    .flatMap(putBack -> importJson(workspaceId, applicationId, appJson));
+        }
+        // Any doubt about the stored edit copy (none readable) counts as a change: import it.
+        return exportTree(applicationId, false)
+                .map(Optional::of)
+                .onErrorResume(error -> {
+                    // Only the error's type and message: never the stored edit copy, which holds secret values.
+                    log.warn(
+                            "Projects repo import over {}: the stored edit copy could not be read ({}: {}), importing"
+                                    + " without it",
+                            applicationId,
+                            error.getClass().getSimpleName(),
+                            error.getMessage());
+                    return Mono.just(Optional.empty());
+                })
+                .defaultIfEmpty(Optional.empty())
+                .flatMap(current -> {
+                    boolean putBack = EditCopyJson.putBackStoredValues(incoming, current.orElse(null));
+                    String restoredJson = putBack ? gson.toJson(incoming) : appJson;
+                    // Map equality ignores key order; list order is content.
+                    boolean unchanged = current.isPresent()
+                            && current.get()
+                                    .equals(EditCopyJson.withoutDatasourceDetails(
+                                            gson.fromJson(restoredJson, Object.class), false));
+                    return unchanged
+                            ? applicationRepository
+                                    .findById(applicationId)
+                                    .map(application -> new ImportResult(
+                                            application.getId(),
+                                            application.getWorkspaceId(),
+                                            application.getName(),
+                                            List.of(),
+                                            true))
+                            : importJson(workspaceId, applicationId, restoredJson);
+                });
     }
 
     private Mono<ImportResult> importJson(String workspaceId, String applicationId, String appJson) {

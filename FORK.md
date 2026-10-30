@@ -69,7 +69,9 @@ The roles work on a **fresh install only**. Nothing is migrated:
   Devs (and MCP) may import over a live app, and its users keep seeing the approved version; a new version goes live
   only through Submit -> Approve. A pending request is cancelled by the fingerprint rule, since the edit copy changed.
   Over a live app the view-mode fingerprint is compared before and after the import; should the import have changed
-  what users see anyway, the app is taken offline (`PublishApproval.markNotLive`), as approve does.
+  what users see anyway, the app is taken offline (`PublishApproval.markNotLive`), as approve does. A file over an
+  existing app that is not an app file (`ApplicationJson`) is refused (`UNSUPPORTED_OPERATION`), since there would be
+  no published side to drop. `ApplicationApprovalServiceTest` covers these cases.
 - Restoring a snapshot of a live app still needs the publish permission and takes the app offline, because the
   snapshot's view mode was not approved; it is live again once a release is approved. Importing a new app is open to
   Devs; it is not live until a release is approved.
@@ -278,9 +280,31 @@ Server (`projectsrepo/`):
 `EditCopyJson` keeps every secret on the instance: the export never carries the published copy, the stored datasource
 structure, decrypted fields or modified-resources bookkeeping; each datasource is reduced to `name` and `pluginId`; a
 query that uses a saved datasource refers to it without its configuration; an API query with its own URL keeps the
-URL, headers and parameters (they are the query) but never its authentication. The MCP tool strips the same again,
-and cab-sync writes datasources as name and plugin only. `McpAllowlistExtensions` allows exactly these two routes
-(prefix `/api/v1/projects-repo`, `import` reserved as a segment).
+URL, headers and parameters (they are the query) but never its authentication or SSH proxy settings. In every query
+the literal values of secret headers and parameters are replaced by `__secret_kept_on_server__`
+(`EditCopyJson.STRIPPED_VALUE`): `actionConfiguration.headers`, `.queryParameters` and the query string of `.path`, and
+the own datasource's `headers`, `queryParameters` and the query string of its `url`. A name is secret when it contains
+(case-insensitive) `authorization`, `cookie`, `token`, `secret`, `key`, `password`, `passwd`, `signature` or
+`credential`, or is `auth`; values with a `{{ }}` binding and empty values stay. The MCP tool strips the datasource
+details again (not the secret values: the server's export already has none), and cab-sync writes datasources as name
+and plugin only. `McpAllowlistExtensions` allows exactly these two routes (prefix `/api/v1/projects-repo`, `import`
+reserved as a segment).
+
+Round trip: the import replaces a query's header and parameter lists and URL whole (authentication is kept, since the
+importer copies only non-null fields), so the marker itself would be stored. `ProjectsRepoService.importEditCopy`
+therefore first puts the stored value back (`EditCopyJson.putBackStoredValues`) for every marker, matching the query by
+`gitSyncId` and the header or parameter by name (case-insensitive) and position among those of that name, and compares
+for "unchanged" with the secrets in place. A marker with no stored value (a new or copied query, a renamed header, a
+new app) refuses the import (400) with the list of those values. A stored value is only put back when the query still
+sends its requests where the stored one does (`EditCopyJson.target`): the same saved datasource (its `id`, the name
+in the file) and the same scheme, host and port (the authority, user info included, letter case ignored) of the own
+datasource's `url` followed by `.path`, so a path starting `.evil.net/`, `@evil.net/` or `:8443/` counts as moved.
+An authority with a `{{ }}` binding is the same only when its text is identical. Otherwise the import is refused (400)
+with the query and header/parameter names, and nothing is saved: whoever edits the file (a Dev, who can't read the
+secrets) could otherwise point the query at their own host and receive them. The fix is to write the value again (a
+literal or a binding) on purpose. Only this route does it: a marker in a file imported
+through `/api/v1/applications/import` is stored as it is. Not stripped: request bodies and form data, and secret
+values in any other field.
 
 The MCP server of a fork-uat instance runs from `scripts/fork-uat` (`up.ps1`, `127.0.0.1:<Port+6>`, proxied at
 `/mcp`), once MCP is enabled on the instance.

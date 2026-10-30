@@ -66,10 +66,35 @@ macOS). On push, a query's or JS object's page is the folder it is in.
 `push` refuses files that are not part of this layout, a widget no parent lists, and two body files for one query, so
 a typo fails loudly instead of being dropped.
 
+## Secrets
+
+No secret leaves the instance; the server strips them before cab-sync sees the export (`EditCopyJson` in
+`app/server`, see FORK.md "Projects repo"):
+
+- datasources: only `name` and `pluginId`; a query on a saved datasource has no datasource configuration;
+- a query with its own URL (an API query without a saved datasource): no `authentication` or SSH proxy settings;
+- in every query, the **literal values** of secret headers and parameters become `__secret_kept_on_server__`: in
+  `actionConfiguration.headers`, `.queryParameters` and the query string of `.path`, and in the own datasource's
+  `headers`, `queryParameters` and the query string of its `url`. A name is secret when it contains (ignoring case)
+  `authorization`, `cookie`, `token`, `secret`, `key`, `password`, `passwd`, `signature` or `credential`, or is
+  `auth`. Values with a `{{ }}` binding, and empty values, stay as they are.
+
+On push the server puts the stored value back for every `__secret_kept_on_server__`, matching the query by
+`gitSyncId` and the header or parameter by name (letter case ignored) and position among those of that name, so a
+pull -> push round trip keeps the secrets. A marker it cannot match (a new or copied query, a renamed header, a new app)
+refuses the push with the list of values; write a `{{ }}` binding there instead. A real value written in the file
+replaces the stored one (and then sits in the repo), so don't.
+
+The stored value only goes back while the query still points where it did: the same saved datasource, and the same
+scheme, host and port in its URL (the own datasource's `url` followed by `.path`; a `{{ }}` binding there must be
+unchanged). Changing the path after the host is fine. If you move a query with markers to another host, port, scheme
+or datasource, the push is refused with the query and header/parameter names: the secret is not sent to the new
+target unless you write its value (a binding, or a literal) there on purpose.
+
 ## Development
 
 ```sh
-npm install            # TypeScript and @types/node, for the type check only
+npm ci                 # TypeScript and @types/node (from package-lock.json), for the type check only
 npm run check-types    # tsc
 npm test               # node --test (layout round trip, CLI against a fake MCP server)
 ```
