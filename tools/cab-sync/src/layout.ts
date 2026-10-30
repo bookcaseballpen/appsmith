@@ -10,7 +10,7 @@ import {
 // The projects repo's layout of one app (apps/<app-slug>/), split from and put back into Appsmith's app JSON (the
 // format export_application returns and import_application takes):
 //
-//   application.json                      the app: settings, page order, schema versions (edit copy only)
+//   application.json                      the app: settings, tags, page order, schema versions (edit copy only)
 //   theme.json                            the edit-mode theme
 //   datasources.json                      the datasources the app uses, by name and plugin only
 //   js-libraries.json                     custom JS libraries (only when the app has some)
@@ -276,6 +276,9 @@ export function splitApp(appJson: JsonObject): FileMap {
   }
 
   for (const key of PUBLISHED_APPLICATION_KEYS) delete exported[key];
+
+  // An app without tags has no "tags" in application.json, whether the instance has none or an empty list.
+  if (Array.isArray(exported.tags) && exported.tags.length === 0) delete exported.tags;
 
   out.json(APPLICATION_FILE, withoutVolatile(application), "The application");
 
@@ -622,6 +625,14 @@ export function assembleApp(files: FileMap): JsonObject {
   if (!isObject(app.exportedApplication)) {
     throw new LayoutError(`${APPLICATION_FILE} has no exportedApplication.`);
   }
+
+  // The file is the truth for the tags: no "tags" means none, so removing the key clears them on the next push (the
+  // import keeps stored values the file leaves out).
+  const exported: JsonObject = { ...app.exportedApplication };
+
+  if (!Array.isArray(exported.tags)) exported.tags = [];
+
+  app.exportedApplication = exported;
 
   if (reader.has(THEME_FILE)) app.editModeTheme = reader.object(THEME_FILE);
 

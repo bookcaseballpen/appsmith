@@ -421,11 +421,23 @@ server side is `projectsrepo/ProjectsRepoController.java`:
 - **`import_application`** (`workspaceId`, optional `applicationId`, `artifact` up to 1.5 MB) —
   `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]`. With `applicationId` it replaces
   that app's **edit copy only**; the published copy and the app's live state stay as they are, and a pending
-  approval request is cancelled because the app changed. Without it, a new app (not live until a release is
-  approved). Returns `applicationId`, `workspaceId`, `name` and `unconfiguredDatasources`. Annotated as a
-  non-destructive write, like the core tools that write the edit copy.
+  approval request is cancelled because the app changed. If the JSON differs from the edit copy only in
+  `exportedApplication.tags`, only the tags are written and the approval state is kept (`tagsOnly: true`). Without
+  `applicationId`, a new app (not live until a release is approved). Returns `applicationId`, `workspaceId`, `name`,
+  `unconfiguredDatasources`, `unchanged` and `tagsOnly`. Annotated as a non-destructive write, like the core tools
+  that write the edit copy.
 
 Both use a 120 s outbound budget (the whole app is read or written).
+
+### App tags (fork)
+
+- **`set_app_tags`** (`applicationId`, `tags`: the full list) — `PUT /api/v1/app-tags/applications/{applicationId}`
+  (server `catalog/AppTagsController.java`). Replaces the app's tags; the server trims, lower-cases and drops repeats,
+  and refuses more than 10 tags or a tag over 30 characters (400, with guidance). Developer with edit access or
+  Administrator. Tags are metadata: they are not in the approval fingerprint, so setting them never cancels a
+  request or changes what users see. Annotated as an idempotent non-destructive write (`WRITE_IDEMPOTENT`).
+- `list_applications` shows each app's `tags` and takes optional `tags` and `tagMode` (`any`, the default, or `all`)
+  to list only the matching apps; `get_application_context` returns the app's `tags`.
 
 ## Adding an edition (EE) MCP tool
 

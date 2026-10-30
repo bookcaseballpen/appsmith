@@ -21,6 +21,8 @@ interface FakeState {
   imports: { applicationId: string | undefined; artifact: JsonObject }[];
   submits: JsonObject[];
   headers: IncomingMessage["headers"][];
+  // Extra fields of the import's answer, e.g. tagsOnly.
+  importAnswer: JsonObject;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -107,7 +109,13 @@ function fakeServer(state: FakeState): Server {
       case "import_application":
         state.imports.push({ applicationId: args.applicationId, artifact: args.artifact });
         state.app = importOver(state.app, args.artifact);
-        tool({ applicationId: "app1", workspaceId: "ws1", name: exported.name, unconfiguredDatasources: [] });
+        tool({
+          applicationId: "app1",
+          workspaceId: "ws1",
+          name: exported.name,
+          unconfiguredDatasources: [],
+          ...state.importAnswer,
+        });
         break;
       case "submit_for_approval":
         state.submits.push(args);
@@ -131,7 +139,7 @@ describe("cab-sync commands", () => {
   };
 
   before(async () => {
-    state = { app: sampleApp(), imports: [], submits: [], headers: [] };
+    state = { app: sampleApp(), imports: [], submits: [], headers: [], importAnswer: {} };
     server = fakeServer(state);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     env = { CAB_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, CAB_TOKEN: TOKEN };
@@ -147,6 +155,7 @@ describe("cab-sync commands", () => {
     state.imports.length = 0;
     state.submits.length = 0;
     state.headers.length = 0;
+    state.importAnswer = {};
     output = [];
     repo = join(TMP, `repo-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     await mkdir(repo, { recursive: true });
@@ -199,6 +208,30 @@ describe("cab-sync commands", () => {
     output = [];
     assert.equal(await run(["diff", dir], env, io), 0);
     assert.match(output.join("\n"), /matches the edit copy/);
+  });
+
+  it("pushes a tag-only change, reports it, and pull then writes the same tags", async () => {
+    await run(["pull", "Orders Admin", "--repo", repo], env, io);
+
+    const dir = join(repo, "apps", "orders-admin");
+    const applicationFile = join(dir, "application.json");
+    const application = JSON.parse(await readFile(applicationFile, "utf8"));
+
+    application.exportedApplication.tags = ["sales", "q3"];
+    await writeFile(applicationFile, `${JSON.stringify(application, null, 2)}\n`, "utf8");
+    state.importAnswer = { tagsOnly: true };
+    output = [];
+
+    assert.equal(await run(["push", dir], env, io), 0);
+    assert.equal(state.imports.length, 1);
+    assert.deepEqual((state.imports[0].artifact.exportedApplication as JsonObject).tags, ["sales", "q3"]);
+    assert.match(output.join("\n"), /Pushed the tags of "Orders Admin".*approval state is kept/);
+
+    assert.equal(await run(["pull", dir], env, io), 0);
+    assert.deepEqual(
+      JSON.parse(await readFile(applicationFile, "utf8")).exportedApplication.tags,
+      ["sales", "q3"],
+    );
   });
 
   it("diff lists the files that changed on the instance and exits 1", async () => {

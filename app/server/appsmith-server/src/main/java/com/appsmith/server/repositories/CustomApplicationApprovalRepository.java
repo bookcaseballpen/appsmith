@@ -6,9 +6,13 @@ import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
+
 public interface CustomApplicationApprovalRepository {
 
     Flux<ApplicationApproval> findAllByStatus(ApprovalStatus status);
+
+    Flux<ApplicationApproval> findAllByApplicationIdIn(Collection<String> applicationIds);
 
     /**
      * Applies the update only if the stored revision is still {@code expectedRevision}; answers the number of documents

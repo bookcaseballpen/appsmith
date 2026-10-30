@@ -486,12 +486,13 @@ const CORE_TOOL_LIST: { name: string; gate: CoreToolGate; summary: string }[] =
     {
       name: "list_applications",
       gate: "always",
-      summary: "list applications in a workspace",
+      summary:
+        "list applications in a workspace, with their tags (filter by tags)",
     },
     {
       name: "get_application_context",
       gate: "always",
-      summary: "read a page + layout",
+      summary: "read a page + layout, and the app's tags",
     },
     { name: "get_capabilities", gate: "always", summary: "this catalog" },
     {

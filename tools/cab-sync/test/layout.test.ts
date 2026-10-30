@@ -170,6 +170,34 @@ describe("assembleApp", () => {
     assert.deepEqual(sorted(second), sorted(first));
   });
 
+  it("keeps the app's tags in application.json and gives them back", () => {
+    const app = sampleApp();
+
+    (app.exportedApplication as JsonObject).tags = ["sales", "finance"];
+
+    const files = splitApp(app);
+    const application = JSON.parse(files.get("application.json") as string);
+
+    assert.deepEqual(application.exportedApplication.tags, ["sales", "finance"]);
+    assert.deepEqual((assembleApp(files).exportedApplication as JsonObject).tags, ["sales", "finance"]);
+    assert.deepEqual(sorted(splitApp(assembleApp(files))), sorted(files));
+  });
+
+  it("writes no tags for an app with an empty list, the same as for one without", () => {
+    const tagged = sampleApp();
+
+    (tagged.exportedApplication as JsonObject).tags = [];
+
+    assert.deepEqual(sorted(splitApp(tagged)), sorted(splitApp(sampleApp())));
+  });
+
+  it("sends an empty tag list when application.json has no tags, so removing them clears them", () => {
+    const files = splitApp(sampleApp());
+
+    assert.equal(JSON.parse(files.get("application.json") as string).exportedApplication.tags, undefined);
+    assert.deepEqual((assembleApp(files).exportedApplication as JsonObject).tags, []);
+  });
+
   it("puts a query on the page whose folder holds it", () => {
     const files = splitApp(sampleApp());
     const meta = files.get("pages/Orders/queries/GetOrders.query.json") ?? "";

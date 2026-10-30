@@ -8,6 +8,7 @@ import com.appsmith.external.models.Property;
 import com.appsmith.server.approvals.ApplicationApprovalService;
 import com.appsmith.server.approvals.ApprovalFingerprint;
 import com.appsmith.server.approvals.ApprovalStatus;
+import com.appsmith.server.catalog.ApplicationCatalogService;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
@@ -60,6 +61,9 @@ class ProjectsRepoServiceTest {
 
     @Autowired
     ApprovalFingerprint fingerprint;
+
+    @Autowired
+    ApplicationCatalogService applicationCatalogService;
 
     @Autowired
     ApplicationPageService applicationPageService;
@@ -233,6 +237,103 @@ class ProjectsRepoServiceTest {
         assertThat(exportError).isPresent();
         assertThat(importError).isPresent();
         assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+    }
+
+    @Test
+    void should_exportTags_when_appHasTags() {
+        // Given
+        runAs(applicationCatalogService.setTags(application.getId(), List.of("Sales", "hr")), InstanceRole.DEV);
+
+        // When
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+
+        // Then
+        assertThat(asMap(exported.get("exportedApplication")).get("tags")).isEqualTo(List.of("sales", "hr"));
+    }
+
+    @Test
+    void should_writeTagsAndStayApproved_when_devPushesTagOnlyChange() {
+        // Given
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        asMap(exported.get("exportedApplication")).put("tags", List.of(" Sales ", "HR  Team", "sales"));
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isFalse();
+        assertThat(result.tagsOnly()).isTrue();
+        Application stored = applicationRepository.findById(application.getId()).block();
+        assertThat(stored.getTags()).containsExactly("sales", "hr team");
+        assertThat(stored.getLastDeployedAt()).isNotNull();
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void should_skipImport_when_pushedEmptyTagsMeetAppWithoutTags() {
+        // Given
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        asMap(exported.get("exportedApplication")).put("tags", List.of());
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isTrue();
+    }
+
+    @Test
+    void should_storeTagsOfFile_when_devPushesTagsWithOtherChanges() {
+        // Given
+        runAs(applicationCatalogService.setTags(application.getId(), List.of("old")), InstanceRole.DEV);
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        Map<String, Object> exportedApplication = asMap(exported.get("exportedApplication"));
+        exportedApplication.put("unpublishedAppLayout", Map.of("type", "MOBILE"));
+        exportedApplication.put("tags", List.of());
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isFalse();
+        assertThat(result.tagsOnly()).isFalse();
+        assertThat(applicationRepository.findById(application.getId()).block().getTags())
+                .isEmpty();
+    }
+
+    @Test
+    void should_keepNormalisedTags_when_devImportsAsNewApp() {
+        // Given
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        asMap(exported.get("exportedApplication")).put("tags", List.of("Finance", "finance", " Q3 "));
+
+        // When
+        ProjectsRepoService.ImportResult result =
+                runAs(projectsRepoService.importEditCopy(workspaceId, null, gson.toJson(exported)), InstanceRole.DEV);
+
+        // Then
+        assertThat(applicationRepository
+                        .findById(result.applicationId())
+                        .block()
+                        .getTags())
+                .containsExactly("finance", "q3");
     }
 
     private static <T> Optional<AppsmithError> errorOf(Mono<T> call, User user) {
