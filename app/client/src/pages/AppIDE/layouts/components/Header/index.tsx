@@ -45,7 +45,11 @@ import { Omnibar } from "pages/Editor/commons/Omnibar";
 import ToggleModeButton from "pages/Editor/ToggleModeButton";
 import { EditorShareButton } from "pages/Editor/EditorShareButton";
 import AppInviteUsersForm from "pages/workspace/AppInviteUsersForm";
-import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  isAppRenameUiHidden,
+  isEmbedUiHidden,
+  isWorkspaceUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 import { getEmbedSnippetForm } from "ee/utils/BusinessFeatures/privateEmbedHelpers";
 import CommunityTemplatesPublishInfo from "pages/Editor/CommunityTemplates/Modals/CommunityTemplatesPublishInfo";
 import PublishCommunityTemplateModal from "pages/Editor/CommunityTemplates/Modals/PublishCommunityTemplate";
@@ -184,6 +188,8 @@ const Header = () => {
                 getNavigationMenu={useNavigationMenuData}
                 isError={isErroredSavingName}
                 isNewEditor={
+                  // Fork: never opens in rename mode; the app name is plain text (ce/utils/forkHiddenFeatures.ts).
+                  !isAppRenameUiHidden() &&
                   applicationList.filter((el) => el.id === applicationId)
                     .length > 0
                 }
@@ -232,9 +238,12 @@ const Header = () => {
                         ? "Share"
                         : createMessage(INVITE_TAB)}
                     </Tab>
-                    <Tab data-testid="t--tab-EMBED" value="embed">
-                      {createMessage(IN_APP_EMBED_SETTING.embed)}
-                    </Tab>
+                    {/* Fork: no embedding (ce/utils/forkHiddenFeatures.ts). */}
+                    {!isEmbedUiHidden() && (
+                      <Tab data-testid="t--tab-EMBED" value="embed">
+                        {createMessage(IN_APP_EMBED_SETTING.embed)}
+                      </Tab>
+                    )}
                     {isPublishAppToCommunityEnabled && cloudHosting && (
                       <Tab data-testid="t--tab-PUBLISH" value="publish">
                         {createMessage(COMMUNITY_TEMPLATES.tabTitle)}
@@ -247,9 +256,11 @@ const Header = () => {
                       workspaceId={currentWorkspace.id}
                     />
                   </TabPanel>
-                  <TabPanel value="embed">
-                    {getEmbedSnippetForm(isPrivateEmbedEnabled, setActiveTab)}
-                  </TabPanel>
+                  {!isEmbedUiHidden() && (
+                    <TabPanel value="embed">
+                      {getEmbedSnippetForm(isPrivateEmbedEnabled, setActiveTab)}
+                    </TabPanel>
+                  )}
                   {cloudHosting && (
                     <TabPanel value="publish">
                       <CommunityTemplatesPublishInfo

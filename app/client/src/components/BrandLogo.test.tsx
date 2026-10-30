@@ -23,10 +23,12 @@ const renderLogo = (
   );
 
 describe("BrandLogo", () => {
-  it("shows the colour wordmark with the product name on light backgrounds", () => {
+  it("shows the mono wordmark with the product name on light backgrounds", () => {
     const { getByAltText, getByTestId } = renderLogo({ height: 32 });
 
-    expect(getByAltText(PRODUCT_NAME).getAttribute("src")).toBe(BRAND_LOGO_URL);
+    expect(getByAltText(PRODUCT_NAME).getAttribute("src")).toBe(
+      "/brand/creative-logo-mono.svg",
+    );
     expect(getByTestId("t--brand-logo").textContent).toBe("App Builder");
   });
 

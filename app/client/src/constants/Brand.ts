@@ -9,8 +9,8 @@ export const PRODUCT_NAME_SUFFIX = "App Builder";
 
 export const BRAND_ASSETS_URL = "/brand";
 
-/** Colour wordmark (teal letters, orange A), for light backgrounds. */
-export const BRAND_LOGO_URL = `${BRAND_ASSETS_URL}/creative-logo-colour.svg`;
+/** Mono wordmark (dark grey), for light backgrounds. The colour one (creative-logo-colour.svg) is not used. */
+export const BRAND_LOGO_URL = `${BRAND_ASSETS_URL}/creative-logo-mono.svg`;
 
 /** White wordmark, for dark backgrounds. */
 export const BRAND_LOGO_ON_DARK_URL = `${BRAND_ASSETS_URL}/creative-logo-white.svg`;

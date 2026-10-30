@@ -4,6 +4,7 @@ import type {
   Setting,
 } from "ee/pages/AdminSettings/config/types";
 import { SettingTypes } from "ee/pages/AdminSettings/config/types";
+import { withoutUpsells } from "ee/pages/AdminSettings/config/upsells";
 export class ConfigFactory {
   static settingsMap: Record<string, Setting> = {};
   static settings: Setting[] = [];
@@ -73,8 +74,11 @@ export class ConfigFactory {
    * category is either fully registered or not at all — and means a duplicate registration is harmless instead of
    * being something each caller has to remember to avoid.
    */
-  static register(config: AdminConfigType) {
-    if (ConfigFactory.isRegistered(config)) {
+  static register(registered: AdminConfigType) {
+    // Fork: no Business or Enterprise upsell pages or fields (ee/pages/AdminSettings/config/upsells.ts).
+    const config = withoutUpsells(registered);
+
+    if (!config || ConfigFactory.isRegistered(config)) {
       return;
     }
 

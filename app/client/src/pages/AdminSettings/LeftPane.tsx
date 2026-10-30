@@ -24,31 +24,52 @@ import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import { getHasAuditLogsReadPermission } from "ee/utils/BusinessFeatures/permissionPageHelpers";
 import { getShowAdminSettings } from "ee/utils/BusinessFeatures/adminSettingsHelpers";
+import { areUpsellsHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  FORK_SETTINGS_COLORS,
+  FORK_SETTINGS_NARROW_WIDTH,
+  SettingsNavSelect,
+} from "ee/pages/AdminSettings/SettingsShell";
 
+// Fork: a calm settings nav (FORK.md, "Admin settings"): small uppercase group names, no icons, no tier badges, the
+// current page in the brand teal. Below 860px it turns into a select above the page (SettingsNavSelect).
 export const Wrapper = styled.div`
-  flex-basis: ${(props) => props.theme.sidebarWidth};
+  flex-basis: 232px;
   overflow-y: auto;
-  border-right: 1px solid var(--ads-v2-color-border);
+  border-right: 1px solid ${FORK_SETTINGS_COLORS.line};
+  background: #ffffff;
   flex-shrink: 0;
-  padding: 12px 0;
+  padding: 24px 12px 24px 24px;
 
   &::-webkit-scrollbar {
     display: none;
   }
 
-  > div:not(:first-child) {
-    border-top: 1px solid var(--ads-v2-color-border);
+  @media (max-width: ${FORK_SETTINGS_NARROW_WIDTH}px) {
+    display: none;
   }
 `;
 
 export const HeaderContainer = styled.div`
-  margin: 12px;
+  margin: 0;
+
+  &:not(:first-child) {
+    margin-top: 14px;
+  }
 `;
 
 export const StyledHeader = styled(Text)`
-  height: 20px;
-  margin: 16px;
-  color: var(--ads-v2-color-fg-emphasis);
+  && {
+    display: block;
+    height: auto;
+    padding: 0 12px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: ${FORK_SETTINGS_COLORS.faint};
+  }
 `;
 
 export const CategoryList = styled.ul`
@@ -61,10 +82,10 @@ export const CategoryItem = styled.li`
 `;
 
 export const StyledLink = styled(Link)<{ $active: boolean }>`
-  padding: 8px 16px;
-  border-radius: var(--ads-v2-border-radius);
+  padding: 7px 12px;
+  border-radius: 6px;
   background-color: ${(props) =>
-    props.$active ? `var(--ads-v2-color-bg-muted)` : ""};
+    props.$active ? FORK_SETTINGS_COLORS.tealBg : ""};
   text-decoration: none !important;
 
   .ads-v2-text {
@@ -74,7 +95,7 @@ export const StyledLink = styled(Link)<{ $active: boolean }>`
   }
 
   && {
-    color: var(--ads-v2-color-fg);
+    color: ${FORK_SETTINGS_COLORS.ink2};
   }
 
   &:hover {
@@ -82,16 +103,17 @@ export const StyledLink = styled(Link)<{ $active: boolean }>`
   }
 
   &:hover:not(.active) {
-    background-color: var(--ads-v2-color-bg-subtle);
+    background-color: ${FORK_SETTINGS_COLORS.bg};
   }
 `;
 
 export const SettingName = styled(Text)<{ active?: boolean }>`
-  color: ${(props) =>
-    props.active
-      ? "var(--ads-v2-color-fg-emphasis-plus)"
-      : "var(--ads-v2-color-fg)"};
-  font-weight: 400;
+  && {
+    font-size: 14px;
+    color: ${(props) =>
+      props.active ? FORK_SETTINGS_COLORS.tealInk : FORK_SETTINGS_COLORS.ink2};
+    font-weight: ${(props) => (props.active ? 600 : 400)};
+  }
 `;
 
 export function getSettingsCategory(type: string): Category[] {
@@ -150,7 +172,9 @@ export function Categories({
           !!currentSubCategory && showSubCategory
             ? currentSubCategory == config.slug
             : currentCategory == config.slug;
-        const showUpgradeTag = config?.isFeatureEnabled === false;
+        // Fork: no lock or tier badge (ce/utils/forkHiddenFeatures.ts), and no icons in the nav.
+        const showUpgradeTag =
+          config?.isFeatureEnabled === false && !areUpsellsHidden();
 
         return (
           <CategoryItem key={config.slug}>
@@ -162,7 +186,7 @@ export function Categories({
               onClick={() =>
                 onClickHandler(config.slug, showUpgradeTag || false)
               }
-              startIcon={showUpgradeTag ? "lock-2-line" : `${config.icon}`}
+              startIcon={showUpgradeTag ? "lock-2-line" : undefined}
               target="_self"
               to={
                 !parentCategory
@@ -230,55 +254,70 @@ export default function LeftPane() {
   );
 
   return (
-    <Wrapper>
-      {profileCategories.length > 0 && (
-        <HeaderContainer>
-          <StyledHeader kind="heading-s" renderAs="p">
-            Profile
-          </StyledHeader>
-          <Categories
-            categories={profileCategories}
-            currentCategory={category}
-            currentSubCategory={subCategory}
-          />
-        </HeaderContainer>
-      )}
-      {filteredOrgCategories.length > 0 && (
-        <HeaderContainer>
-          <StyledHeader kind="heading-s" renderAs="p">
-            Organisation
-          </StyledHeader>
-          <Categories
-            categories={filteredOrgCategories}
-            currentCategory={category}
-            currentSubCategory={subCategory}
-          />
-        </HeaderContainer>
-      )}
-      {filteredUserManagmentCategories.length > 0 && (
-        <HeaderContainer>
-          <StyledHeader kind="heading-s" renderAs="p">
-            User management
-          </StyledHeader>
-          <Categories
-            categories={filteredUserManagmentCategories}
-            currentCategory={category}
-            currentSubCategory={subCategory}
-          />
-        </HeaderContainer>
-      )}
-      {filteredInstanceCategories.length > 0 && (
-        <HeaderContainer>
-          <StyledHeader kind="heading-s" renderAs="p">
-            Instance
-          </StyledHeader>
-          <Categories
-            categories={filteredInstanceCategories}
-            currentCategory={category}
-            currentSubCategory={subCategory}
-          />
-        </HeaderContainer>
-      )}
-    </Wrapper>
+    <>
+      {/* Fork: the same nav as a select, on narrow screens (ee/pages/AdminSettings/SettingsShell). */}
+      <SettingsNavSelect
+        current={category}
+        groups={[
+          { title: "Profile", categories: profileCategories },
+          { title: "Organisation", categories: filteredOrgCategories },
+          {
+            title: "User management",
+            categories: filteredUserManagmentCategories,
+          },
+          { title: "Instance", categories: filteredInstanceCategories },
+        ]}
+      />
+      <Wrapper>
+        {profileCategories.length > 0 && (
+          <HeaderContainer>
+            <StyledHeader kind="heading-s" renderAs="p">
+              Profile
+            </StyledHeader>
+            <Categories
+              categories={profileCategories}
+              currentCategory={category}
+              currentSubCategory={subCategory}
+            />
+          </HeaderContainer>
+        )}
+        {filteredOrgCategories.length > 0 && (
+          <HeaderContainer>
+            <StyledHeader kind="heading-s" renderAs="p">
+              Organisation
+            </StyledHeader>
+            <Categories
+              categories={filteredOrgCategories}
+              currentCategory={category}
+              currentSubCategory={subCategory}
+            />
+          </HeaderContainer>
+        )}
+        {filteredUserManagmentCategories.length > 0 && (
+          <HeaderContainer>
+            <StyledHeader kind="heading-s" renderAs="p">
+              User management
+            </StyledHeader>
+            <Categories
+              categories={filteredUserManagmentCategories}
+              currentCategory={category}
+              currentSubCategory={subCategory}
+            />
+          </HeaderContainer>
+        )}
+        {filteredInstanceCategories.length > 0 && (
+          <HeaderContainer>
+            <StyledHeader kind="heading-s" renderAs="p">
+              Instance
+            </StyledHeader>
+            <Categories
+              categories={filteredInstanceCategories}
+              currentCategory={category}
+              currentSubCategory={subCategory}
+            />
+          </HeaderContainer>
+        )}
+      </Wrapper>
+    </>
   );
 }

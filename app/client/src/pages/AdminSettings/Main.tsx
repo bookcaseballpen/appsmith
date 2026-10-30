@@ -10,6 +10,7 @@ import { getOrganizationPermissions } from "ee/selectors/organizationSelectors";
 import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import { getAdminSettingsPath } from "ee/utils/BusinessFeatures/adminSettingsHelpers";
+import { isDroppedUpsellCategory } from "ee/pages/AdminSettings/config/upsells";
 
 const Main = () => {
   // TODO: Fix this the next time the file is edited
@@ -31,6 +32,8 @@ const Main = () => {
 
     return <WrapperCategoryComponent category={wrapperCategory} />;
   } else if (
+    // Fork: the upsell pages are not offered, not even by URL (ee/pages/AdminSettings/config/upsells.ts).
+    isDroppedUpsellCategory(category) ||
     !Object.values(SettingCategories).includes(category) ||
     (subCategory && !Object.values(SettingCategories).includes(subCategory))
   ) {

@@ -36,6 +36,7 @@ import { ImportAppSettings } from "./components/ImportAppSettings";
 import { getIsAnvilLayout } from "layoutSystems/anvil/integrations/selectors";
 import { getIsAiAgentApp } from "ee/selectors/aiAgentSelectors";
 import { AppSettingsTabs } from "./types";
+import { isEmbedUiHidden } from "ee/utils/forkHiddenFeatures";
 
 export interface SelectedTab {
   type: AppSettingsTabs;
@@ -194,6 +195,14 @@ function AppSettings() {
     );
   }
 
+  // Fork: no "Share & embed" section; the app URL and the public toggle stay in the Share dialog
+  // (ce/utils/forkHiddenFeatures.ts).
+  if (isEmbedUiHidden()) {
+    SectionHeadersConfig = SectionHeadersConfig.filter(
+      (config) => config.id !== "t--share-embed-settings",
+    );
+  }
+
   // 50 px height of the sectionHeader item
   // 41px height of pages title
   // 1px + 20px divider + spacing
@@ -261,7 +270,7 @@ function AppSettings() {
                 )
               );
             case AppSettingsTabs.Embed:
-              return <EmbedSettings />;
+              return isEmbedUiHidden() ? null : <EmbedSettings />;
             case AppSettingsTabs.Navigation:
               return <NavigationSettings />;
             case AppSettingsTabs.Import:

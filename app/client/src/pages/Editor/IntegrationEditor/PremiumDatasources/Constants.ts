@@ -1,4 +1,5 @@
 import type { UpcomingIntegration } from "entities/Plugin";
+import { areUpsellsHidden } from "ee/utils/forkHiddenFeatures";
 
 /**
  * Filters upcoming integrations based on available plugins.
@@ -13,6 +14,9 @@ export const getFilteredUpcomingIntegrations = (
   pluginNames: string[],
   upcomingPlugins: UpcomingIntegration[],
 ): UpcomingIntegration[] => {
+  // Fork: no "upcoming integrations" behind a paid plan (ce/utils/forkHiddenFeatures.ts).
+  if (areUpsellsHidden()) return [];
+
   return isExternalSaasEnabled
     ? upcomingPlugins.filter(
         (integration) =>

@@ -5,6 +5,7 @@ import { Icon, Tooltip, Text, Link } from "@appsmith/ads";
 import type { Setting } from "ee/pages/AdminSettings/config/types";
 import EnterpriseTag from "components/EnterpriseTag";
 import BusinessTag from "components/BusinessTag";
+import { areUpsellsHidden } from "ee/utils/forkHiddenFeatures";
 
 interface FieldHelperProps {
   setting: Setting;
@@ -115,7 +116,9 @@ export function FormGroup({ children, className, setting }: FieldHelperProps) {
             />
           </Tooltip>
         )}
+        {/* Fork: no tier badges (ce/utils/forkHiddenFeatures.ts). */}
         {setting.isFeatureEnabled === false &&
+          !areUpsellsHidden() &&
           (setting.isEnterprise === true ? <EnterpriseTag /> : <BusinessTag />)}
       </StyledLabel>
       {children}

@@ -52,6 +52,10 @@ import {
 } from "ee/selectors/organizationSelectors";
 import { updateOrganizationConfig } from "ee/actions/organizationActions";
 import { useIsCloudBillingEnabled } from "hooks";
+import {
+  getSettingsSubtitle,
+  SettingsFormCard,
+} from "ee/pages/AdminSettings/SettingsShell";
 
 interface FormProps {
   settings: Record<string, string>;
@@ -120,6 +124,10 @@ export function SettingsForm(
   );
   const pageTitle = getSettingLabel(
     details?.title || (subCategory ?? category),
+  );
+  const pageSubtitle = getSettingsSubtitle(
+    subCategory ?? category,
+    details?.subText,
   );
   const isFormLoginEnabled = useSelector(getIsFormLoginEnabled);
   const socialLoginList = useSelector(getThirdPartyAuths);
@@ -337,21 +345,25 @@ export function SettingsForm(
           >
             {pageTitle}
           </SettingsHeader>
-          {details?.subText && (
+          {/* Fork: every page has a subtitle (ee/pages/AdminSettings/SettingsShell). */}
+          {pageSubtitle && (
             <SettingsSubHeader
               color="var(--ads-v2-color-fg-emphasis)"
               kind="body-m"
               renderAs="h2"
             >
-              {details.subText}
+              {pageSubtitle}
             </SettingsSubHeader>
           )}
         </HeaderWrapper>
-        <Group
-          category={category}
-          settings={settingsDetails}
-          subCategory={subCategory}
-        />
+        {/* Fork: the fields in a card (ee/pages/AdminSettings/SettingsShell). */}
+        <SettingsFormCard>
+          <Group
+            category={category}
+            settings={settingsDetails}
+            subCategory={subCategory}
+          />
+        </SettingsFormCard>
         {isSavable && (
           <SaveAdminSettings
             isOnlyOrganizationConfig={isOnlyOrganizationConfig}

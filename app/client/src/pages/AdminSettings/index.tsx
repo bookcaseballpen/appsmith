@@ -13,10 +13,20 @@ import { LoaderContainer } from "pages/AdminSettings/components";
 import { useParams } from "react-router";
 import AdminConfig from "ee/pages/AdminSettings/config";
 import { Spinner } from "@appsmith/ads";
+import {
+  FORK_SETTINGS_COLORS,
+  FORK_SETTINGS_NARROW_WIDTH,
+} from "ee/pages/AdminSettings/SettingsShell";
 
+// Fork: the settings shell (ee/pages/AdminSettings/SettingsShell): the nav stacks above the page on narrow screens.
 const FlexContainer = styled.div`
   display: flex;
   height: 100%;
+  background: ${FORK_SETTINGS_COLORS.bg};
+
+  @media (max-width: ${FORK_SETTINGS_NARROW_WIDTH}px) {
+    flex-direction: column;
+  }
 `;
 
 function Settings() {

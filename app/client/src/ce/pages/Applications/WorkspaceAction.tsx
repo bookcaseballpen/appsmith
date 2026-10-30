@@ -22,7 +22,10 @@ import { getIsCreatingApplicationByWorkspaceId } from "ee/selectors/applicationS
 import { getIsFetchingApplications } from "ee/selectors/selectedWorkspaceSelectors";
 import { hasCreateNewAppPermission } from "ee/utils/permissionHelpers";
 import { isAirgapped } from "ee/utils/airgapHelpers";
-import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  areTemplatesHidden,
+  isAppCreationUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 import { createsAppsRole, getInstanceRole } from "ee/utils/instanceRoles";
 import { getCurrentUser } from "selectors/usersSelectors";
 
@@ -64,7 +67,8 @@ function WorkspaceAction({
     setIsActionMenuOpen(false);
   }, []);
 
-  if (!workspace) return null;
+  // Fork: no "Create new" menu at all; apps are created and imported through MCP (ce/utils/forkHiddenFeatures.ts).
+  if (!workspace || isAppCreationUiHidden()) return null;
 
   // Fork: only Devs and Admins create or import apps, whatever the workspace permissions say.
   const hasCreateNewApplicationPermission =

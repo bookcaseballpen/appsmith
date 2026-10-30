@@ -70,4 +70,74 @@ describe("DataSidePane", () => {
       "1 queries in this app",
     );
   });
+
+  // Fork: says where datasources are changed, by role (ee/components/DatasourceManagedNote).
+  describe("where datasources are changed", () => {
+    const renderPane = (
+      role: string,
+      datasources: (typeof productsDS)[],
+      workspacePermissions: string[],
+    ) => {
+      const state = getIDETestState({ datasources }) as DefaultRootState;
+
+      state.ui.users.currentUser = {
+        ...state.ui.users.currentUser,
+        email: "someone@example.com",
+        role,
+      } as DefaultRootState["ui"]["users"]["currentUser"];
+      state.ui.selectedWorkspace.workspace = {
+        ...state.ui.selectedWorkspace.workspace,
+        userPermissions: workspacePermissions,
+      };
+
+      return render(<DataSidePane dsUsageMap={{}} />, {
+        url: "/app/untitled-application-1/page1-678a356f18346f618bc2c80a/edit/datasource",
+        initialState: state,
+      });
+    };
+
+    it("tells an Admin with no datasources to add one here", () => {
+      renderPane("ADMIN", [], ["create:datasources", "read:workspaces"]);
+
+      expect(screen.getByTestId("t--datasource-managed-note").textContent).toBe(
+        "As an Admin, you add datasources here with Bring your data, and change one with Edit on its page. Every app can use them.",
+      );
+      expect(
+        screen.getByTestId("t--add-datasource-button-blank-screen"),
+      ).toBeInTheDocument();
+    });
+
+    it("says nothing more to an Admin once there are datasources", () => {
+      renderPane("ADMIN", [productsDS], ["create:datasources"]);
+
+      expect(
+        screen.queryByTestId("t--datasource-managed-note"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each(["DEV", "APPROVER"])(
+      "tells a %s that an Admin manages datasources, with no dead add button",
+      (role) => {
+        renderPane(role, [], ["read:workspaces"]);
+
+        expect(
+          screen.getByTestId("t--datasource-managed-note").textContent,
+        ).toBe(
+          "An Admin manages datasources. Ask an Admin to add or change one.",
+        );
+        expect(
+          screen.queryByTestId("t--add-datasource-button-blank-screen"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("keeps the note for a Dev who sees datasources but can't change them", () => {
+      renderPane("DEV", [productsDS], ["read:workspaces"]);
+
+      expect(screen.getByText("Products")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("t--datasource-managed-note"),
+      ).toBeInTheDocument();
+    });
+  });
 });

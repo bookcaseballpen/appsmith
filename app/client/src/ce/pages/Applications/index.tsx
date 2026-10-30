@@ -165,6 +165,7 @@ import { useIsCloudBillingEnabled } from "hooks";
 import { getIsBuiltInGitEnabled } from "ee/selectors/builtInGitSelectors";
 import {
   areTemplatesHidden,
+  isAppCreationUiHidden,
   isOnboardingHidden,
   isWorkspaceUiHidden,
 } from "ee/utils/forkHiddenFeatures";
@@ -1010,15 +1011,18 @@ export function ApplicationsSection(props: any) {
                 workspaceName: activeWorkspace.name,
                 workspaceSlug: activeWorkspace.id,
               })}
-            {selectedWorkspaceIdForImportApplication && (
-              <ImportModal
-                isModalOpen={
-                  selectedWorkspaceIdForImportApplication === activeWorkspace.id
-                }
-                onClose={() => setSelectedWorkspaceIdForImportApplication("")}
-                workspaceId={selectedWorkspaceIdForImportApplication}
-              />
-            )}
+            {/* Fork: no import from the UI, not even through ?openImportModal=true (ce/utils/forkHiddenFeatures.ts). */}
+            {selectedWorkspaceIdForImportApplication &&
+              !isAppCreationUiHidden() && (
+                <ImportModal
+                  isModalOpen={
+                    selectedWorkspaceIdForImportApplication ===
+                    activeWorkspace.id
+                  }
+                  onClose={() => setSelectedWorkspaceIdForImportApplication("")}
+                  workspaceId={selectedWorkspaceIdForImportApplication}
+                />
+              )}
             {!areTemplatesHidden() && (
               <CreateNewAppFromTemplatesWrapper
                 currentWorkspaceId={activeWorkspaceId}
