@@ -223,7 +223,8 @@ editor is read-only.":
   (`POST /api/v1/applications/import/partial/block`) and template merge.
 
 Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
-import, and the projects repo's `/api/v1/projects-repo/...`), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
+import, and the projects repo's `/api/v1/projects-repo/...`), app tags (`/api/v1/app-tags/...`, metadata, see "App
+tags and catalog"), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
 app create, clone, fork, delete and snapshots, and user and admin settings. The Approver filter still applies on top.
 This filter does not refuse `POST /api/v1/applications/publish/{id}`, but the publish service does, for every role:
 an app is published only by approving a submitted release (Submit -> Approve, see "Publishing").
@@ -308,6 +309,49 @@ values in any other field.
 
 The MCP server of a fork-uat instance runs from `scripts/fork-uat` (`up.ps1`, `127.0.0.1:<Port+6>`, proxied at
 `/mcp`), once MCP is enabled on the instance.
+
+A file that differs from the edit copy only in `exportedApplication.tags` is not imported: only the tags are written
+(as a Dev with Edit or an Admin, clamped like an import), so a tag change pushed through cab-sync keeps a submitted or
+approved app as it is; the import answers `tagsOnly: true`. No tags and an empty list count as the same. cab-sync
+writes no `tags` key for an app without tags and sends `tags: []` when `application.json` has none, so deleting the
+key clears them (the importer keeps stored values a file leaves out).
+
+## App tags and catalog
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/catalog/`. Data for the home page (the
+client page is a later task).
+
+**Tags** (`Application.tags`, a list) are free text. Every write normalises them (`ApplicationTags`): trimmed,
+lower-cased, inner white space collapsed to one space, empty tags and repeats dropped, first-seen order kept; at most
+10 tags of at most 30 characters (code points) each. The tags endpoint refuses a list over the limits (400); every
+other path (the domain setter, an import, a cab-sync push) clamps instead, as the description does. Tags travel with
+the app JSON (`exportedApplication.tags`; JSON views Public and Git), so they reach the projects repo and come back
+through import; a duplicated app keeps them.
+
+**Who sets them, and the read-only editor.** Tags are app metadata, not app content: a Dev with Edit on the app or an
+Admin sets them through `PUT /api/v1/app-tags/applications/{applicationId}` (body `{"tags": [...]}`, the full list;
+`[]` clears), also while the editor is read-only, and through MCP (`set_app_tags`). The route has its own family so
+the editor lock on `PUT /api/v1/applications/{id}` does not cover it and the MCP allowlist can list it as an
+extension (the core `/api/v1/applications` rules stay as they are). Approvers (their filter refuses every non-GET)
+and Users (role check, and `RoleGate`) cannot. Only `tags` and `updatedAt` are written, and the approval fingerprint
+does not read `tags`, so a tag change never cancels a pending request and never takes a live app offline. With the
+lock off, `PUT /api/v1/applications/{id}` also takes `tags` (clamped by the setter).
+
+| Endpoint | What |
+| --- | --- |
+| `GET /api/v1/applications/catalog?search=&tags=&tagMode=any\|all&sort=name\|lastDeployedAt\|updatedAt\|createdAt&order=asc\|desc&page=&size=` | One page of the apps the caller can read: `{items, total, page, size}`. Every filter, the sort and the paging are part of the repository query with the caller's read permission, so grants decide what each user sees and a User gets only live apps (`CustomApplicationRepositoryImpl`). `search` (at most 100 characters) matches name, description or a tag, case-insensitively and literally (regex characters are quoted). `tags` (`tags=a,b` or repeated, normalised, at most 10): `any` (default) or `all`. `sort` defaults to `name` ascending; the dates default to newest first; the id breaks ties. `page` starts at 0; `size` 1 to 100 (default 20). Anything else is refused (400). |
+| `GET /api/v1/applications/tags` | Every tag on an app the caller can read, sorted, for the filter chips |
+| `PUT /api/v1/app-tags/applications/{applicationId}` | Set the tags, see above; answers `{applicationId, tags}` |
+
+A catalog item: `id`, `baseId`, `workspaceId`, `name`, `description`, `slug`, `uniqueSlug` (static URL, when on),
+`icon`, `color`, `tags`, `lastDeployedAt`, `updatedAt` (ISO strings), `defaultPageId` and `defaultPageSlug` (the live
+default page of a live app, the edit copy's otherwise; the view URL is `/app/<slug>/<defaultPageSlug>-<defaultPageId>`),
+`approvalStatus` (the stored status, one query per page; a later read of the approval state may still cancel it;
+null for Users) and `canEdit` (the caller is a Dev or Admin and holds the edit permission on the app; for a Dev, an
+Edit grant). Name sort is by stored text (upper case before lower case); there is no collation in the query API.
+
+Indexes: `application_tags_deleted` (`tags`, `deletedAt`; `Migration077AddApplicationTagsIndex`); name search and
+sort use the existing `name` + `deletedAt` index (Migration037).
 
 ## Cherry-picking upstream fixes
 
@@ -966,6 +1010,23 @@ Server plugins (`app/server/appsmith-plugins/`):
   grant), `services/ApplicationPageServiceImpl.java` (creator Edit grant), and the tests
   `acl/PolicyGeneratorTest`, `roles/InstanceRolePermissionsTest`, `roles/DefaultWorkspaceServiceTest`,
   `approvals/ApplicationApprovalServiceTest`, `projectsrepo/ProjectsRepoServiceTest`.
+
+### App tags and catalog
+
+- New server files: `catalog/` (`ApplicationTags`, `ApplicationCatalogService`, `ApplicationCatalogController`,
+  `AppTagsController`, `ApplicationCatalogDTO`), `migrations/db/ce/Migration077AddApplicationTagsIndex.java`, and
+  the tests `catalog/ApplicationCatalogTest`, `catalog/ApplicationTagsTest`.
+- Edited upstream files (`Fork:` comments): `domains/ce/ApplicationCE.java` (`tags`, its setter, the duplicate keeps
+  them), `applications/imports/ApplicationImportServiceImpl.java` (imported tags go through the setter).
+- Edited fork files: `constants/Url.java` (`APP_TAGS_URL`), `filters/McpAllowlistExtensions.java`,
+  `projectsrepo/ProjectsRepoService.java` (tag-only push, `tagsOnly`), `repositories/CustomApplicationApprovalRepository*`
+  (`findAllByApplicationIdIn`), and the tests `projectsrepo/ProjectsRepoServiceTest`,
+  `filters/McpAllowlistWebFilterTest`, `editorlock/EditorReadOnlyWebFilterTest`.
+- MCP: `packages/mcp/src/ee/extensions/` (`api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts`: `set_app_tags`),
+  the new test `appTags.test.ts`, `projectsRepo.test.ts`, the upstream files `src/app.ts` (`list_applications` tags
+  filter, `get_application_context` tags) and `src/builder/capabilities.ts` (their summaries), and `README.md`.
+- cab-sync: `src/layout.ts` (canonical tags), `src/commands.ts` (tag-only push message), `src/template.ts`,
+  `README.md` and the tests.
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

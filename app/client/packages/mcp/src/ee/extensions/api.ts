@@ -1,8 +1,8 @@
 import type { ApiRequest } from "../../ce/extensions/api.js";
 
 // Fork: the endpoints behind the fork's extension tools (ee/extensions/tools.ts): the release-approval endpoints
-// (submit_for_approval, get_approval_status) and the projects repo's app JSON (export_application,
-// import_application). The contract is in ce/extensions/api.ts: every call goes through the handed `request`, and
+// (submit_for_approval, get_approval_status), the projects repo's app JSON (export_application,
+// import_application) and app tags (set_app_tags). The contract is in ce/extensions/api.ts: every call goes through the handed `request`, and
 // every endpoint is allowed for MCP principals by the server's McpAllowlistExtensions and listed in
 // ee/extensions/routeContract.ts. Approving and rejecting are for people only, so there is deliberately no method for
 // them.
@@ -63,6 +63,9 @@ export interface ImportResult {
   unconfiguredDatasources: string[];
   // True when nothing was imported: the app JSON was the app's edit copy already (an import would reset its approval).
   unchanged: boolean;
+  // True when the app JSON differed from the edit copy in its tags alone: only the tags were written, and the
+  // approval state is kept.
+  tagsOnly: boolean;
 }
 
 export interface ProjectsRepoApi {
@@ -78,10 +81,25 @@ export interface ProjectsRepoApi {
   ) => Promise<ImportResult>;
 }
 
+// The server's ApplicationCatalogDTO.TagsResult.
+export interface AppTagsResult {
+  applicationId: string;
+  // As stored: trimmed, lower-cased, repeats dropped.
+  tags: string[];
+}
+
+export interface AppTagsApi {
+  // Replaces the app's tags (an empty list clears them).
+  setApplicationTags: (
+    applicationId: string,
+    tags: string[],
+  ) => Promise<AppTagsResult>;
+}
+
 // Optional on AppsmithApi: core's test suites build AppsmithApi stubs listing only the core methods, so required
 // edition methods would fail their type check. createExtensionApi always supplies all of them; tools reach them
-// through approvalApi() and projectsRepoApi(), which fail loudly if a stub without them is used.
-export type ExtensionApi = Partial<ApprovalApi & ProjectsRepoApi>;
+// through approvalApi(), projectsRepoApi() and appTagsApi(), which fail loudly if a stub without them is used.
+export type ExtensionApi = Partial<ApprovalApi & ProjectsRepoApi & AppTagsApi>;
 
 export function approvalApi(api: ExtensionApi): ApprovalApi {
   const { getApprovalStatus, submitForApproval } = api;
@@ -106,15 +124,26 @@ export function projectsRepoApi(api: ExtensionApi): ProjectsRepoApi {
   return { exportApplicationEditCopy, importApplicationEditCopy };
 }
 
+export function appTagsApi(api: ExtensionApi): AppTagsApi {
+  const { setApplicationTags } = api;
+
+  if (setApplicationTags === undefined) {
+    throw new Error("This Appsmith API client has no app-tags methods");
+  }
+
+  return { setApplicationTags };
+}
+
 const APPROVAL_APPLICATIONS = "/api/v1/approvals/applications";
 const PROJECTS_REPO_APPLICATIONS = "/api/v1/projects-repo/applications";
+const APP_TAGS_APPLICATIONS = "/api/v1/app-tags/applications";
 
 // An export or import reads or writes the whole app, like a git commit does, so it gets the same budget.
 const APP_JSON_TIMEOUT_MS = 120 * 1000;
 
 export const createExtensionApi = (
   request: ApiRequest,
-): ApprovalApi & ProjectsRepoApi => ({
+): ApprovalApi & ProjectsRepoApi & AppTagsApi => ({
   // Both opt into the Appsmith error code, so a refusal surfaces as e.g. "Appsmith API request failed (400)
   // [AE-...]" rather than a bare status (the collection mutations in app.ts do the same).
   getApprovalStatus: async (applicationId) =>
@@ -145,5 +174,11 @@ export const createExtensionApi = (
           : `?applicationId=${encodeURIComponent(applicationId)}`),
       { method: "POST", body: JSON.stringify(artifact) },
       { extractErrorCode: true, timeoutMs: APP_JSON_TIMEOUT_MS },
+    ),
+  setApplicationTags: async (applicationId, tags) =>
+    request<AppTagsResult>(
+      `${APP_TAGS_APPLICATIONS}/${encodeURIComponent(applicationId)}`,
+      { method: "PUT", body: JSON.stringify({ tags }) },
+      { extractErrorCode: true },
     ),
 });

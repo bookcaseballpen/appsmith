@@ -56,6 +56,7 @@ const IMPORTED = {
   name: "Orders",
   unconfiguredDatasources: [],
   unchanged: false,
+  tagsOnly: false,
 };
 
 interface RecordedCall {

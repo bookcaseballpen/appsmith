@@ -53,7 +53,7 @@ Users always see the last approved version: a push never changes what they see.
 
 | File | Holds |
 | --- | --- |
-| \`application.json\` | The app: name, page order (\`exportedApplication.pages\`), layout, navigation and theme settings |
+| \`application.json\` | The app: name, tags (\`exportedApplication.tags\`), page order (\`exportedApplication.pages\`), layout, navigation and theme settings |
 | \`theme.json\` | The edit-mode theme |
 | \`datasources.json\` | The datasources the app uses, by \`name\` and \`pluginId\` only |
 | \`js-libraries.json\` | Custom JS libraries (only if the app has some) |
@@ -66,6 +66,9 @@ Users always see the last approved version: a push never changes what they see.
 
 File names are the entity names (characters other than letters, digits, space, \`_ - . ( )\` appear as \`%XX\`). The
 name inside the file is what counts.
+
+Tags are free-text labels for the home page catalog: a list of at most 10, at most 30 characters each, stored
+lower-cased. No \`tags\` key means no tags. A push that changes only the tags keeps the app's approval state.
 
 ## Rules
 

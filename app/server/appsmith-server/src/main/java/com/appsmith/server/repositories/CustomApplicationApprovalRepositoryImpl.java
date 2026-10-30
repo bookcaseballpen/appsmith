@@ -7,6 +7,8 @@ import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
+
 public class CustomApplicationApprovalRepositoryImpl extends BaseAppsmithRepositoryImpl<ApplicationApproval>
         implements CustomApplicationApprovalRepository {
 
@@ -14,6 +16,13 @@ public class CustomApplicationApprovalRepositoryImpl extends BaseAppsmithReposit
     public Flux<ApplicationApproval> findAllByStatus(ApprovalStatus status) {
         return queryBuilder()
                 .criteria(Bridge.equal(ApplicationApproval.Fields.status, status))
+                .all();
+    }
+
+    @Override
+    public Flux<ApplicationApproval> findAllByApplicationIdIn(Collection<String> applicationIds) {
+        return queryBuilder()
+                .criteria(Bridge.in(ApplicationApproval.Fields.applicationId, applicationIds))
                 .all();
     }
 
