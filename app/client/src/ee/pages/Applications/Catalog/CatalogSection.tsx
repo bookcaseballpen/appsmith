@@ -69,6 +69,12 @@ const TagFilter = styled.div`
   margin-bottom: var(--ads-v2-spaces-3);
 `;
 
+// The segmented control fills its parent; keep it the size of its two options, on the chips' line.
+const TagModeWrapper = styled.div`
+  flex: 0 0 auto;
+  width: 13rem;
+`;
+
 const CardWithTags = styled.div`
   display: flex;
   flex-direction: column;
@@ -221,16 +227,18 @@ export function CatalogSection(props: CatalogSectionProps) {
               );
             })}
             {query.tags.length > 1 && (
-              <SegmentedControl
-                data-testid="t--catalog-tag-mode"
-                onChange={(value: string) =>
-                  dispatch(
-                    setCatalogQuery({ tagMode: value as CatalogTagMode }),
-                  )
-                }
-                options={TAG_MODE_OPTIONS}
-                value={query.tagMode}
-              />
+              <TagModeWrapper>
+                <SegmentedControl
+                  data-testid="t--catalog-tag-mode"
+                  onChange={(value: string) =>
+                    dispatch(
+                      setCatalogQuery({ tagMode: value as CatalogTagMode }),
+                    )
+                  }
+                  options={TAG_MODE_OPTIONS}
+                  value={query.tagMode}
+                />
+              </TagModeWrapper>
             )}
             {query.tags.length > 0 && (
               <Button

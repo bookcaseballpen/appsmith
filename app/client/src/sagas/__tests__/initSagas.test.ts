@@ -9,6 +9,7 @@ import {
   executeActionDuringUserDetailsInitialisation,
 } from "sagas/InitSagas";
 import { toast } from "@appsmith/ads";
+import { initAppViewerAction } from "actions/initActions";
 import { NO_EDIT_ACCESS_MESSAGE } from "ee/utils/instanceRoles";
 import type { AppEnginePayload } from "entities/Engine";
 import { testSaga } from "redux-saga-test-plan";
@@ -110,6 +111,13 @@ describe("tests the sagas in initSagas", () => {
       .isDone();
   });
 
+  // The editor's init goes on as the viewer's: the viewer's own init is dropped while this one runs.
+  const viewerAction = initAppViewerAction({
+    ...action.payload,
+    branch: "",
+    mode: APP_MODE.PUBLISHED,
+  });
+
   it("sends a User from an editor URL to the same page in view mode", () => {
     const engine = { setupEngine: jest.fn(), loadAppData: jest.fn() };
     const mockRootSpan = startRootSpan("startAppEngine");
@@ -128,11 +136,9 @@ describe("tests the sagas in initSagas", () => {
       .next(mockResponse.data)
       .select(getCurrentUserSelector)
       .next({ ...DefaultCurrentUserDetails, role: "USER" })
-      .call(
-        executeActionDuringUserDetailsInitialisation,
-        ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
-        action.payload.shouldInitialiseUserDetails,
-      )
+      .put(viewerAction)
+      .next()
+      .call(startAppEngine, viewerAction)
       .next()
       .isDone();
 
@@ -173,11 +179,9 @@ describe("tests the sagas in initSagas", () => {
       .next(refused)
       .select(getCurrentUserSelector)
       .next({ ...DefaultCurrentUserDetails, role: "DEV" })
-      .call(
-        executeActionDuringUserDetailsInitialisation,
-        ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
-        action.payload.shouldInitialiseUserDetails,
-      )
+      .put(viewerAction)
+      .next()
+      .call(startAppEngine, viewerAction)
       .next()
       .isDone();
 

@@ -11,6 +11,7 @@ import {
   takeLatest,
   takeLeading,
 } from "redux-saga/effects";
+import type { SagaIterator } from "redux-saga";
 import type {
   ReduxAction,
   ReduxActionWithoutPayload,
@@ -25,6 +26,7 @@ import {
   initAppViewerAction,
   initEditorAction,
   resetEditorSuccess,
+  type InitAppViewerPayload,
 } from "actions/initActions";
 import {
   getCurrentPageId,
@@ -318,7 +320,9 @@ export function* getInitResponses({
   return rest;
 }
 
-export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
+export function* startAppEngine(
+  action: ReduxAction<AppEnginePayload>,
+): SagaIterator {
   const rootSpan = startRootSpan("startAppEngine", {
     mode: action.payload.mode,
     pageId: action.payload.basePageId,
@@ -363,15 +367,22 @@ export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
       }
 
       if (isViewOnlyRole(role) || isDevWithoutEdit) {
-        yield call(
-          executeActionDuringUserDetailsInitialisation,
-          ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
-          action.payload.shouldInitialiseUserDetails,
-        );
         history.replace({
           pathname: getViewerPathForBuilderPath(window.location.pathname),
           search: window.location.search,
         });
+
+        // This init goes on as the viewer's: the watcher takes the leading init only, so the init the viewer
+        // dispatches when it mounts is dropped while this one runs, and the page would stay blank.
+        const viewerAction = initAppViewerAction({
+          // The editor's init carries the same ids as the viewer's (initEditorAction).
+          ...(action.payload as Partial<InitAppViewerPayload>),
+          branch: action.payload.branch ?? "",
+          mode: APP_MODE.PUBLISHED,
+        });
+
+        yield put(viewerAction);
+        yield call(startAppEngine, viewerAction);
 
         return;
       }
