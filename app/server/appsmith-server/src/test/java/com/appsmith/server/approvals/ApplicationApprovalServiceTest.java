@@ -9,6 +9,7 @@ import com.appsmith.server.domains.ApplicationApproval;
 import com.appsmith.server.domains.NewPage;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.dtos.ApplicationJson;
+import com.appsmith.server.dtos.ArtifactExchangeJson;
 import com.appsmith.server.dtos.PageDTO;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,7 +74,7 @@ class ApplicationApprovalServiceTest {
     @Autowired
     ApplicationApprovalService approvalService;
 
-    @Autowired
+    @MockitoSpyBean
     ApprovalFingerprint fingerprint;
 
     @Autowired
@@ -633,6 +635,90 @@ class ApplicationApprovalServiceTest {
     }
 
     @Test
+    void should_keepPublishedCopyAndStayLive_when_devImportsFileWithDifferentViewMode() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        String deployedAt =
+                applicationRepository.findById(application.getId()).block().getLastDeployedAt();
+        List<String> publishedPageNames = publishedPageNames();
+        ApplicationJson file = exportWithMobileLayout(true);
+        file.getExportedApplication().setLastDeployedAt(Instant.EPOCH);
+        file.getPageList().forEach(page -> page.getPublishedPage().setName("Renamed in the file"));
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), file),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).isEmpty();
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(publishedPageNames()).isEqualTo(publishedPageNames);
+        Application stored = applicationRepository.findById(application.getId()).block();
+        assertThat(stored.getLastDeployedAt()).isEqualTo(deployedAt);
+        assertThat(stored.getUnpublishedAppLayout().getType()).isEqualTo(Application.AppLayout.Type.MOBILE);
+    }
+
+    @Test
+    void should_takeAppOffline_when_importChangesViewModeAnyway() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        ApplicationJson file = exportWithMobileLayout(false);
+        // The importers keep the published copy, so only a changed reading can stand for an import that changed it.
+        AtomicInteger reads = new AtomicInteger();
+        doAnswer(invocation ->
+                        reads.getAndIncrement() == 0 ? invocation.callRealMethod() : Mono.just("changed by the import"))
+                .when(fingerprint)
+                .ofViewMode(application.getId());
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), file),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).isEmpty();
+        assertThat(reads.get()).isEqualTo(2);
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNull();
+        List<String> visibleToUser = runAs(
+                applicationService
+                        .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                        .map(Application::getId)
+                        .collectList(),
+                InstanceRole.USER);
+        assertThat(visibleToUser).doesNotContain(application.getId());
+    }
+
+    @Test
+    void should_refuseImportAndKeepAppAsApproved_when_liveAppGetsFileThatIsNotAnAppFile() {
+        // Given
+        runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
+        runAs(approvalService.approve(application.getId()), InstanceRole.APPROVER);
+        String viewModeBefore = fingerprint.ofViewMode(application.getId()).block();
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        ArtifactExchangeJson notAnAppFile = Mockito.mock(ArtifactExchangeJson.class);
+
+        // When
+        Optional<AppsmithError> error = errorOf(
+                importService.updateNonGitConnectedArtifactFromJson(workspaceId, application.getId(), notAnAppFile),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).contains(AppsmithError.UNSUPPORTED_OPERATION);
+        assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+        assertThat(applicationRepository.findById(application.getId()).block().getLastDeployedAt())
+                .isNotNull();
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.APPROVED);
+    }
+
+    @Test
     void should_cancelPendingRequest_when_devImportsChangedEditCopy() {
         // Given
         runAs(approvalService.submit(application.getId()), InstanceRole.DEV);
@@ -771,6 +857,15 @@ class ApplicationApprovalServiceTest {
             exported.setPublishedAppLayout(new Application.AppLayout(Application.AppLayout.Type.MOBILE));
         }
         return export;
+    }
+
+    private List<String> publishedPageNames() {
+        return newPageRepository
+                .findByApplicationId(application.getId())
+                .map(page -> page.getPublishedPage().getName())
+                .sort()
+                .collectList()
+                .block();
     }
 
     private void addPage(InstanceRole role) {

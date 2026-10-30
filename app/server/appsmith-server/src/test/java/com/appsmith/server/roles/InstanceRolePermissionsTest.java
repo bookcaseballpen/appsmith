@@ -489,6 +489,59 @@ class InstanceRolePermissionsTest {
         }
     }
 
+    @Test
+    void should_refuseDevImportAndCreateNothing_when_appUsesExistingAndNewDatasource() {
+        // Given
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        DatasourceStorage existing = new DatasourceStorage();
+        existing.setName(datasource.getName());
+        existing.setPluginId("restapi-plugin");
+        DatasourceStorage missing = new DatasourceStorage();
+        String missingName = unique("missing-datasource");
+        missing.setName(missingName);
+        missing.setPluginId("restapi-plugin");
+        export.setDatasourceList(List.of(existing, missing));
+        String appName = unique("imported-by-dev");
+        export.getExportedApplication().setName(appName);
+
+        // When
+        Optional<AppsmithException> error = runAs(
+                        importService
+                                .importNewArtifactInWorkspaceFromJson(workspaceId, export)
+                                .map(imported -> Optional.<AppsmithException>empty()),
+                        users.get(InstanceRole.DEV))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception)))
+                .block();
+
+        // Then
+        // The importer wraps the datasource step's ACTION_IS_NOT_AUTHORIZED in its own error, keeping the message.
+        assertThat(error).hasValueSatisfying(exception -> {
+            assertThat(exception.getError()).isEqualTo(AppsmithError.GENERIC_JSON_IMPORT_ERROR);
+            assertThat(exception.getMessage()).contains("create datasource");
+        });
+        String datasources = new String(clientFor(InstanceRole.ADMIN)
+                .get()
+                .uri("/api/v1/datasources?workspaceId={workspaceId}", workspaceId)
+                .exchange()
+                .expectBody()
+                .returnResult()
+                .getResponseBodyContent());
+        assertThat(datasources).contains(datasource.getName()).doesNotContain(missingName);
+        List<String> appNames = runAs(
+                        applicationService
+                                .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                                .map(Application::getName)
+                                .collectList(),
+                        users.get(InstanceRole.ADMIN))
+                .block();
+        assertThat(appNames).doesNotContain(appName);
+    }
+
     @ParameterizedTest
     @EnumSource(InstanceRole.class)
     void should_hideNeverPublishedAppOnlyFromUser_when_roleOpensOrListsIt(InstanceRole role) {

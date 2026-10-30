@@ -1,5 +1,10 @@
 package com.appsmith.server.projectsrepo;
 
+import com.appsmith.external.models.ActionConfiguration;
+import com.appsmith.external.models.ActionDTO;
+import com.appsmith.external.models.Datasource;
+import com.appsmith.external.models.DatasourceConfiguration;
+import com.appsmith.external.models.Property;
 import com.appsmith.server.approvals.ApplicationApprovalService;
 import com.appsmith.server.approvals.ApprovalFingerprint;
 import com.appsmith.server.approvals.ApprovalStatus;
@@ -7,21 +12,29 @@ import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.helpers.MockPluginExecutor;
+import com.appsmith.server.helpers.PluginExecutorHelper;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
+import com.appsmith.server.repositories.NewActionRepository;
+import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.roles.InstanceRole;
 import com.appsmith.server.roles.InstanceRoleService;
 import com.appsmith.server.services.ApplicationPageService;
+import com.appsmith.server.services.LayoutActionService;
 import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import reactor.core.publisher.Mono;
 
 import java.util.EnumMap;
@@ -31,6 +44,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** The projects repo's export and import of the edit copy, through the real services and permissions. */
 @SpringBootTest
@@ -66,12 +80,27 @@ class ProjectsRepoServiceTest {
     @Autowired
     Gson gson;
 
+    @Autowired
+    LayoutActionService layoutActionService;
+
+    @Autowired
+    NewActionRepository newActionRepository;
+
+    @Autowired
+    PluginRepository pluginRepository;
+
+    // Plugin jars are not loaded in tests; creating an API query needs its executor.
+    @MockitoBean
+    PluginExecutorHelper pluginExecutorHelper;
+
     Map<InstanceRole, User> users;
     String workspaceId;
     Application application;
 
     @BeforeEach
     void setUp() {
+        Mockito.when(pluginExecutorHelper.getPluginExecutor(Mockito.any()))
+                .thenReturn(Mono.just(new MockPluginExecutor()));
         workspaceId = defaultWorkspaceService.getIds().block().workspaceId();
         users = new EnumMap<>(InstanceRole.class);
         for (InstanceRole role : InstanceRole.values()) {
@@ -178,6 +207,116 @@ class ProjectsRepoServiceTest {
                         .block()
                         .getLastDeployedAt())
                 .isNull();
+    }
+
+    @Test
+    void should_exportStrippedSecretValues_when_apiQueryHasLiteralSecrets() {
+        // Given
+        runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+
+        // When
+        String exported = gson.toJson(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+
+        // Then
+        assertThat(exported)
+                .contains(EditCopyJson.STRIPPED_VALUE, "application/json", "{{Input1.text}}")
+                .doesNotContain("Bearer s3cret", "k-123", "t-456", "session\\u003dabc", "session=abc");
+    }
+
+    @Test
+    void should_keepStoredSecretValues_when_devPushesChangedPulledApp() {
+        // Given
+        ActionDTO query = runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        asMap(exported.get("exportedApplication")).put("unpublishedAppLayout", Map.of("type", "MOBILE"));
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isFalse();
+        ActionDTO stored = newActionRepository.findById(query.getId()).block().getUnpublishedAction();
+        assertThat(stored.getActionConfiguration().getHeaders())
+                .extracting(Property::getKey, Property::getValue)
+                .containsExactly(
+                        tuple("Authorization", "Bearer s3cret"),
+                        tuple("Content-Type", "application/json"),
+                        tuple("X-Api-Key", "{{Input1.text}}"));
+        assertThat(stored.getActionConfiguration().getQueryParameters())
+                .extracting(Property::getKey, Property::getValue)
+                .containsExactly(tuple("api_key", "k-123"), tuple("page", "1"));
+        assertThat(stored.getActionConfiguration().getPath()).isEqualTo("/orders?token=t-456&page=2");
+        assertThat(stored.getDatasource().getDatasourceConfiguration().getHeaders())
+                .extracting(Property::getKey, Property::getValue)
+                .containsExactly(tuple("Cookie", "session=abc"));
+    }
+
+    @Test
+    void should_skipImport_when_devPushesUnchangedAppWithStrippedSecrets() {
+        // Given
+        runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isTrue();
+    }
+
+    @Test
+    void should_refuseNewApp_when_fileHasStrippedSecretValues() {
+        // Given
+        runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+
+        // When
+        Optional<AppsmithException> error = runAs(
+                projectsRepoService
+                        .importEditCopy(workspaceId, null, gson.toJson(exported))
+                        .map(imported -> Optional.<AppsmithException>empty())
+                        .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception))),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).hasValueSatisfying(exception -> {
+            assertThat(exception.getError()).isEqualTo(AppsmithError.GENERIC_BAD_REQUEST);
+            assertThat(exception.getMessage()).contains("query 'SecretApi' headers 'Authorization'");
+        });
+    }
+
+    /** An API query with its own URL (no saved datasource) and literal secrets in its headers, parameters and URLs. */
+    private ActionDTO apiQueryWithSecrets() {
+        ActionDTO action = new ActionDTO();
+        action.setName("SecretApi");
+        action.setPageId(application.getPages().get(0).getId());
+        Datasource datasource = new Datasource();
+        datasource.setName("DEFAULT_REST_DATASOURCE");
+        datasource.setWorkspaceId(workspaceId);
+        datasource.setPluginId(
+                pluginRepository.findByPackageName("restapi-plugin").block().getId());
+        DatasourceConfiguration datasourceConfiguration = new DatasourceConfiguration();
+        datasourceConfiguration.setUrl("https://api.example.com");
+        datasourceConfiguration.setHeaders(List.of(new Property("Cookie", "session=abc")));
+        datasource.setDatasourceConfiguration(datasourceConfiguration);
+        action.setDatasource(datasource);
+        ActionConfiguration actionConfiguration = new ActionConfiguration();
+        actionConfiguration.setHttpMethod(HttpMethod.GET);
+        actionConfiguration.setPath("/orders?token=t-456&page=2");
+        actionConfiguration.setHeaders(List.of(
+                new Property("Authorization", "Bearer s3cret"),
+                new Property("Content-Type", "application/json"),
+                new Property("X-Api-Key", "{{Input1.text}}")));
+        actionConfiguration.setQueryParameters(List.of(new Property("api_key", "k-123"), new Property("page", "1")));
+        action.setActionConfiguration(actionConfiguration);
+        return action;
     }
 
     @SuppressWarnings("unchecked")

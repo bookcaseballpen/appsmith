@@ -31,7 +31,7 @@ import reactor.core.publisher.Mono;
  * Importing a file over an existing app replaces its edit copy only. The published side of the file (what a publish
  * would copy: published pages, queries, JS objects, app settings and theme) is dropped before the import
  * ({@link EditCopyJson#dropPublishedSide}), and the importers keep the stored published copy wherever the file has
- * none. So a DEV, or an AI through MCP, may import over
+ * none; any other kind of file over an existing artifact is refused. So a DEV, or an AI through MCP, may import over
  * a live app: its users keep seeing the approved version, which changes only through Submit -> Approve (see
  * {@link PublishApproval}). A pending request is cancelled by the approval fingerprint once the edit copy differs.
  *
@@ -85,9 +85,12 @@ public class ImportServiceImpl extends ImportServiceCEImpl implements ImportServ
         if (!StringUtils.hasText(artifactId)) {
             return super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson);
         }
-        if (artifactExchangeJson instanceof ApplicationJson applicationJson) {
-            EditCopyJson.dropPublishedSide(applicationJson);
+        // Only an app file has a published side this class knows how to drop; any other kind could write it.
+        if (!(artifactExchangeJson instanceof ApplicationJson applicationJson)) {
+            log.warn("Refused importing a file that is not an app file over artifact {}", artifactId);
+            return Mono.error(new AppsmithException(AppsmithError.UNSUPPORTED_OPERATION));
         }
+        EditCopyJson.dropPublishedSide(applicationJson);
         Mono<Artifact> imported = Mono.defer(
                 () -> super.updateNonGitConnectedArtifactFromJson(workspaceId, artifactId, artifactExchangeJson)
                         .map(artifact -> (Artifact) artifact));

@@ -9,7 +9,11 @@ import com.appsmith.server.domains.Theme;
 import com.appsmith.server.dtos.ActionCollectionDTO;
 import com.appsmith.server.dtos.ApplicationJson;
 import com.appsmith.server.dtos.PageDTO;
+import com.appsmith.server.exceptions.AppsmithError;
+import com.appsmith.server.exceptions.AppsmithException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -18,8 +22,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EditCopyJsonTest {
+
+    private static final String STRIPPED = EditCopyJson.STRIPPED_VALUE;
 
     @Test
     void should_keepOnlyEditCopy_when_publishedSideIsDropped() {
@@ -120,5 +127,181 @@ class EditCopyJsonTest {
         assertThat(embeddedConfiguration)
                 .containsEntry("url", "https://api.example.com")
                 .doesNotContainKey("authentication");
+    }
+
+    @Test
+    void should_replaceLiteralSecretValues_when_apiQueryIsExported() {
+        // Given
+        Map<String, Object> exported = exportWithApiQuery("query1");
+
+        // When
+        EditCopyJson.withoutDatasourceDetails(exported);
+
+        // Then
+        Map<String, Object> dto = editCopy(exported);
+        Map<String, Object> actionConfiguration = child(dto, "actionConfiguration");
+        assertThat(actionConfiguration.get("headers"))
+                .isEqualTo(List.of(
+                        Map.of("key", "Authorization", "value", STRIPPED),
+                        Map.of("key", "Content-Type", "value", "application/json"),
+                        Map.of("key", "X-Api-Key", "value", "{{appsmith.store.apiKey}}"),
+                        Map.of("key", "X-Session-Token", "value", "")));
+        assertThat(actionConfiguration.get("queryParameters"))
+                .isEqualTo(List.of(Map.of("key", "api_key", "value", STRIPPED), Map.of("key", "page", "value", "1")));
+        assertThat(actionConfiguration.get("path"))
+                .isEqualTo("/orders?token=" + STRIPPED + "&page=2&signature={{Api.sign('a&secret=b')}}");
+        Map<String, Object> datasourceConfiguration = child(child(dto, "datasource"), "datasourceConfiguration");
+        assertThat(datasourceConfiguration.get("url"))
+                .isEqualTo("https://api.example.com/v1?client_secret=" + STRIPPED + "&region=eu");
+        assertThat(datasourceConfiguration.get("headers"))
+                .isEqualTo(List.of(Map.of("key", "Cookie", "value", STRIPPED)));
+        assertThat(datasourceConfiguration.get("queryParameters"))
+                .isEqualTo(List.of(Map.of("key", "Password", "value", STRIPPED)));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "Authorization, true",
+        "Proxy-Authorization, true",
+        "cookie, true",
+        "X-API-KEY, true",
+        "apikey, true",
+        "x-access-token, true",
+        "client_secret, true",
+        "PASSWORD, true",
+        "auth, true",
+        "X-Signature, true",
+        "Content-Type, false",
+        "Accept, false",
+        "author, false",
+        "page, false"
+    })
+    void should_stripValueOnlyOfSecretNames_when_headerIsExported(String name, boolean secret) {
+        // Given
+        Map<String, Object> exported = exportWithHeader(name, "literal-value");
+
+        // When
+        EditCopyJson.withoutDatasourceDetails(exported);
+
+        // Then
+        assertThat(firstHeader(exported).get("value")).isEqualTo(secret ? STRIPPED : "literal-value");
+    }
+
+    @Test
+    void should_keepSecretValues_when_secretStrippingIsOff() {
+        // Given
+        Map<String, Object> exported = exportWithApiQuery("query1");
+
+        // When
+        Object result = EditCopyJson.withoutDatasourceDetails(exported, false);
+
+        // Then
+        assertThat(result).isEqualTo(exportWithApiQuery("query1"));
+    }
+
+    @Test
+    void should_putStoredValuesBack_when_pulledFileIsPushed() {
+        // Given
+        Map<String, Object> stored = exportWithApiQuery("query1");
+        Object pushed = EditCopyJson.withoutDatasourceDetails(exportWithApiQuery("query1"));
+
+        // When
+        boolean putBack = EditCopyJson.putBackStoredValues(pushed, stored);
+
+        // Then
+        assertThat(putBack).isTrue();
+        assertThat(pushed).isEqualTo(stored);
+    }
+
+    @Test
+    void should_keepValuesWrittenInFile_when_pushedFileHasNoStrippedValues() {
+        // Given
+        Map<String, Object> stored = exportWithApiQuery("query1");
+        Map<String, Object> pushed = exportWithHeader("Authorization", "Bearer new-token");
+
+        // When
+        boolean putBack = EditCopyJson.putBackStoredValues(pushed, stored);
+
+        // Then
+        assertThat(putBack).isFalse();
+        assertThat(firstHeader(pushed).get("value")).isEqualTo("Bearer new-token");
+    }
+
+    @Test
+    void should_refusePush_when_strippedValueHasNoStoredValue() {
+        // Given
+        Map<String, Object> stored = exportWithApiQuery("query1");
+        Object pushed = EditCopyJson.withoutDatasourceDetails(exportWithApiQuery("copied-query"));
+
+        // When / Then
+        assertThatThrownBy(() -> EditCopyJson.putBackStoredValues(pushed, stored))
+                .isInstanceOf(AppsmithException.class)
+                .satisfies(error ->
+                        assertThat(((AppsmithException) error).getError()).isEqualTo(AppsmithError.GENERIC_BAD_REQUEST))
+                .hasMessageContaining("query 'GetOrders' headers 'Authorization'")
+                .hasMessageContaining("query 'GetOrders' URL parameter 'token'")
+                .hasMessageContaining("query 'GetOrders' URL parameter 'client_secret'");
+    }
+
+    /** An exported app with one API query that has its own URL and secrets in its headers, parameters and URLs. */
+    private static Map<String, Object> exportWithApiQuery(String gitSyncId) {
+        Map<String, Object> actionConfiguration = new HashMap<>();
+        actionConfiguration.put("path", "/orders?token=t-456&page=2&signature={{Api.sign('a&secret=b')}}");
+        actionConfiguration.put(
+                "headers",
+                List.of(
+                        property("Authorization", "Bearer s3cret"),
+                        property("Content-Type", "application/json"),
+                        property("X-Api-Key", "{{appsmith.store.apiKey}}"),
+                        property("X-Session-Token", "")));
+        actionConfiguration.put("queryParameters", List.of(property("api_key", "k-123"), property("page", "1")));
+        Map<String, Object> datasourceConfiguration = new HashMap<>();
+        datasourceConfiguration.put("url", "https://api.example.com/v1?client_secret=cs-789&region=eu");
+        datasourceConfiguration.put("headers", List.of(property("Cookie", "session=abc")));
+        datasourceConfiguration.put("queryParameters", List.of(property("Password", "pw")));
+        return exportWith(gitSyncId, actionConfiguration, datasourceConfiguration);
+    }
+
+    private static Map<String, Object> exportWithHeader(String name, String value) {
+        Map<String, Object> actionConfiguration = new HashMap<>();
+        actionConfiguration.put("headers", List.of(property(name, value)));
+        return exportWith("query1", actionConfiguration, new HashMap<>());
+    }
+
+    private static Map<String, Object> exportWith(
+            String gitSyncId, Map<String, Object> actionConfiguration, Map<String, Object> datasourceConfiguration) {
+        Map<String, Object> datasource = new HashMap<>();
+        datasource.put("name", "DEFAULT_REST_DATASOURCE");
+        datasource.put("datasourceConfiguration", datasourceConfiguration);
+        Map<String, Object> dto = new HashMap<>();
+        dto.put("name", "GetOrders");
+        dto.put("actionConfiguration", actionConfiguration);
+        dto.put("datasource", datasource);
+        Map<String, Object> exported = new HashMap<>();
+        exported.put("actionList", List.of(Map.of("gitSyncId", gitSyncId, "unpublishedAction", dto)));
+        return exported;
+    }
+
+    private static Map<String, Object> property(String key, String value) {
+        return new HashMap<>(Map.of("key", key, "value", value));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> editCopy(Object exported) {
+        List<Map<String, Object>> actions =
+                (List<Map<String, Object>>) ((Map<String, Object>) exported).get("actionList");
+        return child(actions.get(0), "unpublishedAction");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> firstHeader(Object exported) {
+        return ((List<Map<String, Object>>)
+                        child(editCopy(exported), "actionConfiguration").get("headers"))
+                .get(0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> child(Map<String, Object> node, String key) {
+        return (Map<String, Object>) node.get(key);
     }
 }
