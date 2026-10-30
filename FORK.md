@@ -99,14 +99,18 @@ Dev and User see no app through their role. An Admin gives access per app: a **g
 app, its pages, queries and JS objects). Edit never includes publishing: an app goes live only through Submit ->
 Approve. Approver and Admin keep every app through their role.
 
+**After upgrading to this version, Devs and Users see none of the existing apps until an Admin grants them.** No
+creator is recorded for apps made before it, so nobody gets an automatic Edit grant on them; give each team or user
+their apps (`PUT /api/v1/applications/{applicationId}/grants`, below).
+
 - **Teams** are permission groups with `defaultDomainType` `Team`; their members are the group's `assignedToUserIds`.
   A team holds no permission of its own.
 - **A grant to a single user** goes to the user's hidden personal group (`defaultDomainType` `UserGrant`,
   `defaultDomainId` = the user id, the user its only member), created on their first grant, because document
   policies only name permission groups.
-- Both kinds count among a user's permission groups (`CacheableRepositoryHelperCEImpl.getPermissionGroupsOfUser`).
-  Adding or removing a member, and creating a personal group, clear that user's cached groups, so access changes on
-  their next request.
+- Both kinds count among a user's permission groups (`CacheableRepositoryHelperCEImpl.getPermissionGroupsOfUser`),
+  and are also cached apart for `RoleGate` (`getGrantGroupsOfUser`). Adding or removing a member, and creating a
+  personal group, clear both of that user's caches, so access changes on their next request.
 - **How a grant is stored** (`AppGrantService`): like CE's "make public", in the policies of the app and of its pages,
   queries, JS objects and custom themes, for the grantee's group. View = `read:applications` (pages: read, queries:
   execute); Edit = `manage:applications` (pages and queries: manage). Pages, queries and JS objects created later
@@ -126,7 +130,7 @@ Approve. Approver and Admin keep every app through their role.
 | `GET /api/v1/teams`, `GET /api/v1/teams/{teamId}` | Teams with their members (`id`, `email`, `name`) |
 | `POST /api/v1/teams` (body `{"name", "description"}`) | Create; names are unique (ignoring case), at most 100 characters |
 | `PUT /api/v1/teams/{teamId}` (same body) | Rename and replace the description |
-| `DELETE /api/v1/teams/{teamId}` | Revoke every grant the team holds, then delete it |
+| `DELETE /api/v1/teams/{teamId}` | Delete the team, then revoke every grant it holds; a retry after a failure partway revokes what is left, and deleting a team that is already gone succeeds |
 | `PUT` / `DELETE /api/v1/teams/{teamId}/members/{userId}` | Add / remove a member |
 | `GET /api/v1/applications/{applicationId}/grants` | The app's grants: `[{grantee: {type: TEAM\|USER, id}, name, level}]` (`name` is the team name or the user's email) |
 | `PUT /api/v1/applications/{applicationId}/grants` (body `{"grantee": {"type": "TEAM"\|"USER", "id"}, "level": "VIEW"\|"EDIT"\|"NONE"}`) | Set one grantee's level (`NONE` revokes); answers the app's grants |
@@ -998,8 +1002,10 @@ Server plugins (`app/server/appsmith-plugins/`):
 - New server files: `grants/` (`AppGrantService`, `AppGrantController`, `AppGrantDTO`, `GrantLevel`, `GrantGroups`,
   `TeamService`, `TeamController`, `TeamDTO`), `roles/RoleGate.java`, `roles/RoleGroupReconciler.java`, and the tests
   `grants/AppGrantServiceTest`, `grants/TeamServiceTest`.
-- Edited upstream files (`Fork:` comments): `repositories/ce/CacheableRepositoryHelperCEImpl.java` (teams and personal
-  grant groups count among a user's groups), `repositories/ce/BaseAppsmithRepositoryCEImpl.java` (the `RoleGate` hook
+- Edited upstream files (`Fork:` comments): `repositories/ce/CacheableRepositoryHelperCEImpl.java` and
+  `CacheableRepositoryHelperCE.java` (teams and personal grant groups count among a user's groups; the user's grant
+  groups are cached for `RoleGate`), `repositories/ce/CustomPermissionGroupRepositoryCEImpl.java` (clearing a user's
+  cached groups also clears their cached grant groups), `repositories/ce/BaseAppsmithRepositoryCEImpl.java` (the `RoleGate` hook
   where a permission check resolves the caller's groups), `applications/base/ApplicationServiceImpl.java` (app name
   check ignores permissions), `solutions/WorkspacePermissionImpl.java` (creating an app needs the create permission
   on the workspace, not "manage every app").

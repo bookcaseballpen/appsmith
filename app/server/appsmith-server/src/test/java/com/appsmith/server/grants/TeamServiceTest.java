@@ -3,9 +3,12 @@ package com.appsmith.server.grants;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.applications.base.ApplicationService;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserRepository;
@@ -27,7 +30,9 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -77,6 +82,9 @@ class TeamServiceTest {
     @Autowired
     ApplicationService applicationService;
 
+    @Autowired
+    ApplicationRepository applicationRepository;
+
     WebTestClient webTestClient;
     Map<InstanceRole, User> users;
     String workspaceId;
@@ -122,6 +130,78 @@ class TeamServiceTest {
 
         // Then
         assertThat(error).contains(AppsmithError.DUPLICATE_KEY_USER_ERROR);
+    }
+
+    @Test
+    void should_keepAtMostOneTeam_when_teamsWithSameNameAreCreatedAtOnce() {
+        // Given
+        String name = unique("Rush");
+
+        // When
+        List<Optional<AppsmithError>> outcomes = Flux.range(0, 8)
+                .flatMap(i -> runAs(
+                                teamService
+                                        .create(new TeamDTO.Request(name, null))
+                                        .map(created -> Optional.<AppsmithError>empty())
+                                        .onErrorResume(
+                                                AppsmithException.class,
+                                                exception -> Mono.just(Optional.of(exception.getError()))),
+                                users.get(InstanceRole.ADMIN))
+                        .subscribeOn(Schedulers.parallel()))
+                .collectList()
+                .block();
+
+        // Then
+        long liveTeams = permissionGroupRepository
+                .queryBuilder()
+                .criteria(Bridge.<PermissionGroup>equal(PermissionGroup.Fields.defaultDomainType, GrantGroups.TEAM)
+                        .equalIgnoreCase(PermissionGroup.Fields.name, name))
+                .all()
+                .count()
+                .block();
+        assertThat(liveTeams).isLessThanOrEqualTo(1);
+        assertThat(outcomes.stream().filter(Optional::isEmpty).count()).isEqualTo(liveTeams);
+        assertThat(outcomes.stream().flatMap(Optional::stream)).containsOnly(AppsmithError.DUPLICATE_KEY_USER_ERROR);
+    }
+
+    @Test
+    void should_revokeLeftoverGrants_when_deleteIsRetriedAfterTeamWasArchived() {
+        // Given
+        User dev = users.get(InstanceRole.DEV);
+        TeamDTO team = asAdmin(teamService.create(new TeamDTO.Request(unique("Half gone"), null)));
+        asAdmin(teamService.addMember(team.id(), dev.getId()));
+        Application application = createAppAsAdmin();
+        asAdmin(appGrantService.setGrant(
+                application.getId(),
+                new AppGrantDTO.Request(new AppGrantDTO.Grantee(AppGrantDTO.Type.TEAM, team.id()), GrantLevel.VIEW)));
+        // A first delete that stopped after archiving the team, before revoking its grants.
+        permissionGroupRepository.archiveById(team.id()).block();
+
+        // When
+        Optional<AppsmithError> error = errorOf(teamService.delete(team.id()).thenReturn(true), InstanceRole.ADMIN);
+
+        // Then
+        assertThat(error).isEmpty();
+        assertThat(applicationRepository
+                        .findById(application.getId())
+                        .block()
+                        .getPolicyMap()
+                        .values())
+                .allSatisfy(policy -> assertThat(policy.getPermissionGroups()).doesNotContain(team.id()));
+        assertThat(reads(dev, application.getId())).isFalse();
+    }
+
+    @Test
+    void should_refuseDeleteAndKeepGroup_when_idIsNotATeam() {
+        // Given
+        String roleGroupId = defaultWorkspaceService.getIds().block().groupId(InstanceRole.DEV);
+
+        // When
+        Optional<AppsmithError> error = errorOf(teamService.delete(roleGroupId).thenReturn(true), InstanceRole.ADMIN);
+
+        // Then
+        assertThat(error).contains(AppsmithError.NO_RESOURCE_FOUND);
+        assertThat(permissionGroupRepository.findById(roleGroupId).block()).isNotNull();
     }
 
     @Test

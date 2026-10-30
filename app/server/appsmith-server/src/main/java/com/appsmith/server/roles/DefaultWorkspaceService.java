@@ -60,6 +60,8 @@ public class DefaultWorkspaceService {
     static final String CONFIG_NAME = "fork.defaultWorkspace";
     static final String WORKSPACE_ID_KEY = "workspaceId";
     static final String DEFAULT_WORKSPACE_NAME = "Apps";
+    static final String RECONCILE_FAILED_MESSAGE = "ROLES RECONCILE FAILED: the permissions of the role groups and"
+            + " apps may be out of date; the reconcile will retry on the next start.";
 
     private final ConfigRepository configRepository;
     private final WorkspaceRepository workspaceRepository;
@@ -111,7 +113,7 @@ public class DefaultWorkspaceService {
                 roleGroupReconciler.reconcile(ids).block();
             }
         } catch (Exception e) {
-            log.error("Could not bring the role groups in line with the role definitions", e);
+            log.error(RECONCILE_FAILED_MESSAGE, e);
         }
     }
 

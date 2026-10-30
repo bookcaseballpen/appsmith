@@ -219,6 +219,56 @@ class AppGrantServiceTest {
     }
 
     @Test
+    void should_keepUserFromEditing_when_userJoinsEditTeamAfterGateCachedTheirGroups() {
+        // Given
+        grant(AppGrantDTO.Type.USER, viewer.getId(), GrantLevel.VIEW);
+        makeLive();
+        // Resolves and caches the user's groups and grant groups before they join the team.
+        boolean addsPageBeforeJoining = canAddPage(viewer);
+        TeamDTO team = createTeam();
+        grant(AppGrantDTO.Type.TEAM, team.id(), GrantLevel.EDIT);
+
+        // When
+        runAs(teamService.addMember(team.id(), viewer.getId()), admin).block();
+
+        // Then
+        assertThat(addsPageBeforeJoining).isFalse();
+        assertThat(canRead(viewer)).isTrue();
+        assertThat(canAddPage(viewer)).isFalse();
+        assertThat(cacheableRepositoryHelper.getGrantGroupsOfUser(viewer).block())
+                .contains(team.id(), personalGroupId(viewer));
+    }
+
+    @Test
+    void should_importWithSuffixedNameAndKeepOtherAppHidden_when_devImportsAppNamedLikeHiddenApp() {
+        // Given
+        ApplicationJson export = runAs(
+                        exportService
+                                .exportByArtifactIdAndBranchName(application.getId(), "", ArtifactType.APPLICATION)
+                                .map(json -> (ApplicationJson) json),
+                        admin)
+                .block();
+        boolean seesTakenNameBefore = canRead(dev);
+
+        // When
+        Application imported = runAs(
+                        importService
+                                .importNewArtifactInWorkspaceFromJson(workspaceId, export)
+                                .map(artifact -> (Application) artifact),
+                        dev)
+                .block();
+
+        // Then
+        assertThat(seesTakenNameBefore).isFalse();
+        assertThat(imported.getId()).isNotEqualTo(application.getId());
+        assertThat(imported.getName()).isEqualTo(application.getName() + " (1)");
+        assertThat(canRead(dev, imported.getId())).isTrue();
+        assertThat(canRead(dev)).isFalse();
+        assertThat(applicationRepository.findById(application.getId()).block().getName())
+                .isEqualTo(application.getName());
+    }
+
+    @Test
     void should_letDevReadButNotEdit_when_devHoldsViewGrant() {
         // When
         grant(AppGrantDTO.Type.USER, dev.getId(), GrantLevel.VIEW);
