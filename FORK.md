@@ -75,23 +75,28 @@ browser: the login page, a Dev's "Submit for approval" in the editor, the admin'
 approval" list, and the published page then carrying the Dev's change. Tested on Testcontainers PostgreSQL: the repository tests,
 imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial import/export 4 + 4,
 `ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
-(`ApplicationApprovalServiceTest` 38, `InstanceRolePermissionsTest` 78, `EditorReadOnlyHttpTest` 5) and the Postgres
+(`ApplicationApprovalServiceTest` 48, `InstanceRolePermissionsTest` 81, `EditorReadOnlyHttpTest` 5), the projects repo
+(`ProjectsRepoServiceTest` 13, `EditCopyJsonTest` 39) and the Postgres
 tests (transactions, unique names, soft delete, admin sync). The datasource plugins postgres, mysql, mssql and REST API
 and JS objects run on a live server in edit and view mode.
 The REST API plugin refuses loopback hosts (SSRF filter); for local tests only, `APPSMITH_DISABLE_SSRF_FILTER=true`.
 
 Server test suite on PostgreSQL (`appsmith-server`, Testcontainers, one JVM per batch as in CI), in batches by
-package. Classes, not test methods:
+package, after merging `release` (#289, #290, #294). Classes, not test methods:
 
 | Batch | Packages | Passed | Failed | Skipped |
 |---|---|---|---|---|
-| 1 | 27 small packages (acl … widgets, controllers, domains, imports, exports), `ServerApplicationTests` | 66 | 2 | 0 |
-| 2 | `repositories`, `configurations` | 31 | 0 | 1 |
+| 1 | every package but those below (acl … widgets, approvals, controllers, imports, exports, projectsrepo, roles), `ServerApplicationTests` | 68 | 0 | 0 |
+| 2 | `repositories`, `configurations` | 32 | 0 | 1 |
 | 3 | `helpers` | 32 | 0 | 0 |
-| 4 | `solutions` | 18 | 1 | 0 |
+| 4 | `solutions` | 19 | 0 | 0 |
 | 5 | `git` | 13 | 2 | 1 |
 | 6a | `services.ce` | 26 | 0 | 0 |
-| 6b | `services` (the rest) | 31 | 4 | 0 |
+| 6b | `services` (the rest) | 34 | 0 | 1 |
+| | **Total** | **224** | **2** | **3** |
+
+Batch 4's `ActionExecutionSolutionCETest` and batch 6b's `UserServiceWithDisabledSignupTest` failed once more in the
+batch run and were rerun after their last fix (below); the other batches are from one run each.
 
 Fixed in the tests after the first run (none came from the port):
 - `UserWorkspaceServiceUnitTest` leaves out the fork's default "Apps" workspace, which `api_user` also sees.
@@ -104,13 +109,17 @@ Fixed in the tests after the first run (none came from the port):
   shared default workspace are visible too.
 - `MockDataServiceTest` and `ActionExecutionSolutionCETest.executeAction_actionOnMockDatasource_success` are
   `@Disabled`: they need the cloud's mock datasources, which are off by design ("Sample databases" below).
+- The test seed (`SeedMongoData`) keeps the default workspace. It deleted every workspace at each new context's start,
+  so each context bootstrapped its own "Apps" and the contexts cached earlier kept stale ids.
+- `UserServiceWithDisabledSignupTest.createNewUserValidWhenDisabled` uses a unique email: `UserServiceTest` creates the
+  same one earlier in the batch, and an existing user is refused before the signup check.
+- `ActionExecutionSolutionCETest` accepts a `requestedAt` equal to `Instant.now()`: on Windows the two can be the same.
 
 Failed, not from the port: `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the client DSL
-migration) fail on Windows (from reading the code; not run on Linux here). Upstream's `FileUtilsCEImpl.getExistingFilesInRepo` / `isWhiteListedPath` and
-`getGitResourceIdentity` split the repository's relative paths on `/`, but on Windows they come as `pages\Page1\...`,
-so no page file is read back and nothing is committed. On Linux (CI, the Docker image) the paths use `/`.
-`ActionExecutionSolutionCETest.testWidgetSuggestionAfterExecutionWithJsonObjectData` can fail on Windows when two
-`Instant.now()` calls return the same value ("strictly before"); it passes on a rerun.
+migration) fail on Windows (from reading the code; not run on Linux here). Upstream's
+`FileUtilsCEImpl.getExistingFilesInRepo` / `isWhiteListedPath` and `getGitResourceIdentity` split the repository's
+relative paths on `/`, but on Windows they come as `pages\Page1\...`, so no page file is read back and nothing is
+committed. On Linux (CI, the Docker image) the paths use `/`.
 The organization is cached in Redis, so flush the test Redis between runs.
 
 Adapted from the suite: tests that read the encrypted password from the saved object
@@ -124,8 +133,8 @@ V2 now names the seed's columns with `SnakeCaseNamingStrategy`; its own function
 and `isDependentOnCS` into columns that do not exist, so the plugins lost them and "generate CRUD page" was refused.
 `V6__plugin_seed_acronym_columns.sql` fills them in on databases seeded before the fix.
 
-Skipped: `MockDataServiceTest` (above). `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
-endpoint). `GitBranchesWithCentralServiceIT` was left out: it starts the `appsmith/test-event-driver` git server image,
+Skipped: `MockDataServiceTest` (above). `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a
+workspace over HTTP is a hidden endpoint). `GitBranchesWithCentralServiceIT` was left out: it starts the `appsmith/test-event-driver` git server image,
 which is not on this PC, and the Testcontainers pull hung for 25 minutes.
 Classes whose tests are all `@Nested` (`FSGitHandlerTest`, 31 tests) show 0 tests in surefire's text summary; they are
 counted from the XML report.

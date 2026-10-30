@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -100,7 +101,9 @@ public class UserServiceWithDisabledSignupTest {
     @WithMockAppsmithUser
     public void createNewUserValidWhenDisabled() {
         User newUser = new User();
-        newUser.setEmail("new-user-email@email.com");
+        // Fork: a unique email; UserServiceTest creates new-user-email@email.com in the same database, and an
+        // existing user is refused before the signup check.
+        newUser.setEmail("new-user-" + UUID.randomUUID() + "@email.com");
         newUser.setPassword("new-user-test-password");
 
         Mono<User> userMono = userService.create(newUser);
