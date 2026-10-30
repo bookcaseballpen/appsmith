@@ -16,10 +16,14 @@ import com.appsmith.server.domains.Plugin;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.dtos.ApplicationJson;
+import com.appsmith.server.dtos.PageDTO;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.exports.internal.ExportService;
 import com.appsmith.server.fork.internal.ApplicationForkingService;
+import com.appsmith.server.grants.AppGrantDTO;
+import com.appsmith.server.grants.AppGrantService;
+import com.appsmith.server.grants.GrantLevel;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
 import com.appsmith.server.imports.internal.ImportService;
@@ -130,6 +134,9 @@ class InstanceRolePermissionsTest {
     @Autowired
     ExportService exportService;
 
+    @Autowired
+    AppGrantService appGrantService;
+
     @MockBean
     PluginExecutorHelper pluginExecutorHelper;
 
@@ -174,8 +181,41 @@ class InstanceRolePermissionsTest {
         application = runAs(applicationPageService.createApplication(unsaved, workspaceId), admin)
                 .block();
         pageId = application.getPages().get(0).getId();
+        // DEV and USER see no app through their role; the role checks below run on an app they are granted.
+        grant(users.get(InstanceRole.DEV), GrantLevel.EDIT);
+        grant(users.get(InstanceRole.USER), GrantLevel.VIEW);
 
         datasource = runAs(datasourceService.create(newDatasource()), admin).block();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = InstanceRole.class,
+            names = {"DEV", "USER"})
+    void should_seeAndEditNothing_when_roleHoldsNoGrant(InstanceRole role) {
+        // Given
+        User ungranted = createUserWithRole(role);
+        makeLive(application.getId());
+
+        // When
+        List<String> visible = runAs(
+                        applicationService
+                                .findByWorkspaceId(workspaceId, AclPermission.READ_APPLICATIONS)
+                                .map(Application::getId)
+                                .collectList(),
+                        ungranted)
+                .block();
+        PageDTO page = new PageDTO();
+        page.setName("Page" + UUID.randomUUID().toString().substring(0, 8));
+        page.setApplicationId(application.getId());
+        Boolean addedPage = runAs(applicationPageService.createPage(page), ungranted)
+                .map(created -> true)
+                .onErrorResume(AppsmithException.class, error -> Mono.just(false))
+                .block();
+
+        // Then
+        assertThat(visible).doesNotContain(application.getId());
+        assertThat(addedPage).isFalse();
     }
 
     @ParameterizedTest
@@ -704,6 +744,16 @@ class InstanceRolePermissionsTest {
                         .getRole(userRepository.findById(target.getId()).block())
                         .block())
                 .isEqualTo(newRole);
+    }
+
+    private void grant(User grantee, GrantLevel level) {
+        runAs(
+                        appGrantService.setGrant(
+                                application.getId(),
+                                new AppGrantDTO.Request(
+                                        new AppGrantDTO.Grantee(AppGrantDTO.Type.USER, grantee.getId()), level)),
+                        users.get(InstanceRole.ADMIN))
+                .block();
     }
 
     private void makeLive(String applicationId) {

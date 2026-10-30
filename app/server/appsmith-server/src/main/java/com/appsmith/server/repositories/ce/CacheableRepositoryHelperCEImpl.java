@@ -11,6 +11,7 @@ import com.appsmith.server.domains.User;
 import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.grants.GrantGroups;
 import com.appsmith.server.helpers.InMemoryCacheableRepositoryHelper;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
@@ -73,6 +74,8 @@ public class CacheableRepositoryHelperCEImpl implements CacheableRepositoryHelpe
                     BridgeQuery<PermissionGroup> ceSupportedRolesCriteria = Bridge.or(
                             Bridge.equal(PermissionGroup.Fields.defaultDomainType, Workspace.class.getSimpleName()),
                             Bridge.equal(PermissionGroup.Fields.defaultDomainType, User.class.getSimpleName()),
+                            // Fork: teams and personal app-grant groups, see com.appsmith.server.grants.
+                            Bridge.in(PermissionGroup.Fields.defaultDomainType, GrantGroups.TYPES),
                             Bridge.equal(PermissionGroup.Fields.id, organizationAdminPermissionGroupId));
 
                     BridgeQuery<PermissionGroup> andCriteria =

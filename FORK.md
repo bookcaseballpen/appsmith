@@ -26,15 +26,21 @@ The roles work on a **fresh install only**. Nothing is migrated:
   gets a role from them, and the server logs a warning at startup.
 - Old apps are re-imported one by one into "Apps" (export from the old instance, import into the new one).
 - Every startup logs a line saying the fork supports fresh installs only.
+- When the role definitions change in a new server version (`InstanceRole`), the next start brings an instance that
+  already runs this fork in line (`RoleGroupReconciler`, idempotent): if a role group stores other permissions than
+  its role defines, each role group first loses, on every app of "Apps" and its pages, queries, JS objects and custom
+  themes, the permissions its role no longer gives; then the workspace's policies are rebuilt and last the groups store
+  their new permissions (so a start that stops halfway does it all again). App grants and other groups are left alone,
+  nothing is added, datasources are not touched.
 
 ### The four roles
 
 | Role | Can |
 | --- | --- |
-| Admin | Everything: apps, datasources, users and roles. Instance administrator. |
-| Dev | Create and edit apps, edit mode, AI and MCP, and use existing datasources in queries. Cannot create, edit, test or delete datasources (sees only name and plugin), publish, or delete apps. |
-| Approver | Open the editor or preview read-only, run queries, and publish. Nothing else. |
-| User | Published apps only. Never edit mode or preview, and never an app that was never published. |
+| Admin | Everything: apps, datasources, users, roles, teams and app grants. Instance administrator. |
+| Dev | Create apps; see and edit only the apps they hold a grant on (Edit to edit, View to see and run; every app they create, duplicate or import as a new app gives them Edit). Edit mode, AI and MCP, and use existing datasources in queries. Cannot create, edit, test or delete datasources (sees only name and plugin), publish, or delete apps. |
+| Approver | Every app: open the editor or preview read-only, run queries, and publish. Nothing else. |
+| User | Only the published apps they hold a grant on. Never edit mode or preview (an Edit grant counts as View), and never an app that was never published. |
 
 - New users join "Apps" as User. Nobody gets a personal workspace.
 - An Admin changes roles (`GET /api/v1/admin/users`, `PUT /api/v1/admin/users/{userId}/role`, and the "User roles"
@@ -84,6 +90,50 @@ It also refuses the GET endpoints that change state: git pull, git status, git f
 `pruneRefs=true`, git commit history (it checks out a branch), deploy key generation, and the datasource OAuth
 callback. It fails closed when the caller's role cannot be resolved.
 
+### Teams and app grants
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/grants/`.
+
+Dev and User see no app through their role. An Admin gives access per app: a **grant** goes to a **team** or a
+**single user**, at level **View** (see the app, run its queries and JS objects) or **Edit** (View plus change the
+app, its pages, queries and JS objects). Edit never includes publishing: an app goes live only through Submit ->
+Approve. Approver and Admin keep every app through their role.
+
+- **Teams** are permission groups with `defaultDomainType` `Team`; their members are the group's `assignedToUserIds`.
+  A team holds no permission of its own.
+- **A grant to a single user** goes to the user's hidden personal group (`defaultDomainType` `UserGrant`,
+  `defaultDomainId` = the user id, the user its only member), created on their first grant, because document
+  policies only name permission groups.
+- Both kinds count among a user's permission groups (`CacheableRepositoryHelperCEImpl.getPermissionGroupsOfUser`).
+  Adding or removing a member, and creating a personal group, clear that user's cached groups, so access changes on
+  their next request.
+- **How a grant is stored** (`AppGrantService`): like CE's "make public", in the policies of the app and of its pages,
+  queries, JS objects and custom themes, for the grantee's group. View = `read:applications` (pages: read, queries:
+  execute); Edit = `manage:applications` (pages and queries: manage). Pages, queries and JS objects created later
+  inherit the app's policies, so they inherit its grants; an import over the app keeps the app's policies and grants.
+  Datasources are not part of a grant: Dev and User execute every datasource through their role.
+- **Creator gets Edit:** a Dev who creates an app, duplicates one or imports a file as a new app (in the editor or
+  through MCP / cab-sync) gets an Edit grant on it before it is saved (`ApplicationPageServiceImpl.setApplicationPolicies`).
+- **A User never edits** (`roles/RoleGate`): for a User, team and personal grants count only for reading and executing
+  apps, pages, queries, JS objects and themes; every other permission check on them leaves those groups out. A User
+  also sees only live apps of "Apps", whatever grant they hold (`CustomApplicationRepositoryImpl`).
+- App names stay unique in the workspace even across apps a Dev cannot see, so an import picks a free name suffix
+  (`ApplicationServiceImpl.isApplicationNameTaken`).
+- Git-connected apps: a grant is written on the branch app it is set on; built-in Git is off by default.
+
+| Endpoint | What |
+| --- | --- |
+| `GET /api/v1/teams`, `GET /api/v1/teams/{teamId}` | Teams with their members (`id`, `email`, `name`) |
+| `POST /api/v1/teams` (body `{"name", "description"}`) | Create; names are unique (ignoring case), at most 100 characters |
+| `PUT /api/v1/teams/{teamId}` (same body) | Rename and replace the description |
+| `DELETE /api/v1/teams/{teamId}` | Revoke every grant the team holds, then delete it |
+| `PUT` / `DELETE /api/v1/teams/{teamId}/members/{userId}` | Add / remove a member |
+| `GET /api/v1/applications/{applicationId}/grants` | The app's grants: `[{grantee: {type: TEAM\|USER, id}, name, level}]` (`name` is the team name or the user's email) |
+| `PUT /api/v1/applications/{applicationId}/grants` (body `{"grantee": {"type": "TEAM"\|"USER", "id"}, "level": "VIEW"\|"EDIT"\|"NONE"}`) | Set one grantee's level (`NONE` revokes); answers the app's grants |
+
+All of them are Admin only (403 otherwise); the Approver filter refuses the non-GET ones for Approvers anyway, and
+they are not on the MCP allowlist.
+
 ## Release approvals
 
 Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/approvals/` and the domain
@@ -112,7 +162,7 @@ id is the application id). Client: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/ap
 | Endpoint | Who |
 | --- | --- |
 | `GET /api/v1/approvals/applications/{applicationId}` | Anyone who can open the app in the editor |
-| `POST /api/v1/approvals/applications/{applicationId}/submit` (optional body `{"note": "..."}`, at most 500 characters, kept as the SUBMITTED event's comment and shown in the history) | Dev, Admin, Approver |
+| `POST /api/v1/approvals/applications/{applicationId}/submit` (optional body `{"note": "..."}`, at most 500 characters, kept as the SUBMITTED event's comment and shown in the history) | Dev (with an Edit grant on the app), Admin, Approver |
 | `POST /api/v1/approvals/applications/{applicationId}/approve` | Approver, Admin; never an MCP token |
 | `POST /api/v1/approvals/applications/{applicationId}/reject` (body `{"comment": "..."}`, required) | Approver, Admin; never an MCP token |
 | `GET /api/v1/approvals/pending` | Approver, Admin |
@@ -224,8 +274,8 @@ Server (`projectsrepo/`):
 
 | Endpoint | What | Who |
 | --- | --- | --- |
-| `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev, Admin, Approver |
-| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions; the Approver filter refuses it) |
+| `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev (with an Edit grant on the app), Admin, Approver |
+| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions: over an app, a Dev needs an Edit grant on it; a new app gives the importing Dev one; the Approver filter refuses it) |
 
 `EditCopyJson` keeps every secret on the instance: the export never carries the published copy, the stored datasource
 structure, decrypted fields or modified-resources bookkeeping; each datasource is reduced to `name` and `pluginId`; a
@@ -898,6 +948,24 @@ Server plugins (`app/server/appsmith-plugins/`):
   `ReleaseControls.test.tsx`, `scripts/fork-uat/` (`up.ps1`, `down.ps1`, `README.md`: the MCP server), and the
   tests `approvals/ApplicationApprovalServiceTest`, `roles/InstanceRolePermissionsTest`,
   `filters/McpAllowlistWebFilterTest`.
+
+### Teams and app grants
+
+- New server files: `grants/` (`AppGrantService`, `AppGrantController`, `AppGrantDTO`, `GrantLevel`, `GrantGroups`,
+  `TeamService`, `TeamController`, `TeamDTO`), `roles/RoleGate.java`, `roles/RoleGroupReconciler.java`, and the tests
+  `grants/AppGrantServiceTest`, `grants/TeamServiceTest`.
+- Edited upstream files (`Fork:` comments): `repositories/ce/CacheableRepositoryHelperCEImpl.java` (teams and personal
+  grant groups count among a user's groups), `repositories/ce/BaseAppsmithRepositoryCEImpl.java` (the `RoleGate` hook
+  where a permission check resolves the caller's groups), `applications/base/ApplicationServiceImpl.java` (app name
+  check ignores permissions), `solutions/WorkspacePermissionImpl.java` (creating an app needs the create permission
+  on the workspace, not "manage every app").
+- Edited fork files: `acl/PolicyGenerator.java` (creating apps no longer implies managing them; page and git rights
+  come from managing every app; executing the workspace's datasources executes every datasource),
+  `roles/InstanceRole.java` (DEV and USER lose the workspace app permissions), `roles/DefaultWorkspaceService.java`
+  (runs the reconciler), `repositories/CustomApplicationRepositoryImpl.java` (a User's live-only filter covers every
+  grant), `services/ApplicationPageServiceImpl.java` (creator Edit grant), and the tests
+  `acl/PolicyGeneratorTest`, `roles/InstanceRolePermissionsTest`, `roles/DefaultWorkspaceServiceTest`,
+  `approvals/ApplicationApprovalServiceTest`, `projectsrepo/ProjectsRepoServiceTest`.
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

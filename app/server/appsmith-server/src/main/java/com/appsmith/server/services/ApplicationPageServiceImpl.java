@@ -7,8 +7,10 @@ import com.appsmith.server.clonepage.ClonePageService;
 import com.appsmith.server.domains.ActionCollection;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.NewAction;
+import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.grants.AppGrantService;
 import com.appsmith.server.helpers.CommonGitFileUtils;
 import com.appsmith.server.helpers.DSLMigrationUtils;
 import com.appsmith.server.layouts.UpdateLayoutService;
@@ -45,6 +47,7 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
     private final ApplicationRepository applicationRepository;
     private final ApplicationPermission applicationPermission;
     private final PublishApproval publishApproval;
+    private final AppGrantService appGrantService;
 
     public ApplicationPageServiceImpl(
             WorkspaceService workspaceService,
@@ -79,7 +82,8 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
             CacheableRepositoryHelper cacheableRepositoryHelper,
             PostPublishHookCoordinatorService<Application> postApplicationPublishHookCoordinatorService,
             UserDataService userDataService,
-            PublishApproval publishApproval) {
+            PublishApproval publishApproval,
+            AppGrantService appGrantService) {
         super(
                 workspaceService,
                 applicationService,
@@ -116,6 +120,19 @@ public class ApplicationPageServiceImpl extends ApplicationPageServiceCEImpl imp
         this.applicationRepository = applicationRepository;
         this.applicationPermission = applicationPermission;
         this.publishApproval = publishApproval;
+        this.appGrantService = appGrantService;
+    }
+
+    /**
+     * Every new app gets its policies here before it is saved: create, duplicate, import as a new app (also through
+     * MCP) and git. A DEV can edit only the apps they hold a grant on, so the creating DEV also gets an EDIT grant on
+     * the new app (see {@link AppGrantService#withCreatorGrant}); its pages, queries and JS objects inherit it.
+     */
+    @Override
+    public Mono<Application> setApplicationPolicies(Mono<User> userMono, String workspaceId, Application application) {
+        return super.setApplicationPolicies(userMono, workspaceId, application)
+                .flatMap(
+                        withPolicies -> userMono.flatMap(user -> appGrantService.withCreatorGrant(withPolicies, user)));
     }
 
     /**

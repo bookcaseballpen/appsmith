@@ -21,12 +21,17 @@ import static com.appsmith.server.acl.AclPermission.WORKSPACE_READ_DATASOURCES;
  * <p>The workspace permissions below are expanded into application, page, action and datasource policies by the
  * {@link com.appsmith.server.acl.PolicyGenerator} graph:
  * <ul>
- *   <li>DEV manages every app and uses the datasources (read, create queries, execute) but never manages them, and
- *       has no publish permission.</li>
- *   <li>APPROVER holds manage on apps only so the editor can load the unpublished version; every write other than
+ *   <li>DEV creates apps and uses the datasources (read, create queries, execute) but never manages them, and has no
+ *       publish permission. A DEV sees and edits no app through the role: only the apps they hold a grant on (see
+ *       {@link com.appsmith.server.grants.AppGrantService}), which includes every app they create.</li>
+ *   <li>APPROVER holds manage on every app only so the editor can load the unpublished version; every write other than
  *       publish is refused by {@link ApproverReadOnlyWebFilter}.</li>
- *   <li>USER reads apps and executes their queries, so only view mode works.</li>
+ *   <li>USER executes the datasources and reads no app through the role: only the live apps they hold a grant on, in
+ *       view mode.</li>
  * </ul>
+ *
+ * <p>Changing these sets changes what the role groups store and what existing documents hold; the server brings both
+ * in line at startup ({@link RoleGroupReconciler}).
  */
 @Getter
 public enum InstanceRole {
@@ -36,12 +41,11 @@ public enum InstanceRole {
             AppsmithRole.WORKSPACE_ADMIN.getPermissions()),
     DEV(
             "Developer",
-            "Builds and edits apps and uses existing datasources; cannot publish or manage datasources",
+            "Builds apps and edits the apps they are granted; uses existing datasources; cannot publish or manage"
+                    + " datasources",
             Set.of(
                     READ_WORKSPACES,
                     WORKSPACE_CREATE_APPLICATION,
-                    WORKSPACE_MANAGE_APPLICATIONS,
-                    WORKSPACE_READ_APPLICATIONS,
                     WORKSPACE_READ_DATASOURCES,
                     WORKSPACE_EXECUTE_DATASOURCES)),
     APPROVER(
@@ -55,8 +59,8 @@ public enum InstanceRole {
                     WORKSPACE_EXECUTE_DATASOURCES)),
     USER(
             "App Viewer",
-            "Runs published apps",
-            Set.of(READ_WORKSPACES, WORKSPACE_READ_APPLICATIONS, WORKSPACE_EXECUTE_DATASOURCES)),
+            "Runs the published apps they are granted",
+            Set.of(READ_WORKSPACES, WORKSPACE_EXECUTE_DATASOURCES)),
     ;
 
     private final String groupName;

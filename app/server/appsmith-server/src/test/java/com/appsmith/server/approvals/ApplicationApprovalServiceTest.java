@@ -14,6 +14,9 @@ import com.appsmith.server.dtos.PageDTO;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.exports.internal.ExportService;
+import com.appsmith.server.grants.AppGrantDTO;
+import com.appsmith.server.grants.AppGrantService;
+import com.appsmith.server.grants.GrantLevel;
 import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.repositories.ApplicationApprovalRepository;
 import com.appsmith.server.repositories.ApplicationRepository;
@@ -110,6 +113,9 @@ class ApplicationApprovalServiceTest {
     @Autowired
     NewPageRepository newPageRepository;
 
+    @Autowired
+    AppGrantService appGrantService;
+
     WebTestClient webTestClient;
     Map<InstanceRole, User> users;
     String workspaceId;
@@ -129,6 +135,32 @@ class ApplicationApprovalServiceTest {
         unsaved.setName("approval-app-" + UUID.randomUUID());
         application = runAs(applicationPageService.createApplication(unsaved, workspaceId), users.get(InstanceRole.DEV))
                 .block();
+        // The creating DEV holds an EDIT grant on the app; USER sees it (once live) through a VIEW grant.
+        runAs(
+                appGrantService.setGrant(
+                        application.getId(),
+                        new AppGrantDTO.Request(
+                                new AppGrantDTO.Grantee(
+                                        AppGrantDTO.Type.USER,
+                                        users.get(InstanceRole.USER).getId()),
+                                GrantLevel.VIEW)),
+                InstanceRole.ADMIN);
+    }
+
+    @Test
+    void should_refuseSubmit_when_devHoldsNoGrantOnApp() {
+        // Given
+        User ungrantedDev = createUserWithRole(InstanceRole.DEV);
+
+        // When
+        Optional<AppsmithError> error = runAs(errorOfAsync(approvalService.submit(application.getId())), ungrantedDev)
+                .block();
+
+        // Then
+        assertThat(error).isPresent();
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.DRAFT);
     }
 
     @Test

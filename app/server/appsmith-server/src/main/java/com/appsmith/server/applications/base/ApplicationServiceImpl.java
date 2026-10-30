@@ -1,5 +1,6 @@
 package com.appsmith.server.applications.base;
 
+import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.artifacts.base.artifactbased.ArtifactBasedService;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.repositories.ApplicationRepository;
@@ -20,6 +21,7 @@ import io.micrometer.observation.ObservationRegistry;
 import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @Service
@@ -58,5 +60,15 @@ public class ApplicationServiceImpl extends ApplicationServiceCECompatibleImpl
                 workspacePermission,
                 observationRegistry,
                 featureFlagService);
+    }
+
+    /**
+     * App names are unique per workspace whoever can see the apps. A developer sees only the apps they are granted
+     * (see {@link com.appsmith.server.grants.AppGrantService}), so CE's check with their permission would miss a name
+     * taken by another app, and the import would then fail on the unique index instead of picking a free suffix.
+     */
+    @Override
+    public Mono<Boolean> isApplicationNameTaken(String applicationName, String workspaceId, AclPermission permission) {
+        return super.isApplicationNameTaken(applicationName, workspaceId, null);
     }
 }

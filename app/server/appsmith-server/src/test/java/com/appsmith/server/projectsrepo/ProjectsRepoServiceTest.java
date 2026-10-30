@@ -209,6 +209,39 @@ class ProjectsRepoServiceTest {
                         .block()
                         .getLastDeployedAt())
                 .isNull();
+        // The importing DEV holds an EDIT grant on the new app, so they can pull it again.
+        assertThat(runAs(projectsRepoService.exportEditCopy(result.applicationId()), InstanceRole.DEV))
+                .isNotNull();
+    }
+
+    @Test
+    void should_refuseExportAndImport_when_devHoldsNoGrantOnApp() {
+        // Given
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        User ungrantedDev = createUserWithRole(InstanceRole.DEV);
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+
+        // When
+        Optional<AppsmithError> exportError =
+                errorOf(projectsRepoService.exportEditCopy(application.getId()), ungrantedDev);
+        Optional<AppsmithError> importError = errorOf(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                ungrantedDev);
+
+        // Then
+        assertThat(exportError).isPresent();
+        assertThat(importError).isPresent();
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+    }
+
+    private static <T> Optional<AppsmithError> errorOf(Mono<T> call, User user) {
+        return call.map(result -> Optional.<AppsmithError>empty())
+                .defaultIfEmpty(Optional.of(AppsmithError.NO_RESOURCE_FOUND))
+                .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception.getError())))
+                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(new SecurityContextImpl(
+                        new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities())))))
+                .block();
     }
 
     @Test
