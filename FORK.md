@@ -81,28 +81,30 @@ browser: the login page, a Dev's "Submit for approval" in the editor, the admin'
 approval" list, and the published page then carrying the Dev's change. Tested on Testcontainers PostgreSQL: the repository tests,
 imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial import/export 4 + 4,
 `ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
-(`ApplicationApprovalServiceTest` 48, `InstanceRolePermissionsTest` 81, `EditorReadOnlyHttpTest` 5), the projects repo
-(`ProjectsRepoServiceTest` 13, `EditCopyJsonTest` 39) and the Postgres
-tests (transactions, unique names, soft delete, admin sync). The datasource plugins postgres, mysql, mssql and REST API
+(`ApplicationApprovalServiceTest` 49, `InstanceRolePermissionsTest` 83, `EditorReadOnlyHttpTest` 5), the projects repo
+(`ProjectsRepoServiceTest` 19, `EditCopyJsonTest` 39), teams and per-app grants (`AppGrantServiceTest` 22,
+`TeamServiceTest` 13, `DefaultWorkspaceServiceTest` 8, `PolicyGeneratorTest` 9), app tags and the catalog
+(`ApplicationCatalogTest` 26, `ApplicationTagsTest` 8, `McpAllowlistWebFilterTest` 36) and the Postgres
+tests (transactions, unique names including team names, soft delete, admin sync, JSON array queries and the tags index). The datasource plugins postgres, mysql, mssql and REST API
 and JS objects run on a live server in edit and view mode.
 The REST API plugin refuses loopback hosts (SSRF filter); for local tests only, `APPSMITH_DISABLE_SSRF_FILTER=true`.
 
 Server test suite on PostgreSQL (`appsmith-server`, Testcontainers, one JVM per batch as in CI), in batches by
-package, after merging `release` (#289, #290, #294). Classes, not test methods:
+package, after merging `release` (#289, #290, #294, then #291, #292, #295). Classes, not test methods:
 
 | Batch | Packages | Passed | Failed | Skipped |
 |---|---|---|---|---|
-| 1 | every package but those below (acl … widgets, approvals, controllers, imports, exports, projectsrepo, roles), `ServerApplicationTests` | 68 | 0 | 0 |
-| 2 | `repositories`, `configurations` | 32 | 0 | 1 |
+| 1 | every package but those below (acl … widgets, approvals, catalog, controllers, grants, imports, exports, projectsrepo, roles), `ServerApplicationTests` | 72 | 0 | 0 |
+| 2 | `repositories`, `configurations` | 33 | 0 | 1 |
 | 3 | `helpers` | 32 | 0 | 0 |
 | 4 | `solutions` | 19 | 0 | 0 |
 | 5 | `git` | 13 | 2 | 1 |
 | 6a | `services.ce` | 26 | 0 | 0 |
 | 6b | `services` (the rest) | 34 | 0 | 1 |
-| | **Total** | **224** | **2** | **3** |
+| | **Total** | **229** | **2** | **3** |
 
-Batch 4's `ActionExecutionSolutionCETest` and batch 6b's `UserServiceWithDisabledSignupTest` failed once more in the
-batch run and were rerun after their last fix (below); the other batches are from one run each.
+Each batch is from one run after the merge of #291, #292 and #295. The MCP package (`packages/mcp`, jest 1597 passed,
+5 skipped, `tsc` clean) and `tools/cab-sync` (33 passed) don't touch the database and pass unchanged.
 
 Fixed in the tests after the first run (none came from the port):
 - `UserWorkspaceServiceUnitTest` leaves out the fork's default "Apps" workspace, which `api_user` also sees.
