@@ -89,14 +89,17 @@ package. Classes, not test methods:
 | 2 | `repositories`, `configurations` | 31 | 0 | 1 |
 | 3 | `helpers` | 32 | 0 | 0 |
 | 4 | `solutions` | 18 | 1 | 0 |
-| 5 | `git` | | | |
+| 5 | `git` | 13 | 2 | 1 |
 | 6 | `services` | | | |
 
 Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
 alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
 default-workspace config of another context). `ActionExecutionSolutionCETest` (1 test,
 `executeAction_actionOnMockDatasource_success`) needs the cloud's mock datasources, which tests point at
-`127.0.0.1:1`; it fails on MongoDB too.
+`127.0.0.1:1`; it fails on MongoDB too. `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the
+client DSL migration) also fail when run alone: the app read back from the test's git repository has no pages, so
+nothing is committed. Their path is the git file system, Redis and mocks, with no database, and no git code differs
+from `release`; not yet checked against MongoDB on this PC.
 
 Fixed from the suite: `V5__remaining_unique_indexes.sql` adds the unique indexes Mongo had beyond names (one cached
 structure per datasource and environment, storages, snapshot chunks, custom JS libraries, reset tokens, URL slugs).
@@ -105,7 +108,10 @@ and `isDependentOnCS` into columns that do not exist, so the plugins lost them a
 `V6__plugin_seed_acronym_columns.sql` fills them in on databases seeded before the fix.
 
 Skipped: `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
-endpoint).
+endpoint). `GitBranchesWithCentralServiceIT` was left out: it starts the `appsmith/test-event-driver` git server image,
+which is not on this PC, and the Testcontainers pull hung for 25 minutes.
+Classes whose tests are all `@Nested` (`FSGitHandlerTest`, 31 tests) show 0 tests in surefire's text summary; they are
+counted from the XML report.
 
 Test setup: every cached test context has its own connection pool, so the test container allows 400 connections and
 each pool holds at most 5 (`PostgresTestContainerInitializer`); with the defaults (100 and 10) the later contexts in a
