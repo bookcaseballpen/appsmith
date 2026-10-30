@@ -10,8 +10,8 @@ import static com.appsmith.server.filters.McpAllowRule.rule;
 
 /**
  * Fork: the MCP tools submit_for_approval and get_approval_status, export_application and import_application (the
- * projects repo's app JSON, edit copy only), and set_app_tags. Approving and rejecting are for people only, so their routes are never
- * listed here (and the service refuses MCP tokens for them too).
+ * projects repo's app JSON, edit copy only), and set_app_tags. Approving and rejecting are for people only, so their
+ * routes are never listed here (and the service refuses MCP tokens for them too).
  */
 public class McpAllowlistExtensions extends McpAllowlistExtensionsCE {
 

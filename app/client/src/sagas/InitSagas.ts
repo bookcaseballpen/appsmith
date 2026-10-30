@@ -70,6 +70,7 @@ import {
   getInstanceRole,
   getViewerPathForBuilderPath,
   isViewOnlyRole,
+  NO_EDIT_ACCESS_MESSAGE,
 } from "ee/utils/instanceRoles";
 import { APPLICATIONS_URL } from "constants/routes";
 import { FAVORITES_KEY } from "ee/constants/workspaceConstants";
@@ -153,6 +154,10 @@ export interface EditConsolidatedApi {
 }
 
 export type InitConsolidatedApi = DeployConsolidatedApi | EditConsolidatedApi;
+
+/** Fork: the server answers the edit-mode pages with 404 when the caller may not edit the app. */
+export const isEditModeRefused = (responses?: InitConsolidatedApi) =>
+  responses?.pages?.responseMeta?.status === 404;
 
 export function* failFastApiCalls(
   triggerActions: Array<ReduxAction<unknown> | ReduxActionWithoutPayload>,
@@ -344,12 +349,20 @@ export function* startAppEngine(action: ReduxAction<AppEnginePayload>) {
 
     endSpan(getInitResponsesSpan);
 
-    // Fork: the server hides the editor from Users, so an editor URL opens the same page in view mode instead.
+    // Fork: the server hides the editor from Users, and from Devs on apps they hold no Edit grant on (the edit-mode
+    // pages answer 404), so an editor URL opens the same page in view mode instead.
     if (action.payload.mode === APP_MODE.EDIT) {
       const currentUser: ReturnType<typeof getCurrentUserSelector> =
         yield select(getCurrentUserSelector);
+      const role = getInstanceRole(currentUser);
+      const isDevWithoutEdit =
+        role === "DEV" && isEditModeRefused(allResponses);
 
-      if (isViewOnlyRole(getInstanceRole(currentUser))) {
+      if (isDevWithoutEdit) {
+        toast.show(NO_EDIT_ACCESS_MESSAGE, { kind: "info" });
+      }
+
+      if (isViewOnlyRole(role) || isDevWithoutEdit) {
         yield call(
           executeActionDuringUserDetailsInitialisation,
           ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,

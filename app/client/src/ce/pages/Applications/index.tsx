@@ -97,6 +97,8 @@ import { usePackage } from "ee/pages/Applications/helpers";
 import PackageCardList from "ee/pages/Applications/PackageCardList";
 // Fork: releases waiting for approval, for Approvers and Admins.
 import PendingApprovals from "ee/pages/Applications/PendingApprovals";
+// Fork: the home page catalog (search, tags, sort, pages).
+import CatalogSection from "ee/pages/Applications/Catalog/CatalogSection";
 import ResourceListLoader from "ee/pages/Applications/ResourceListLoader";
 import WorkflowCardList from "ee/pages/Applications/WorkflowCardList";
 import WorkspaceAction from "ee/pages/Applications/WorkspaceAction";
@@ -1088,7 +1090,18 @@ export function ApplicationsSection(props: any) {
           ) : (
             <>
               <PendingApprovals />
-              {!isAiAgentInstanceEnabled && (
+              {/* Fork: a flat catalog of the apps the user can open, searched, filtered and paged on the server. */}
+              {isWorkspaceUiHidden() && (
+                <CatalogSection
+                  deleteApplication={deleteApplication}
+                  enableImportExport={enableImportExport}
+                  isMobile={isMobile}
+                  title={createMessage(APPLICATIONS)}
+                  updateApplicationDispatch={updateApplicationDispatch}
+                  workspaceId={activeWorkspace.id}
+                />
+              )}
+              {!isWorkspaceUiHidden() && !isAiAgentInstanceEnabled && (
                 <ApplicationCardList
                   applications={nonAnvilApplications}
                   canInviteToWorkspace={canInviteToWorkspace}

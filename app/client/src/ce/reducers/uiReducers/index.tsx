@@ -49,6 +49,8 @@ import ideReducer from "reducers/uiReducers/ideReducer";
 import consolidatedPageLoadReducer from "reducers/uiReducers/consolidatedPageLoadReducer";
 import copyEntityToAppReducer from "reducers/uiReducers/copyEntityToAppReducer";
 import { pluginActionReducer } from "PluginActionEditor/store";
+// Fork: the home page catalog.
+import catalogReducer from "ee/reducers/uiReducers/catalogReducer";
 
 export const uiReducerObject = {
   analytics: analyticsReducer,
@@ -102,4 +104,5 @@ export const uiReducerObject = {
   consolidatedPageLoad: consolidatedPageLoadReducer,
   pluginActionEditor: pluginActionReducer,
   copyEntityToApp: copyEntityToAppReducer,
+  catalog: catalogReducer,
 };

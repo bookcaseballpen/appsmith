@@ -5,9 +5,10 @@ import { call, all, spawn, race, take } from "redux-saga/effects";
 import { appsmithTelemetry } from "instrumentation";
 import log from "loglevel";
 import editorReadOnlySagas from "./editorReadOnlySagas";
+import catalogSagas from "./catalogSagas";
 
-// Fork: the read-only editor flag (see ee/utils/editorReadOnly).
-const sagasArr = [...CE_Sagas, editorReadOnlySagas];
+// Fork: the read-only editor flag (see ee/utils/editorReadOnly) and the home page catalog.
+const sagasArr = [...CE_Sagas, editorReadOnlySagas, catalogSagas];
 
 // TODO: Fix this the next time the file is edited
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

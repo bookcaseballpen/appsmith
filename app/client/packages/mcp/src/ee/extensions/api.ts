@@ -2,10 +2,10 @@ import type { ApiRequest } from "../../ce/extensions/api.js";
 
 // Fork: the endpoints behind the fork's extension tools (ee/extensions/tools.ts): the release-approval endpoints
 // (submit_for_approval, get_approval_status), the projects repo's app JSON (export_application,
-// import_application) and app tags (set_app_tags). The contract is in ce/extensions/api.ts: every call goes through the handed `request`, and
-// every endpoint is allowed for MCP principals by the server's McpAllowlistExtensions and listed in
-// ee/extensions/routeContract.ts. Approving and rejecting are for people only, so there is deliberately no method for
-// them.
+// import_application) and app tags (set_app_tags). The contract is in ce/extensions/api.ts: every call goes through
+// the handed `request`, and every endpoint is allowed for MCP principals by the server's McpAllowlistExtensions and
+// listed in ee/extensions/routeContract.ts. Approving and rejecting are for people only, so there is deliberately no
+// method for them.
 
 export type { ApiRequest } from "../../ce/extensions/api.js";
 

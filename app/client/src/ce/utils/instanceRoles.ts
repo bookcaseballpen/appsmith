@@ -38,6 +38,20 @@ export const canPublishRole = (role?: InstanceRole) =>
 export const selectCanPublish = (state: DefaultRootState) =>
   canPublishRole(getInstanceRole(state.ui?.users?.currentUser));
 
+/** Devs and Admins create and import apps; Approvers and Users don't. */
+export const createsAppsRole = (role?: InstanceRole) =>
+  role === "DEV" || role === "ADMIN";
+
+/** Admins manage teams and give access to apps. */
+export const isAdminRole = (role?: InstanceRole) => role === "ADMIN";
+
+/**
+ * A Dev opened the editor of an app they hold no Edit grant on; they get the view mode instead (or the not-found page
+ * when they can't even view it).
+ */
+export const NO_EDIT_ACCESS_MESSAGE =
+  "You don't have edit access to this app. Ask an Admin for Edit access.";
+
 export const PUBLISH_NOT_ALLOWED_TOOLTIP =
   "Only an Approver or an Admin can deploy apps";
 

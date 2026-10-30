@@ -4,9 +4,12 @@ import { APP_MODE } from "entities/App";
 import AppEngineFactory from "entities/Engine/factory";
 import {
   getInitResponses,
+  isEditModeRefused,
   startAppEngine,
   executeActionDuringUserDetailsInitialisation,
 } from "sagas/InitSagas";
+import { toast } from "@appsmith/ads";
+import { NO_EDIT_ACCESS_MESSAGE } from "ee/utils/instanceRoles";
 import type { AppEnginePayload } from "entities/Engine";
 import { testSaga } from "redux-saga-test-plan";
 import { generateAutoHeightLayoutTreeAction } from "actions/autoHeightActions";
@@ -139,5 +142,63 @@ describe("tests the sagas in initSagas", () => {
     });
     expect(engine.loadAppData).not.toHaveBeenCalled();
     replace.mockRestore();
+  });
+
+  it("sends a Dev without Edit on the app to view mode with a clear message", () => {
+    const engine = { setupEngine: jest.fn(), loadAppData: jest.fn() };
+    const mockRootSpan = startRootSpan("startAppEngine");
+    const replace = jest
+      .spyOn(history, "replace")
+      .mockImplementation(jest.fn());
+    const show = jest.spyOn(toast, "show").mockImplementation(jest.fn());
+    const refused = {
+      ...mockResponse.data,
+      pages: {
+        responseMeta: {
+          status: 404,
+          success: false,
+          error: { message: "Unable to find page basePageId" },
+        },
+      },
+    };
+
+    window.history.pushState({}, "", "/app/my-app/page1-abc/edit");
+    (AppEngineFactory.create as jest.Mock).mockReturnValue(engine);
+
+    testSaga(startAppEngine, action)
+      .next()
+      .call(engine.setupEngine, action.payload, mockRootSpan)
+      .next()
+      .call(getInitResponses, { ...action.payload })
+      .next(refused)
+      .select(getCurrentUserSelector)
+      .next({ ...DefaultCurrentUserDetails, role: "DEV" })
+      .call(
+        executeActionDuringUserDetailsInitialisation,
+        ReduxActionTypes.END_CONSOLIDATED_PAGE_LOAD,
+        action.payload.shouldInitialiseUserDetails,
+      )
+      .next()
+      .isDone();
+
+    expect(show).toHaveBeenCalledWith(NO_EDIT_ACCESS_MESSAGE, {
+      kind: "info",
+    });
+    expect(replace).toHaveBeenCalledWith({
+      pathname: "/app/my-app/page1-abc",
+      search: "",
+    });
+    expect(engine.loadAppData).not.toHaveBeenCalled();
+    replace.mockRestore();
+    show.mockRestore();
+  });
+
+  it("tells a refused edit-mode load from a normal one", () => {
+    expect(isEditModeRefused(mockResponse.data as never)).toBe(false);
+    expect(
+      isEditModeRefused({
+        pages: { responseMeta: { status: 404, success: false } },
+      } as never),
+    ).toBe(true);
   });
 });

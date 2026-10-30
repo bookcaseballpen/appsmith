@@ -27,9 +27,10 @@ const setSelectedWorkspaceIdForImportApplication = jest.fn();
 const renderWorkspaceActionComponent = (
   workspace: Workspace,
   workspaceId: string,
+  role = "DEV",
 ) =>
   render(
-    <Provider store={mockStore(baseStoreForSpec)}>
+    <Provider store={mockStore(storeWithRole(role))}>
       <ThemeProvider theme={lightTheme}>
         <WorkspaceAction
           enableImportExport
@@ -132,6 +133,32 @@ describe("WorkspaceAction", () => {
 
     // reset the changes
     workspace.userPermissions = existingPermissions;
+  });
+
+  // Fork: only Devs and Admins create or import apps.
+  it.each(["USER", "APPROVER"])(
+    "6. should not render anything for the %s role",
+    (role) => {
+      const { queryByText } = renderWorkspaceActionComponent(
+        workspace,
+        workspace.id,
+        role,
+      );
+
+      expect(queryByText(createMessage(WORKSPACE_ACTION_BUTTON))).toBeNull();
+    },
+  );
+
+  it("7. should render for an Admin", () => {
+    const { getByText } = renderWorkspaceActionComponent(
+      workspace,
+      workspace.id,
+      "ADMIN",
+    );
+
+    expect(
+      getByText(createMessage(WORKSPACE_ACTION_BUTTON)),
+    ).toBeInTheDocument();
   });
 });
 
@@ -262,3 +289,11 @@ const baseStoreForSpec = {
     },
   },
 };
+
+const storeWithRole = (role: string) => ({
+  ...baseStoreForSpec,
+  ui: {
+    ...baseStoreForSpec.ui,
+    users: { currentUser: { email: "someone@example.com", role } },
+  },
+});
