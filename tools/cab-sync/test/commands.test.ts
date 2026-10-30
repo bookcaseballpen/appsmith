@@ -152,10 +152,13 @@ describe("cab-sync commands", () => {
     await mkdir(repo, { recursive: true });
   });
 
-  it("pull, push, pull gives byte-identical files and changes only the edit copy", async () => {
+  it("pull, edit, push, pull gives byte-identical files and changes only the edit copy", async () => {
     assert.equal(await run(["pull", "Orders Admin", "--repo", repo], env, io), 0);
 
     const dir = join(repo, "apps", "orders-admin");
+
+    await writeFile(join(dir, "pages", "Orders", "queries", "GetOrders.sql"), "SELECT 3;\n", "utf8");
+
     const first = await readTree(dir);
 
     assert.equal(await run(["push", dir], env, io), 0);
@@ -164,6 +167,15 @@ describe("cab-sync commands", () => {
 
     assert.equal(await run(["pull", dir], env, io), 0);
     assert.deepEqual([...(await readTree(dir))].sort(), [...first].sort());
+  });
+
+  it("push without changes imports nothing", async () => {
+    await run(["pull", "Orders Admin", "--repo", repo], env, io);
+    output = [];
+
+    assert.equal(await run(["push", join(repo, "apps", "orders-admin")], env, io), 0);
+    assert.equal(state.imports.length, 0);
+    assert.match(output.join("\n"), /Nothing to push/);
   });
 
   it("pushes an edited query body and diff then finds nothing", async () => {

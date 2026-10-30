@@ -55,6 +55,7 @@ const IMPORTED = {
   workspaceId: "ws1",
   name: "Orders",
   unconfiguredDatasources: [],
+  unchanged: false,
 };
 
 interface RecordedCall {

@@ -2,6 +2,7 @@ package com.appsmith.server.projectsrepo;
 
 import com.appsmith.server.approvals.ApplicationApprovalService;
 import com.appsmith.server.approvals.ApprovalFingerprint;
+import com.appsmith.server.approvals.ApprovalStatus;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
@@ -132,10 +133,32 @@ class ProjectsRepoServiceTest {
 
         // Then
         assertThat(result.applicationId()).isEqualTo(application.getId());
+        assertThat(result.unchanged()).isFalse();
         Application stored = applicationRepository.findById(application.getId()).block();
         assertThat(stored.getLastDeployedAt()).isNotNull();
         assertThat(stored.getUnpublishedAppLayout().getType()).isEqualTo(Application.AppLayout.Type.MOBILE);
         assertThat(fingerprint.ofViewMode(application.getId()).block()).isEqualTo(viewModeBefore);
+    }
+
+    @Test
+    void should_skipImportAndStayApproved_when_devImportsUnchangedExport() {
+        // Given
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isTrue();
+        assertThat(result.applicationId()).isEqualTo(application.getId());
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+        assertThat(runAs(approvalService.getStatus(application.getId()), InstanceRole.DEV)
+                        .status())
+                .isEqualTo(ApprovalStatus.APPROVED);
     }
 
     @Test

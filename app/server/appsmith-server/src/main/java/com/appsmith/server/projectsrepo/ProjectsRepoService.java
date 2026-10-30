@@ -10,6 +10,7 @@ import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.exports.internal.ExportService;
 import com.appsmith.server.imports.internal.ImportService;
+import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.services.ArtifactCopyAudit;
 import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
@@ -35,11 +36,17 @@ public class ProjectsRepoService {
 
     private final ExportService exportService;
     private final ImportService importService;
+    private final ApplicationRepository applicationRepository;
     private final Gson gson;
 
-    public ProjectsRepoService(ExportService exportService, ImportService importService, Gson gson) {
+    public ProjectsRepoService(
+            ExportService exportService,
+            ImportService importService,
+            ApplicationRepository applicationRepository,
+            Gson gson) {
         this.exportService = exportService;
         this.importService = importService;
+        this.applicationRepository = applicationRepository;
         this.gson = gson;
     }
 
@@ -58,11 +65,47 @@ public class ProjectsRepoService {
                 });
     }
 
-    /** Imports an app JSON as a new app, or over the edit copy of {@code applicationId}. */
+    /**
+     * Imports an app JSON as a new app, or over the edit copy of {@code applicationId}. An app JSON identical to the
+     * app's current edit copy (as {@link #exportEditCopy} gives it) is not imported: an import always writes new
+     * layout ids, which would count as an edit and send an approved app back to draft.
+     */
     public Mono<ImportResult> importEditCopy(String workspaceId, String applicationId, String appJson) {
         if (!StringUtils.hasText(appJson)) {
             return Mono.error(new AppsmithException(AppsmithError.INVALID_PARAMETER, "app JSON"));
         }
+        if (!StringUtils.hasText(applicationId)) {
+            return importJson(workspaceId, applicationId, appJson);
+        }
+        return isEditCopy(applicationId, appJson)
+                .flatMap(unchanged -> unchanged
+                        ? applicationRepository
+                                .findById(applicationId)
+                                .map(application -> new ImportResult(
+                                        application.getId(),
+                                        application.getWorkspaceId(),
+                                        application.getName(),
+                                        List.of(),
+                                        true))
+                        : importJson(workspaceId, applicationId, appJson));
+    }
+
+    /** Answers whether the app JSON is the app's edit copy as it is now; any doubt answers false (import it). */
+    private Mono<Boolean> isEditCopy(String applicationId, String appJson) {
+        Object incoming;
+        try {
+            incoming = EditCopyJson.withoutDatasourceDetails(gson.fromJson(appJson, Object.class));
+        } catch (RuntimeException e) {
+            return Mono.just(false);
+        }
+        // Map equality ignores key order; list order is content.
+        return exportEditCopy(applicationId)
+                .map(current -> current.equals(incoming))
+                .onErrorReturn(false)
+                .defaultIfEmpty(false);
+    }
+
+    private Mono<ImportResult> importJson(String workspaceId, String applicationId, String appJson) {
         return ArtifactCopyAudit.suppress(
                         importService.extractArtifactExchangeJsonAndSaveArtifact(appJson, workspaceId, applicationId))
                 .map(imported -> {
@@ -76,11 +119,22 @@ public class ProjectsRepoService {
                                     .sorted()
                                     .toList();
                     return new ImportResult(
-                            application.getId(), application.getWorkspaceId(), application.getName(), unconfigured);
+                            application.getId(),
+                            application.getWorkspaceId(),
+                            application.getName(),
+                            unconfigured,
+                            false);
                 });
     }
 
-    /** What an import answers: the app it wrote and the datasources it uses that still need a configuration. */
+    /**
+     * What an import answers: the app it wrote, the datasources it uses that still need a configuration, and whether
+     * nothing was imported because the file was the app's edit copy already.
+     */
     public record ImportResult(
-            String applicationId, String workspaceId, String name, List<String> unconfiguredDatasources) {}
+            String applicationId,
+            String workspaceId,
+            String name,
+            List<String> unconfiguredDatasources,
+            boolean unchanged) {}
 }

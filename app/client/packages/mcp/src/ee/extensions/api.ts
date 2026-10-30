@@ -61,6 +61,8 @@ export interface ImportResult {
   name: string;
   // Datasources the app uses that have no configuration on this instance yet (an Admin configures them).
   unconfiguredDatasources: string[];
+  // True when nothing was imported: the app JSON was the app's edit copy already (an import would reset its approval).
+  unchanged: boolean;
 }
 
 export interface ProjectsRepoApi {

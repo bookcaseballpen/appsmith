@@ -208,7 +208,8 @@ they change apps over HTTP as session users; `EditorReadOnlyWebFilterTest` and `
 Apps live in a separate git repository (the projects repo; a local folder for now, CodeCommit later), one folder per
 app, split into diff-friendly files. `tools/cab-sync` (TypeScript on Node 24, self-contained, see its README) moves
 them in and out: `init`, `pull`, `push`, `diff`, `submit`. The flow: pull -> edit the files -> push -> test in the
-editor's preview -> submit -> a human approves in the app.
+editor's preview -> submit -> a human approves in the app. `push` first compares the folder with the app's edit copy
+(as `diff` does) and imports nothing when they match, so an unchanged push leaves an approved or submitted app as it is.
 
 **Design: the CLI is an MCP client.** It calls the instance's MCP server (`/mcp`) with the user's own `mcp_` key
 (`CAB_TOKEN`; `CAB_URL` for the instance), and uses the MCP tools `list_workspaces`, `list_applications`,
@@ -222,7 +223,7 @@ Server (`projectsrepo/`):
 | Endpoint | What | Who |
 | --- | --- | --- |
 | `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev, Admin, Approver |
-| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`. | Dev, Admin (the normal import permissions; the Approver filter refuses it) |
+| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions; the Approver filter refuses it) |
 
 `EditCopyJson` keeps every secret on the instance: the export never carries the published copy, the stored datasource
 structure, decrypted fields or modified-resources bookkeeping; each datasource is reduced to `name` and `pluginId`; a

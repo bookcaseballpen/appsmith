@@ -14,7 +14,8 @@ cab-sync submit <app-dir> [--note ..]  submit the app for approval; an Approver 
 
 Workflow: `pull` → edit the files → `push` → test in the editor's preview → `submit` → a human approves in the app.
 A push replaces only the app's edit copy: users keep seeing the approved version until the next release is approved,
-and any pending request is cancelled (submit again).
+and any pending request is cancelled (submit again). A push of a folder that matches the edit copy (`diff` finds
+nothing) imports nothing, so it leaves an approved or submitted app as it is.
 
 ## Running it
 

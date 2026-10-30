@@ -278,20 +278,39 @@ async function push(args: ParsedArgs, env: NodeJS.ProcessEnv, io: Io, factory: C
 
   if (dir === undefined) throw new UsageError("push needs an app folder (apps/<app>).");
 
-  const { app, name } = await readAppFolder(dir);
+  const { files, app, name } = await readAppFolder(dir);
 
   return withClient(env, factory, async (client) => {
     const workspace = await resolveWorkspace(client, env);
     const existing = findApp(await listApps(client, workspace), name);
+
+    // An import always counts as an edit (it writes new layout ids), so pushing an unchanged folder would send an
+    // approved app back to draft and cancel a pending request: skip it.
+    if (
+      existing !== undefined &&
+      diffFiles(files, (await exportFiles(client, existing.id)).files).length === 0
+    ) {
+      io.out(`Nothing to push: ${dir} matches the edit copy of "${existing.name}".`);
+
+      return 0;
+    }
+
     const result = await client.callJsonTool<{
       applicationId: string;
       name: string;
       unconfiguredDatasources?: string[];
+      unchanged?: boolean;
     }>("import_application", {
       workspaceId: workspace.id,
       ...(existing !== undefined ? { applicationId: existing.id } : {}),
       artifact: app,
     });
+
+    if (result.unchanged === true) {
+      io.out(`Nothing to push: ${dir} matches the edit copy of "${result.name}".`);
+
+      return 0;
+    }
 
     io.out(
       existing !== undefined
