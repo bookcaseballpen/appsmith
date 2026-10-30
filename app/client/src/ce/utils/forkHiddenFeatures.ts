@@ -23,6 +23,33 @@ export const areTemplatesHidden = () => true;
 export const isOnboardingHidden = () => true;
 
 /**
+ * No "Create new" menu on the home page (new app, import) and no import modal: apps are created and imported through
+ * MCP and the projects repo (cab-sync). The server's create and import APIs stay.
+ */
+export const isAppCreationUiHidden = () => true;
+
+/**
+ * The app name is plain text: no rename on the app card, its menu, the editor header or the app settings. The server
+ * API stays (MCP and import rename apps).
+ */
+export const isAppRenameUiHidden = () => true;
+
+/**
+ * No "Edit app" (pencil) button in the app viewer: the editor is read-only, apps change through MCP. The editor URL
+ * still works for those allowed in.
+ */
+export const isViewerEditButtonHidden = () => true;
+
+/** No "Embed" settings or snippet: apps are not embedded in other sites. The app URL and the public toggle stay. */
+export const isEmbedUiHidden = () => true;
+
+/**
+ * No Business or Enterprise upsell: no tier badge, lock icon, "Upgrade" link or button, upgrade page or banner. The
+ * paid-only admin settings pages and fields are not offered at all. See FORK.md, "Hidden features".
+ */
+export const areUpsellsHidden = () => true;
+
+/**
  * No link to an Appsmith host (docs, community, Discord, support, the blog) and no "Built on Appsmith" badge in the
  * app viewer. The product is CreativeAppBuilder; see FORK.md, "Branding".
  */

@@ -693,10 +693,11 @@ public class MssqlPlugin extends BasePlugin {
         if (datasourceConfiguration.getConnection() == null
                 || datasourceConfiguration.getConnection().getSsl() == null
                 || datasourceConfiguration.getConnection().getSsl().getAuthType() == null) {
+            // Fork: no Appsmith name in user-visible messages.
             throw new AppsmithPluginException(
                     AppsmithPluginError.PLUGIN_ERROR,
-                    "Appsmith server has failed to fetch SSL configuration from datasource configuration form. "
-                            + "Please reach out to Appsmith customer support to resolve this.");
+                    "The server has failed to fetch SSL configuration from datasource configuration form. "
+                            + "Please contact your administrator to resolve this.");
         }
 
         /*
@@ -717,8 +718,8 @@ public class MssqlPlugin extends BasePlugin {
             default:
                 throw new AppsmithPluginException(
                         AppsmithPluginError.PLUGIN_ERROR,
-                        "Appsmith server has found an unexpected SSL option: " + sslAuthType + ". Please reach out to"
-                                + " Appsmith customer support to resolve this.");
+                        "The server has found an unexpected SSL option: " + sslAuthType + ". Please contact"
+                                + " your administrator to resolve this.");
         }
     }
 }

@@ -38,6 +38,10 @@ import {
   SubCategory,
 } from "./StyledComponents";
 import UserProfileImagePicker from "./UserProfileImagePicker";
+import {
+  SettingsCardBody,
+  SettingsFormCard,
+} from "ee/pages/AdminSettings/SettingsShell";
 import { emailValidator } from "@appsmith/ads-old";
 import {
   getGlobalGitConfig,
@@ -229,106 +233,111 @@ export const Profile = () => {
               : "Set your profile"}
           </SettingsSubHeader>
         </HeaderWrapper>
-        <SubCategory kind="heading-s" renderAs="p">
-          Profile
-        </SubCategory>
-        <Flex flexDirection="column" gap="spaces-5">
-          <FieldWrapper>
-            <LabelWrapper>
-              <Text kind="body-m">
-                {createMessage(USER_DISPLAY_PICTURE_PLACEHOLDER)}
-              </Text>
-            </LabelWrapper>
-            <div className="user-profile-image-picker">
-              <UserProfileImagePicker />
-            </div>
-          </FieldWrapper>
-          <FieldWrapper>
-            <Input
-              data-testid="t--display-name"
-              isRequired
-              label={createMessage(USER_DISPLAY_NAME_PLACEHOLDER)}
-              labelPosition="top"
-              onChange={setName}
-              placeholder={createMessage(USER_DISPLAY_NAME_PLACEHOLDER)}
-              renderAs="input"
-              size="md"
-              type="text"
-              value={name}
-            />
-          </FieldWrapper>
-          <FieldWrapper>
-            <Flex flexDirection="column" gap="spaces-2">
-              <Input
-                data-testid="t--user-name"
-                defaultValue={user?.email}
-                isDisabled
-                isReadOnly
-                label={createMessage(USER_EMAIL_PLACEHOLDER)}
-                labelPosition="top"
-                placeholder={createMessage(USER_EMAIL_PLACEHOLDER)}
-                renderAs="input"
-                size="md"
-                type="text"
-              />
-              {isFormLoginEnabled && (
-                <ResetPasswordButton
-                  className="t--user-reset-password"
-                  kind="tertiary"
-                  onClick={forgotPassword}
-                  renderAs="a"
+        {/* Fork: the fields in a card (ee/pages/AdminSettings/SettingsShell). */}
+        <SettingsFormCard>
+          <SettingsCardBody>
+            <SubCategory kind="heading-s" renderAs="p">
+              Profile
+            </SubCategory>
+            <Flex flexDirection="column" gap="spaces-5">
+              <FieldWrapper>
+                <LabelWrapper>
+                  <Text kind="body-m">
+                    {createMessage(USER_DISPLAY_PICTURE_PLACEHOLDER)}
+                  </Text>
+                </LabelWrapper>
+                <div className="user-profile-image-picker">
+                  <UserProfileImagePicker />
+                </div>
+              </FieldWrapper>
+              <FieldWrapper>
+                <Input
+                  data-testid="t--display-name"
+                  isRequired
+                  label={createMessage(USER_DISPLAY_NAME_PLACEHOLDER)}
+                  labelPosition="top"
+                  onChange={setName}
+                  placeholder={createMessage(USER_DISPLAY_NAME_PLACEHOLDER)}
+                  renderAs="input"
                   size="md"
-                  startIcon="restart-line"
-                >
-                  {createMessage(USER_RESET_PASSWORD)}
-                </ResetPasswordButton>
-              )}
+                  type="text"
+                  value={name}
+                />
+              </FieldWrapper>
+              <FieldWrapper>
+                <Flex flexDirection="column" gap="spaces-2">
+                  <Input
+                    data-testid="t--user-name"
+                    defaultValue={user?.email}
+                    isDisabled
+                    isReadOnly
+                    label={createMessage(USER_EMAIL_PLACEHOLDER)}
+                    labelPosition="top"
+                    placeholder={createMessage(USER_EMAIL_PLACEHOLDER)}
+                    renderAs="input"
+                    size="md"
+                    type="text"
+                  />
+                  {isFormLoginEnabled && (
+                    <ResetPasswordButton
+                      className="t--user-reset-password"
+                      kind="tertiary"
+                      onClick={forgotPassword}
+                      renderAs="a"
+                      size="md"
+                      startIcon="restart-line"
+                    >
+                      {createMessage(USER_RESET_PASSWORD)}
+                    </ResetPasswordButton>
+                  )}
+                </Flex>
+              </FieldWrapper>
             </Flex>
-          </FieldWrapper>
-        </Flex>
-        {showGitAuthor && (
-          <SubCategory kind="heading-s" renderAs="p">
-            Git author
-          </SubCategory>
-        )}
-        {showGitAuthor && (
-          <Flex flexDirection="column" gap="spaces-5">
-            <FieldWrapper>
-              {isFetching && <Loader className={Classes.SKELETON} />}
-              {!isFetching && (
-                <Input
-                  data-testid="t--git-author-name"
-                  isRequired
-                  label={createMessage(AUTHOR_NAME)}
-                  labelPosition="top"
-                  onChange={setAuthorNameInState}
-                  placeholder={createMessage(AUTHOR_NAME)}
-                  renderAs="input"
-                  size="md"
-                  type="text"
-                  value={authorName}
-                />
-              )}
-            </FieldWrapper>
-            <FieldWrapper>
-              {isFetching && <Loader className={Classes.SKELETON} />}
-              {!isFetching && (
-                <Input
-                  data-testid="t--git-author-email"
-                  isRequired
-                  label={createMessage(AUTHOR_EMAIL)}
-                  labelPosition="top"
-                  onChange={setAuthorEmailInState}
-                  placeholder={createMessage(AUTHOR_EMAIL)}
-                  renderAs="input"
-                  size="md"
-                  type="text"
-                  value={authorEmail}
-                />
-              )}
-            </FieldWrapper>
-          </Flex>
-        )}
+            {showGitAuthor && (
+              <SubCategory kind="heading-s" renderAs="p">
+                Git author
+              </SubCategory>
+            )}
+            {showGitAuthor && (
+              <Flex flexDirection="column" gap="spaces-5">
+                <FieldWrapper>
+                  {isFetching && <Loader className={Classes.SKELETON} />}
+                  {!isFetching && (
+                    <Input
+                      data-testid="t--git-author-name"
+                      isRequired
+                      label={createMessage(AUTHOR_NAME)}
+                      labelPosition="top"
+                      onChange={setAuthorNameInState}
+                      placeholder={createMessage(AUTHOR_NAME)}
+                      renderAs="input"
+                      size="md"
+                      type="text"
+                      value={authorName}
+                    />
+                  )}
+                </FieldWrapper>
+                <FieldWrapper>
+                  {isFetching && <Loader className={Classes.SKELETON} />}
+                  {!isFetching && (
+                    <Input
+                      data-testid="t--git-author-email"
+                      isRequired
+                      label={createMessage(AUTHOR_EMAIL)}
+                      labelPosition="top"
+                      onChange={setAuthorEmailInState}
+                      placeholder={createMessage(AUTHOR_EMAIL)}
+                      renderAs="input"
+                      size="md"
+                      type="text"
+                      value={authorEmail}
+                    />
+                  )}
+                </FieldWrapper>
+              </Flex>
+            )}
+          </SettingsCardBody>
+        </SettingsFormCard>
         <SettingsButtonWrapper>
           <Button
             className="t--admin-settings-save-button"

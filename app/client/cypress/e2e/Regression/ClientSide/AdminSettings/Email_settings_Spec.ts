@@ -12,6 +12,9 @@ import SignupPageLocators from "../../../../locators/SignupPage.json";
 import { CURRENT_REPO, REPO } from "../../../../fixtures/REPO";
 import homePageLocators from "../../../../locators/HomePage";
 
+// Fork: the emails and toasts name the fork's product (constants/Brand.ts, server constants/Brand.java).
+const PRODUCT_NAME = "CreativeAppBuilder";
+
 describe(
   "Admin Email Page - Email setting page validations",
   { tags: ["@tag.Settings", "@tag.Email"] },
@@ -66,9 +69,8 @@ describe(
 
     it("2. Verify admin setup smtp and test email works", () => {
       cy.LoginFromAPI(Cypress.env("USERNAME"), Cypress.env("PASSWORD"));
-      const testEmailSubject: string = "Test email from Appsmith";
-      const testEmailBody: string =
-        "This is a test email from Appsmith, initiated from Admin Settings page. If you are seeing this, your email configuration is working!";
+      const testEmailSubject: string = `Test email from ${PRODUCT_NAME}`;
+      const testEmailBody: string = `This is a test email from ${PRODUCT_NAME}, initiated from Admin Settings page. If you are seeing this, your email configuration is working!`;
       adminSettings.NavigateToAdminSettings(false);
       agHelper.AssertElementVisibility(AdminsSettings.LeftPaneBrandingLink);
       agHelper.GetNClick(AdminsSettings.emailTab);
@@ -157,10 +159,7 @@ describe(
 
     it("3. To verify forget password email", () => {
       agHelper.VisitNAssert("/applications", "getAllWorkspaces");
-      const resetPassSubject: string =
-        CURRENT_REPO === REPO.EE
-          ? "Reset your Appsmith password"
-          : "Reset your Appsmith password";
+      const resetPassSubject: string = `Reset your ${PRODUCT_NAME} password`;
       homePage.LogOutviaAPI();
       agHelper.VisitNAssert("/");
       agHelper.WaitUntilEleAppear(SignupPageLocators.forgetPasswordLink);
@@ -191,7 +190,7 @@ describe(
       });
 
       agHelper.AssertContains(
-        `A password reset link has been sent to your email address ${emailOne} registered with Appsmith.`,
+        `A password reset link has been sent to your email address ${emailOne} registered with ${PRODUCT_NAME}.`,
       );
 
       try {
@@ -250,7 +249,7 @@ describe(
       const inviteEmailSubject: string =
         CURRENT_REPO === REPO.EE
           ? "You’re invited to the workspace"
-          : "You’re invited to the Appsmith workspace";
+          : `You’re invited to the ${PRODUCT_NAME} workspace`;
       homePage.LogOutviaAPI();
       agHelper.VisitNAssert("/");
       agHelper.WaitUntilEleAppear(SignupPageLocators.forgetPasswordLink);
@@ -323,7 +322,7 @@ describe(
       const inviteEmailSubject: string =
         CURRENT_REPO === REPO.EE
           ? "You're invited to the app"
-          : "You’re invited to the Appsmith workspace.";
+          : `You’re invited to the ${PRODUCT_NAME} workspace.`;
       homePage.LogOutviaAPI();
       agHelper.VisitNAssert("/");
       agHelper.WaitUntilEleAppear(SignupPageLocators.forgetPasswordLink);
@@ -424,7 +423,7 @@ describe(
       const inviteEmailSubject: string =
         CURRENT_REPO === REPO.EE
           ? "You're invited to the app"
-          : "You’re invited to the Appsmith workspace.";
+          : `You’re invited to the ${PRODUCT_NAME} workspace.`;
       homePage.LogOutviaAPI();
       agHelper.VisitNAssert("/");
       agHelper.WaitUntilEleAppear(SignupPageLocators.forgetPasswordLink);

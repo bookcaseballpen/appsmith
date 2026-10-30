@@ -17,8 +17,8 @@ public class MssqlErrorMessages extends BasePluginErrorMessages {
     public static final String CONNECTION_POOL_CREATION_FAILED_ERROR_MSG =
             "Exception occurred while creating connection pool. One or more arguments in the datasource configuration may be invalid. Please check your datasource configuration.";
 
-    public static final String GET_STRUCTURE_ERROR_MSG =
-            "The Appsmith server has failed to fetch the structure of your schema.";
+    // Fork: no Appsmith name in user-visible messages.
+    public static final String GET_STRUCTURE_ERROR_MSG = "The server has failed to fetch the structure of your schema.";
 
     /*
     ************************************************************************************************************************************************

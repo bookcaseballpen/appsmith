@@ -18,8 +18,9 @@ public class RedshiftErrorMessages extends BasePluginErrorMessages {
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG =
             "Error occurred while executing Redshift query. To know more please check the error details.";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String GET_STRUCTURE_ERROR_MSG =
-            "Appsmith server has failed to fetch the structure of the database. "
+            "The server has failed to fetch the structure of the database. "
                     + "Please check if the database credentials are valid and/or you have the required permissions.";
 
     public static final String CONNECTION_POOL_CREATION_FAILED_ERROR_MSG =

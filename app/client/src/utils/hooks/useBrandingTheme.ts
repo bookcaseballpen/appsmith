@@ -9,6 +9,48 @@ import {
 } from "utils/BrandingUtils";
 import { LightModeTheme } from "@appsmith/wds-theming";
 
+const DEFAULT_HREF_ATTRIBUTE = "data-default-href";
+
+/**
+ * Fork: index.html declares the brand favicon three times (plain, and light or dark by prefers-color-scheme), and a
+ * browser may keep any of them, so a link added after them does not reliably win. A custom favicon therefore replaces
+ * the href of every icon link; the brand favicon (or none set) puts the index.html hrefs back.
+ */
+export const setFavicon = (faviconUrl?: string) => {
+  const isCustom = !!faviconUrl && faviconUrl !== APPSMITH_BRAND_FAVICON_URL;
+  const links = Array.from(
+    document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']"),
+  );
+
+  if (isCustom && links.length === 0) {
+    const favicon = document.createElement("link");
+
+    favicon.rel = "icon";
+    favicon.className = "t--branding-favicon";
+    document.head.appendChild(favicon);
+    links.push(favicon);
+  }
+
+  links.forEach((link) => {
+    if (!link.hasAttribute(DEFAULT_HREF_ATTRIBUTE)) {
+      link.setAttribute(
+        DEFAULT_HREF_ATTRIBUTE,
+        link.getAttribute("href") ?? "",
+      );
+    }
+
+    const defaultHref = link.getAttribute(DEFAULT_HREF_ATTRIBUTE);
+
+    if (isCustom) {
+      link.href = faviconUrl;
+    } else if (defaultHref) {
+      link.setAttribute("href", defaultHref);
+    } else {
+      link.remove();
+    }
+  });
+};
+
 const useBrandingTheme = () => {
   const config = useSelector(getOrganizationConfig);
   let activeColor: string | undefined = undefined;
@@ -53,27 +95,7 @@ const useBrandingTheme = () => {
       document.documentElement.style.setProperty(`${prefix}${key}`, value);
     }
 
-    // Set the favicon
-    // TODO: Fix this the next time the file is edited
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let favicon: any = document.querySelector("link[rel='shortcut icon']");
-
-    // Fork: index.html sets the default favicon, light or dark by prefers-color-scheme; a link added here would win
-    // over both, so only a custom favicon is set.
-    if (getAssetUrl(config.brandFaviconUrl) === APPSMITH_BRAND_FAVICON_URL) {
-      favicon?.remove();
-
-      return;
-    }
-
-    if (!favicon) {
-      favicon = document.createElement("link");
-      favicon.rel = "shortcut icon";
-      favicon.className = "t--branding-favicon";
-      document.getElementsByTagName("head")[0].appendChild(favicon);
-    }
-
-    favicon.href = getAssetUrl(config.brandFaviconUrl);
+    setFavicon(getAssetUrl(config.brandFaviconUrl));
   }, [
     config.brandColors.primary,
     config.brandColors.background,

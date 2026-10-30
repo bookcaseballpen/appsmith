@@ -257,7 +257,7 @@ public class SnowflakePluginTest {
 
         // Match error statement.
         Set<String> expectedInvalids = new HashSet<>();
-        expectedInvalids.add("Appsmith could not find any valid database configured for this datasource"
+        expectedInvalids.add("Could not find any valid database configured for this datasource"
                 + ". Please provide a valid database by editing the Database field in the datasource "
                 + "configuration page.");
         assertEquals(expectedInvalids, invalids);

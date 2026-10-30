@@ -34,6 +34,7 @@ import PremiumFeatureTag from "components/editorComponents/PremiumFeatureTag";
 import { PluginType } from "entities/Plugin";
 import { selectFeatureFlagCheck } from "ee/selectors/featureFlagsSelectors";
 import type { Datasource } from "entities/Datasource";
+import { DataPaneNote } from "ee/components/DatasourceManagedNote";
 
 const PaneBody = styled.div`
   padding: var(--ads-v2-spaces-3) 0;
@@ -139,7 +140,8 @@ export const DataSidePane = (props: DataSidePaneProps) => {
       <PaneBody>
         {datasources.length === 0 ? (
           <EmptyState
-            button={blankStateButtonProps}
+            // Fork: no dead "Bring your data" button for those who can't add a datasource.
+            button={canCreateDatasource ? blankStateButtonProps : undefined}
             description={createMessage(DATASOURCE_LIST_BLANK_DESCRIPTION)}
             icon={"datasource-v3"}
           />
@@ -172,6 +174,8 @@ export const DataSidePane = (props: DataSidePaneProps) => {
             };
           })}
         />
+        {/* Fork: where datasources are changed, by role (ee/components/DatasourceManagedNote). */}
+        <DataPaneNote hasDatasources={datasources.length !== 0} />
       </PaneBody>
     </Flex>
   );

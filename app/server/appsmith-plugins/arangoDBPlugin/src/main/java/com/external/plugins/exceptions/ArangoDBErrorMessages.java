@@ -11,20 +11,21 @@ public class ArangoDBErrorMessages extends BasePluginErrorMessages {
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG =
             "Your query failed to execute. Please check more information in the error details.";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String UNEXPECTED_SSL_OPTION_ERROR_MSG =
-            "Appsmith server has found an unexpected SSL option: %s. Please reach "
-                    + "out to Appsmith customer support to resolve this.";
+            "The server has found an unexpected SSL option: %s. Please contact "
+                    + "your administrator to resolve this.";
 
     public static final String SSL_CONTEXT_FETCHING_ERROR_MSG =
-            "Appsmith server encountered an error when getting ssl context. Please contact Appsmith "
-                    + "customer support to resolve this.";
+            "The server encountered an error when getting ssl context. Please contact your administrator "
+                    + "to resolve this.";
 
     public static final String UNEXPECTED_CA_CERT_OPTION_ERROR_MSG =
-            "Appsmith server has found an unexpected CA certificate option: %s. "
-                    + "Please reach out to Appsmith customer support to resolve this.";
+            "The server has found an unexpected CA certificate option: %s. "
+                    + "Please contact your administrator to resolve this.";
 
     public static final String GET_STRUCTURE_ERROR_MSG =
-            "Appsmith server has failed to fetch list of collections from database. Please check "
+            "The server has failed to fetch list of collections from database. Please check "
                     + "if the database credentials are valid and/or you have the required permissions.";
 
     /*

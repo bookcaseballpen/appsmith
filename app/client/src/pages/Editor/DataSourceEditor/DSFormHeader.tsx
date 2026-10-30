@@ -29,6 +29,7 @@ import { useLocation } from "react-router";
 import { useHeaderActions } from "ee/hooks/datasourceEditorHooks";
 import { getIDETypeByUrl } from "ee/entities/IDE/utils";
 import { getPlugin } from "ee/selectors/entitiesSelector";
+import { DatasourceReadOnlyNote } from "ee/components/DatasourceManagedNote";
 
 export const ActionWrapper = styled.div`
   display: flex;
@@ -236,6 +237,10 @@ export const DSFormHeader = (props: DSFormHeaderProps) => {
             >
               {createMessage(EDIT)}
             </Button>
+          )}
+          {/* Fork: says who changes a datasource, in place of Edit (ee/components/DatasourceManagedNote). */}
+          {!canManageDatasource && !isNewDatasource && (
+            <DatasourceReadOnlyNote />
           )}
           {headerActions && headerActions.newActionButton
             ? headerActions.newActionButton

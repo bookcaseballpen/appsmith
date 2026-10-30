@@ -115,8 +115,8 @@ public class MongoPluginErrorsTest {
                     assertTrue(invalids.stream()
                             .anyMatch(error -> error.contains("It seems that you are trying to use a mongo connection"
                                     + " string URI. Please extract relevant fields and fill the form with extracted "
-                                    + "values. For details, please check out the Appsmith's documentation for Mongo "
-                                    + "database. Alternatively, you may use 'Import from connection string URI' option "
+                                    + "values. For details, please check the MongoDB documentation. "
+                                    + "Alternatively, you may use 'Import from connection string URI' option "
                                     + "from the dropdown labelled 'Use mongo connection string URI' to use the URI "
                                     + "connection string directly.")));
                 })
@@ -140,8 +140,8 @@ public class MongoPluginErrorsTest {
                     assertTrue(invalids.stream()
                             .anyMatch(error -> error.contains("It seems that you are trying to use a mongo connection"
                                     + " string URI. Please extract relevant fields and fill the form with extracted "
-                                    + "values. For details, please check out the Appsmith's documentation for Mongo "
-                                    + "database. Alternatively, you may use 'Import from connection string URI' option "
+                                    + "values. For details, please check the MongoDB documentation. "
+                                    + "Alternatively, you may use 'Import from connection string URI' option "
                                     + "from the dropdown labelled 'Use mongo connection string URI' to use the URI "
                                     + "connection string directly.")));
                 })
@@ -271,8 +271,9 @@ public class MongoPluginErrorsTest {
 
         StepVerifier.create(structureMono).verifyErrorSatisfies(error -> {
             assertTrue(error instanceof AppsmithPluginException);
-            String expectedMessage = "Appsmith has failed to get database structure. Please provide read permission on"
-                    + " the database to fix this.";
+            String expectedMessage =
+                    "The server has failed to get database structure. Please provide read permission on"
+                            + " the database to fix this.";
             assertTrue(expectedMessage.equals(error.getMessage()));
         });
     }

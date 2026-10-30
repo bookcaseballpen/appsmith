@@ -12,17 +12,16 @@ public class OracleErrorMessages extends BasePluginErrorMessages {
 
     public static final String ORACLE_JDBC_DRIVER_LOADING_ERROR_MSG = "Your Oracle query failed to execute.";
 
-    public static final String GET_STRUCTURE_ERROR_MSG =
-            "The Appsmith server has failed to fetch the structure of your schema.";
+    // Fork: no Appsmith name in user-visible messages.
+    public static final String GET_STRUCTURE_ERROR_MSG = "The server has failed to fetch the structure of your schema.";
 
     public static final String QUERY_PREPARATION_FAILED_ERROR_MSG =
             "Query preparation failed while inserting value: %s" + " for binding: {{%s}}.";
 
     public static final String SSL_CONFIGURATION_ERROR_MSG =
-            "The Appsmith server has failed to fetch SSL configuration from datasource configuration form. ";
+            "The server has failed to fetch SSL configuration from datasource configuration form. ";
 
-    public static final String INVALID_SSL_OPTION_ERROR_MSG =
-            "The Appsmith server has found an unexpected SSL option: %s.";
+    public static final String INVALID_SSL_OPTION_ERROR_MSG = "The server has found an unexpected SSL option: %s.";
 
     public static final String CONNECTION_POOL_CREATION_FAILED_ERROR_MSG = "An exception occurred while creating "
             + "connection pool. One or more arguments in the datasource configuration may be invalid.";

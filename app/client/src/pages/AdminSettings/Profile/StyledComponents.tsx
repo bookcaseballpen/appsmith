@@ -1,5 +1,6 @@
 import { Button, Text } from "@appsmith/ads";
 import styled from "styled-components";
+import { SettingsFooter } from "ee/pages/AdminSettings/SettingsShell";
 
 export const FieldWrapper = styled.div`
   /* width: 460px; */
@@ -43,23 +44,7 @@ export const SubCategory = styled(Text)`
   margin-top: 24px;
 `;
 
-export const SettingsButtonWrapper = styled.div`
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  width: ${(props) => `calc(100% - ${props.theme.sidebarWidth})`};
-  height: ${(props) => props.theme.settings.footerHeight}px;
-  padding: ${(props) => props.theme.spaces[11]}px 20px 24px
-    ${(props) =>
-      props.theme.homePage.leftPane.leftPadding +
-      props.theme.homePage.leftPane.width +
-      props.theme.spaces[8]}px;
-  /* box-shadow: ${(props) => props.theme.settings.footerShadow}; */
-  border-top: 1px solid var(--ads-v2-color-border);
-  z-index: 2;
-  background-color: var(--ads-v2-color-bg);
-  display: flex;
+// Fork: the settings shell's footer (ee/pages/AdminSettings/SettingsShell); Save is the first child, on the right.
+export const SettingsButtonWrapper = styled(SettingsFooter)`
   flex-direction: row-reverse;
-  gap: 16px;
-  align-items: center;
 `;

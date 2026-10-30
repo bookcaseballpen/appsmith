@@ -87,7 +87,10 @@ import {
 } from "utils/appDescription";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
 import AppTagsSetting from "ee/pages/AppSettings/AppTagsSetting";
-import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  areAppsmithLinksHidden,
+  isAppRenameUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 
 const IconSelectorWrapper = styled.div`
   position: relative;
@@ -563,6 +566,8 @@ function GeneralSettings() {
           }
           // undefined sent implicitly - parameter "icon"
           id="t--general-settings-app-name"
+          // Fork: the app name is shown, not edited; apps are renamed through MCP (ce/utils/forkHiddenFeatures.ts).
+          isReadOnly={isAppRenameUiHidden()}
           isValid={isAppNameValid}
           label={GENERAL_SETTINGS_APP_NAME_LABEL()}
           onBlur={() => updateAppSettings()}

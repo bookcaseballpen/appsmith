@@ -13,8 +13,9 @@ public class SnowflakeErrorMessages extends BasePluginErrorMessages {
 
     public static final String UNABLE_TO_CREATE_CONNECTION_ERROR_MSG = "Unable to create connection to Snowflake URL";
 
+    // Fork: no Appsmith name in user-visible messages.
     public static final String GET_STRUCTURE_ERROR_MSG =
-            "Appsmith server has failed to fetch the structure of your schema. Please check more information in the error details.";
+            "The server has failed to fetch the structure of your schema. Please check more information in the error details.";
 
     /*
     ************************************************************************************************************************************************

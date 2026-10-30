@@ -34,6 +34,7 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
+  Text,
 } from "@appsmith/ads";
 import { useDispatch, useSelector } from "react-redux";
 import type {
@@ -56,7 +57,10 @@ import {
   createMessage,
 } from "ee/constants/messages";
 import ForkApplicationModal from "./ForkApplicationModal";
-import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  isAppRenameUiHidden,
+  isWorkspaceUiHidden,
+} from "ee/utils/forkHiddenFeatures";
 import { getExportAppAPIRoute } from "ee/constants/ApiConstants";
 import { builderURL, viewerURL } from "ee/RouteBuilder";
 import history from "utils/history";
@@ -416,7 +420,11 @@ export function ApplicationCard(props: ApplicationCardProps) {
       setShowOverlay(false);
       addDeleteOption();
 
-      if (lastUpdatedValue && application.name !== lastUpdatedValue) {
+      if (
+        !isAppRenameUiHidden() &&
+        lastUpdatedValue &&
+        application.name !== lastUpdatedValue
+      ) {
         props.update &&
           props.update(applicationId, {
             name: lastUpdatedValue,
@@ -452,35 +460,46 @@ export function ApplicationCard(props: ApplicationCardProps) {
                 e.stopPropagation();
               }}
             >
-              <EditableText
-                className="px-3 pt-2 pb-2 t--application-name"
-                defaultValue={application.name}
-                editInteractionKind={EditInteractionKind.SINGLE}
-                fill
-                hideEditIcon={false}
-                isError={isErroredSavingName}
-                isInvalid={(value: string) => {
-                  if (!value) {
-                    return "Name cannot be empty";
-                  } else {
-                    return false;
+              {/* Fork: the app name is plain text; apps are renamed through MCP (ce/utils/forkHiddenFeatures.ts). */}
+              {isAppRenameUiHidden() ? (
+                <Text
+                  className="block px-3 pt-2 pb-2 t--application-name"
+                  kind="body-m"
+                  renderAs="p"
+                >
+                  {application.name}
+                </Text>
+              ) : (
+                <EditableText
+                  className="px-3 pt-2 pb-2 t--application-name"
+                  defaultValue={application.name}
+                  editInteractionKind={EditInteractionKind.SINGLE}
+                  fill
+                  hideEditIcon={false}
+                  isError={isErroredSavingName}
+                  isInvalid={(value: string) => {
+                    if (!value) {
+                      return "Name cannot be empty";
+                    } else {
+                      return false;
+                    }
+                  }}
+                  onBlur={(value: string) => {
+                    props.update &&
+                      props.update(applicationId, {
+                        name: value,
+                      });
+                  }}
+                  onTextChanged={(value: string) => {
+                    setLastUpdatedValue(value);
+                  }}
+                  placeholder={"Edit text input"}
+                  savingState={
+                    isSavingName ? SavingState.STARTED : SavingState.NOT_STARTED
                   }
-                }}
-                onBlur={(value: string) => {
-                  props.update &&
-                    props.update(applicationId, {
-                      name: value,
-                    });
-                }}
-                onTextChanged={(value: string) => {
-                  setLastUpdatedValue(value);
-                }}
-                placeholder={"Edit text input"}
-                savingState={
-                  isSavingName ? SavingState.STARTED : SavingState.NOT_STARTED
-                }
-                underline
-              />
+                  underline
+                />
+              )}
               <DescriptionEditorWrapper data-testid="t--application-description-editor">
                 <EditableText
                   className="px-3 pb-2 t--application-description"

@@ -341,10 +341,10 @@ public class PluginUtils {
             }
 
             if (usingLocalhostUrl) {
-                message.add("You may not be able to access your localhost if Appsmith is running inside a docker "
+                // Fork: no Appsmith name in user-visible messages.
+                message.add("You may not be able to access your localhost if the server is running inside a docker "
                         + "container or on the cloud. To enable access to your localhost you may use ngrok to expose "
-                        + "your local endpoint to the internet. Please check out Appsmith's documentation to understand more"
-                        + ".");
+                        + "your local endpoint to the internet.");
             }
         }
 
@@ -429,16 +429,16 @@ public class PluginUtils {
         if (properties == null) {
             throw new AppsmithPluginException(
                     AppsmithPluginError.PLUGIN_ERROR,
-                    "Appsmith server encountered an unexpected error: property list is null. Please reach out to "
-                            + "our customer support to resolve this.");
+                    "The server encountered an unexpected error: property list is null. Please contact "
+                            + "your administrator to resolve this.");
         }
 
         if (index < 0 || index > properties.size() - 1) {
             throw new AppsmithPluginException(
                     AppsmithPluginError.PLUGIN_ERROR,
-                    "Appsmith server encountered an unexpected error: index value out or range: index: " + index
+                    "The server encountered an unexpected error: index value out or range: index: " + index
                             + ", property list size: "
-                            + properties.size() + ". Please reach out to our customer " + "support to resolve this.");
+                            + properties.size() + ". Please contact your administrator " + "to resolve this.");
         }
 
         properties.get(index).setValue(value);

@@ -579,10 +579,9 @@ class LayoutActionServiceTest {
                     assertThat(resultAction.getDatasource().getMessages().size())
                             .isNotZero();
 
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may "
-                            + "use ngrok to expose your local endpoint to the internet. Please check out "
-                            + "Appsmith's documentation to understand more.";
+                            + "use ngrok to expose your local endpoint to the internet.";
                     assertThat(resultAction.getDatasource().getMessages().stream()
                                     .anyMatch(message -> expectedMessage.equals(message)))
                             .isTrue();

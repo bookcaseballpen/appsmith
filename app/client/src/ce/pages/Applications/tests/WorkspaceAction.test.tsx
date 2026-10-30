@@ -11,6 +11,19 @@ import { lightTheme } from "selectors/themeSelectors";
 import { ThemeProvider } from "styled-components";
 import WorkspaceAction from "../WorkspaceAction";
 
+// Fork: the menu is hidden for good (isAppCreationUiHidden); the upstream cases run with the switch off.
+jest.mock("ee/utils/forkHiddenFeatures", () => ({
+  ...jest.requireActual("ee/utils/forkHiddenFeatures"),
+  isAppCreationUiHidden: jest.fn(() => false),
+}));
+
+const mockAppCreationUiHidden = (hidden: boolean) => {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { isAppCreationUiHidden } = require("ee/utils/forkHiddenFeatures");
+
+  isAppCreationUiHidden.mockImplementation(() => hidden);
+};
+
 const mockStore = configureStore([]);
 const locators = {
   testId: {
@@ -160,6 +173,25 @@ describe("WorkspaceAction", () => {
       getByText(createMessage(WORKSPACE_ACTION_BUTTON)),
     ).toBeInTheDocument();
   });
+
+  // Fork: apps are created and imported through MCP, so nobody gets "Create new" (new app, import).
+  it.each(["ADMIN", "DEV"])(
+    "8. should not render anything for the %s role while app creation is hidden",
+    (role) => {
+      mockAppCreationUiHidden(true);
+
+      const { queryByTestId, queryByText } = renderWorkspaceActionComponent(
+        workspace,
+        workspace.id,
+        role,
+      );
+
+      expect(queryByText(createMessage(WORKSPACE_ACTION_BUTTON))).toBeNull();
+      expect(queryByTestId(locators.testId.importApp)).toBeNull();
+
+      mockAppCreationUiHidden(false);
+    },
+  );
 });
 
 jest.mock("ee/utils/airgapHelpers", () => ({

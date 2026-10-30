@@ -7,8 +7,9 @@ public abstract class BasePluginErrorMessages {
     public static final String CONNECTION_POOL_NULL_ERROR_MSG = "Connection pool is null.";
     public static final String CONNECTION_POOL_CLOSED_ERROR_MSG = "Connection pool is closed.";
     public static final String CONNECTION_POOL_NOT_RUNNING_ERROR_MSG = "Connection pool is not running.";
+    // Fork: no Appsmith name in user-visible messages.
     public static final String UNKNOWN_CONNECTION_ERROR_MSG =
-            "Unknown connection error. Please reach out to Appsmith " + "customer support to resolve this.";
+            "Unknown connection error. Please contact your administrator to resolve this.";
     public static final String JDBC_DRIVER_LOADING_ERROR_MSG = "Error loading JDBC Driver class.";
     public static final String DS_MISSING_PORT_ERROR_MSG = "Missing database port number for authentication.";
     public static final String SSH_CONNECTION_FAILED_ERROR_MSG =

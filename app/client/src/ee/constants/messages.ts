@@ -89,6 +89,11 @@ export const IN_APP_EMBED_SETTING = {
   secondaryHeadingForAppSettings: () =>
     `Make your app public to embed your ${PRODUCT_NAME} app into legacy applications`,
 };
+// A query whose plugin isn't installed: no paid plan unlocks it here (ce/utils/forkHiddenFeatures.ts, upsells).
+export const PLUGIN_NOT_INSTALLED = () =>
+  "This query's integration isn't installed on this instance. Ask an Admin.";
+// The editor's Data pane: there is one hidden workspace, so the datasources are not called the workspace's.
+export const DATA_PANE_TITLE = () => "Datasources";
 // Upgrade pages (Admin settings): the plan names stay, the product is not named Appsmith.
 export const AVAILABLE_ON_ENTERPRISE = () => "Available on the Enterprise plan";
 export const USER_PROVISIONING_FOR_ENTERPRISES = () =>

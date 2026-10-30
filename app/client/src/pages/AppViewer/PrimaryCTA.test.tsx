@@ -220,3 +220,42 @@ describe("App viewer fork button", () => {
     mockDispatch.mockClear();
   });
 });
+
+// Fork: no pencil when viewing an app (ce/utils/forkHiddenFeatures.ts, isViewerEditButtonHidden); it stays in the
+// editor's preview, where it leaves the preview.
+describe("App viewer edit button", () => {
+  const renderForEditor = (isPreviewMode: boolean) => {
+    const editorState = JSON.parse(JSON.stringify(initialState));
+
+    editorState.ui.users.currentUser = { username: "dev@example.com" };
+    editorState.ui.editor.isPreviewMode = isPreviewMode;
+    editorState.ui.applications.currentApplication.forkingEnabled = false;
+    editorState.ui.applications.currentApplication.userPermissions = [
+      "manage:applications",
+    ];
+
+    return render(
+      <Provider store={mockStore(editorState)}>
+        <ThemeProvider theme={lightTheme}>
+          <PrimaryCTA
+            navColorStyle="solid"
+            primaryColor="red"
+            url={"/app/test-3/page1-605c435a91dea93f0eaf9123/edit"}
+          />
+        </ThemeProvider>
+      </Provider>,
+    );
+  };
+
+  it("is not shown in the app viewer, even to someone who may edit the app", () => {
+    const { container } = renderForEditor(false);
+
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("is shown in the editor's preview, to leave it", () => {
+    const { container } = renderForEditor(true);
+
+    expect(container.querySelector("button")).not.toBeNull();
+  });
+});

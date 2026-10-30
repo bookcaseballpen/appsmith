@@ -26,6 +26,7 @@ import { getAppsmithConfigs } from "ee/configs";
 import { isPylonChatAvailable } from "utils/bootPylon";
 import { getCurrentUser } from "selectors/usersSelectors";
 import { getIsAiAgentApp } from "ee/selectors/aiAgentSelectors";
+import { isAppRenameUiHidden } from "ee/utils/forkHiddenFeatures";
 
 const { cloudHosting } = getAppsmithConfigs();
 
@@ -119,7 +120,8 @@ export const useNavigationMenuData = ({
           text: "Rename",
           onClick: editMode,
           type: MenuTypes.MENU,
-          isVisible: true,
+          // Fork: apps are renamed through MCP (ce/utils/forkHiddenFeatures.ts).
+          isVisible: !isAppRenameUiHidden(),
         },
         {
           text: "Fork application",

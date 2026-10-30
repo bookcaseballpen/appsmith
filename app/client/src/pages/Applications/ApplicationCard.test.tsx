@@ -219,11 +219,13 @@ describe("ApplicationCard — description subtitle", () => {
     });
   });
 
-  it("edits the description in a multi-line field and the name in a single-line one", () => {
+  // Fork: the name is plain text (ce/utils/forkHiddenFeatures.ts, isAppRenameUiHidden); apps are renamed through MCP.
+  it("edits the description in a multi-line field and shows the name as plain text", () => {
     const app = buildApplication({ description: "Old blurb" });
+    const update = jest.fn();
 
     const { getByTestId } = render(
-      <ApplicationCard {...baseProps} application={app} update={jest.fn()} />,
+      <ApplicationCard {...baseProps} application={app} update={update} />,
     );
 
     fireEvent.keyDown(getByTestId("t--application-card-context-menu"), {
@@ -237,10 +239,15 @@ describe("ApplicationCard — description subtitle", () => {
       document.querySelector(".t--application-description textarea"),
     ).toBeTruthy();
 
-    fireEvent.click(
-      document.querySelector(".t--application-name") as HTMLElement,
+    const name = document.querySelector(".t--application-name") as HTMLElement;
+
+    fireEvent.click(name);
+    expect(name.textContent).toBe("Sample App");
+    expect(document.querySelector(".t--application-name input")).toBeNull();
+    expect(update).not.toHaveBeenCalledWith(
+      app.id,
+      expect.objectContaining({ name: expect.anything() }),
     );
-    expect(document.querySelector(".t--application-name input")).toBeTruthy();
   });
 
   it("collapses line breaks in the description on save", () => {

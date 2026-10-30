@@ -1911,10 +1911,9 @@ public class DatasourceServiceTest {
                     assertThat(testResult.getInvalids()).isEmpty();
                     assertThat(testResult.getMessages()).isNotEmpty();
 
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may use "
-                            + "ngrok to expose your local endpoint to the internet. Please check out Appsmith's "
-                            + "documentation to understand more.";
+                            + "ngrok to expose your local endpoint to the internet.";
                     assertThat(testResult.getMessages().stream().anyMatch(message -> expectedMessage.equals(message)))
                             .isTrue();
                 })
@@ -1965,10 +1964,9 @@ public class DatasourceServiceTest {
                             createdDatasource.getDatasourceStorages().get(defaultEnvironmentId);
                     assertThat(datasourceStorageDTO.getMessages()).isNotEmpty();
 
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may "
-                            + "use ngrok to expose your local endpoint to the internet. Please check out Appsmith's "
-                            + "documentation to understand more.";
+                            + "use ngrok to expose your local endpoint to the internet.";
                     assertThat(datasourceStorageDTO.getMessages()).containsExactly(expectedMessage);
                 })
                 .verifyComplete();
@@ -2037,10 +2035,9 @@ public class DatasourceServiceTest {
                     DatasourceStorageDTO datasourceStorageDTO =
                             updatedDatasource.getDatasourceStorages().get(defaultEnvironmentId);
                     assertThat(datasourceStorageDTO.getMessages().size()).isNotZero();
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may "
-                            + "use ngrok to expose your local endpoint to the internet. Please check out Appsmith's "
-                            + "documentation to understand more.";
+                            + "use ngrok to expose your local endpoint to the internet.";
                     assertThat(datasourceStorageDTO.getMessages()).containsExactly(expectedMessage);
                 })
                 .verifyComplete();
@@ -2080,10 +2077,9 @@ public class DatasourceServiceTest {
                             createdDatasource.getDatasourceStorages().get(defaultEnvironmentId);
                     assertThat(datasourceStorageDTO.getMessages()).isNotEmpty();
 
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may "
-                            + "use ngrok to expose your local endpoint to the internet. Please check out Appsmith's "
-                            + "documentation to understand more.";
+                            + "use ngrok to expose your local endpoint to the internet.";
                     assertThat(datasourceStorageDTO.getMessages()).containsExactly(expectedMessage);
                 })
                 .verifyComplete();
@@ -2155,10 +2151,9 @@ public class DatasourceServiceTest {
                     DatasourceStorageDTO datasourceStorageDTO =
                             updatedDatasource.getDatasourceStorages().get(defaultEnvironmentId);
                     assertThat(datasourceStorageDTO.getMessages().size()).isNotZero();
-                    String expectedMessage = "You may not be able to access your localhost if Appsmith is running "
+                    String expectedMessage = "You may not be able to access your localhost if the server is running "
                             + "inside a docker container or on the cloud. To enable access to your localhost you may "
-                            + "use ngrok to expose your local endpoint to the internet. Please check out "
-                            + "Appsmith's documentation to understand more.";
+                            + "use ngrok to expose your local endpoint to the internet.";
                     assertThat(datasourceStorageDTO.getMessages()).containsExactly(expectedMessage);
                 })
                 .verifyComplete();

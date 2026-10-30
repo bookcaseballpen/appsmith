@@ -41,9 +41,13 @@ import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 const HeaderSection = styled.div`
   display: flex;
+  flex-shrink: 0;
   align-items: center;
 
   .t--appsmith-logo {
+    /* Fork: the logo keeps its full width (components/BrandLogo). */
+    flex-shrink: 0;
+
     svg {
       max-width: 110px;
       width: 110px;

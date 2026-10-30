@@ -4,7 +4,11 @@ import {
   GITHUB_SIGNUP_SETUP_DOC,
   GOOGLE_SIGNUP_SETUP_DOC,
 } from "constants/ThirdPartyConstants";
-import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
+import {
+  areAppsmithLinksHidden,
+  areUpsellsHidden,
+} from "ee/utils/forkHiddenFeatures";
+import { isUpsell } from "ee/pages/AdminSettings/config/upsells";
 import type { AdminConfigType } from "ee/pages/AdminSettings/config/types";
 import {
   CategoryType,
@@ -323,13 +327,14 @@ export const OidcAuthCallout: AuthMethodType = {
   isFeatureEnabled: isOIDCEnabled(featureFlags),
 };
 
+// Fork: no locked SAML or OIDC card with an Enterprise badge and "Upgrade" (ee/pages/AdminSettings/config/upsells.ts).
 const AuthMethods = [
   OidcAuthCallout,
   SamlAuthCallout,
   GoogleAuthCallout,
   GithubAuthCallout,
   FormAuthCallout,
-];
+].filter((method) => !areUpsellsHidden() || !isUpsell(method));
 
 function AuthMain() {
   FormAuthCallout.isConnected = useSelector(getIsFormLoginEnabled);

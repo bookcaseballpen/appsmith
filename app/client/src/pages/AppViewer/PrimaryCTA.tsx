@@ -27,6 +27,7 @@ import { ButtonVariantTypes } from "components/constants";
 import { setPreviewModeInitAction } from "actions/editorActions";
 import { getCurrentApplication } from "ee/selectors/applicationSelectors";
 import { useGitProtectedMode } from "pages/Editor/gitSync/hooks/modHooks";
+import { isViewerEditButtonHidden } from "ee/utils/forkHiddenFeatures";
 
 /**
  * ---------------------------------------------------------------------------------------------------
@@ -141,7 +142,11 @@ function PrimaryCTA(props: Props) {
    * 2. if forking app is enabled and app is public but the user is not logged  -> fork button
    */
   const PrimaryCTA = useMemo(() => {
-    if (url && canEdit && !isProtectedMode) {
+    // Fork: no pencil when viewing an app; it stays in the editor's preview, where it leaves the preview
+    // (ce/utils/forkHiddenFeatures.ts).
+    const isEditButtonHidden = isViewerEditButtonHidden() && !isPreviewMode;
+
+    if (url && canEdit && !isProtectedMode && !isEditButtonHidden) {
       return (
         <Tooltip
           content={createMessage(EDIT_APP)}
@@ -269,6 +274,7 @@ function PrimaryCTA(props: Props) {
     navColorStyle,
     primaryColor,
     isForkModalOpen,
+    isPreviewMode,
   ]);
 
   return <div>{PrimaryCTA}</div>;

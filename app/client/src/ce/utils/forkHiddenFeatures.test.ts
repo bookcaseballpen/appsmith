@@ -1,8 +1,44 @@
 import {
   areAppsmithLinksHidden,
+  areUpsellsHidden,
+  isAppCreationUiHidden,
+  isAppRenameUiHidden,
   isAppsmithLink,
+  isEmbedUiHidden,
+  isViewerEditButtonHidden,
   withoutAppsmithLink,
 } from "ee/utils/forkHiddenFeatures";
+import { showProductRamps } from "ee/selectors/rampSelectors";
+import type { DefaultRootState } from "react-redux";
+import { RAMP_NAME } from "utils/ProductRamps/RampsControlList";
+
+// Fork: UI the fork hides for good (FORK.md, "Hidden features").
+describe("hidden features", () => {
+  it.each([
+    ["app creation and import", isAppCreationUiHidden],
+    ["app rename", isAppRenameUiHidden],
+    ["the viewer's edit button", isViewerEditButtonHidden],
+    ["embedding", isEmbedUiHidden],
+    ["paid-plan upsells", areUpsellsHidden],
+  ])("hides %s", (_name, isHidden) => {
+    expect(isHidden()).toBe(true);
+  });
+
+  it.each([RAMP_NAME.MULTIPLE_ENV, RAMP_NAME.PRIVATE_EMBED])(
+    "offers no %s product ramp, even to a super user",
+    (rampName) => {
+      const state = {
+        ui: {
+          users: { currentUser: { isSuperUser: true } },
+          applications: {},
+          selectedWorkspace: {},
+        },
+      } as unknown as DefaultRootState;
+
+      expect(showProductRamps(rampName, true)(state)).toBe(false);
+    },
+  );
+});
 import pluginsReducer from "reducers/entityReducers/pluginsReducer";
 import { ReduxActionTypes } from "ee/constants/ReduxActionConstants";
 import type { Plugin } from "entities/Plugin";

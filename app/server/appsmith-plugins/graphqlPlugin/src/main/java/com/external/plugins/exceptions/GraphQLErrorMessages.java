@@ -11,6 +11,7 @@ public class GraphQLErrorMessages extends BasePluginErrorMessages {
     public static final String NO_HTTP_METHOD_ERROR_MSG = "HTTPMethod must be set.";
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG =
             "An error occurred during the execution of your GraphQL query. Please check the error logs for more details.";
+    // Fork: no Appsmith name in user-visible messages.
     public static final String UNEXPECTED_HTTP_METHOD_ERROR_MSG =
-            "Appsmith server has found an unexpected HTTP method configured with the GraphQL " + "plugin query: %s";
+            "The server has found an unexpected HTTP method configured with the GraphQL " + "plugin query: %s";
 }

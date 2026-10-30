@@ -6,29 +6,31 @@ import {
   SAVE_BUTTON,
   createMessage,
 } from "ee/constants/messages";
-import { Button } from "@appsmith/ads";
+import { Button, Text } from "@appsmith/ads";
 import styled from "styled-components";
+import {
+  FORK_SETTINGS_COLORS,
+  FORK_SETTINGS_NARROW_WIDTH,
+  SettingsFooter,
+} from "ee/pages/AdminSettings/SettingsShell";
 
-const SettingsButtonWrapper = styled.div`
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  width: ${(props) => `calc(100% - ${props.theme.sidebarWidth})`};
-  height: ${(props) => props.theme.settings.footerHeight}px;
-  padding: ${(props) => props.theme.spaces[11]}px 20px 24px
-    ${(props) =>
-      props.theme.homePage.leftPane.leftPadding +
-      props.theme.homePage.leftPane.width +
-      props.theme.spaces[8]}px;
-  /* box-shadow: ${(props) => props.theme.settings.footerShadow}; */
-  border-top: 1px solid var(--ads-v2-color-border);
-  z-index: 2;
-  background-color: var(--ads-v2-color-bg);
-  display: flex;
-  flex-direction: row-reverse;
-  gap: 16px;
-  align-items: center;
+// Fork: the settings shell's sticky footer (ee/pages/AdminSettings/SettingsShell): what saving does on the left,
+// Reset and Save on the right, both disabled until something changes.
+const Hint = styled(Text)`
+  && {
+    margin-right: auto;
+    color: ${FORK_SETTINGS_COLORS.muted};
+    font-size: 12.5px;
+  }
+
+  @media (max-width: ${FORK_SETTINGS_NARROW_WIDTH}px) {
+    flex-basis: 100%;
+  }
 `;
+
+export const UNSAVED_CHANGES_HINT = "You have unsaved changes.";
+export const RESTART_HINT = "Saving restarts the server (about 30 seconds).";
+export const REFRESH_HINT = "Saving reloads the page.";
 
 interface SaveAdminSettingsProps {
   isOnlyOrganizationConfig?: boolean;
@@ -68,27 +70,41 @@ const saveAdminSettings = (props: SaveAdminSettingsProps) => {
     saveButtonText = SAVE_BUTTON;
   }
 
+  const isDirty = Object.keys(settings).length !== 0;
+  const effectHint =
+    saveButtonText === SAVE_AND_RESTART_BUTTON
+      ? RESTART_HINT
+      : saveButtonText === SAVE_AND_REFRESH_BUTTON
+        ? REFRESH_HINT
+        : "";
+  const hint = [isDirty ? UNSAVED_CHANGES_HINT : "", effectHint]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <SettingsButtonWrapper>
-      <Button
-        className="t--admin-settings-save-button"
-        isDisabled={Object.keys(settings).length == 0 || !valid}
-        isLoading={isSaving}
-        onClick={onSave}
-        size="md"
-      >
-        {createMessage(saveButtonText)}
-      </Button>
+    <SettingsFooter data-testid="t--admin-settings-footer">
+      <Hint data-testid="t--admin-settings-footer-hint" renderAs="p">
+        {hint}
+      </Hint>
       <Button
         className="t--admin-settings-reset-button"
-        isDisabled={Object.keys(settings).length == 0}
+        isDisabled={!isDirty}
         kind="secondary"
         onClick={onClear}
         size="md"
       >
         {createMessage(RESET_BUTTON)}
       </Button>
-    </SettingsButtonWrapper>
+      <Button
+        className="t--admin-settings-save-button"
+        isDisabled={!isDirty || !valid}
+        isLoading={isSaving}
+        onClick={onSave}
+        size="md"
+      >
+        {createMessage(saveButtonText)}
+      </Button>
+    </SettingsFooter>
   );
 };
 

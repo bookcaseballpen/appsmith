@@ -91,11 +91,12 @@ public class GraphQLHintMessageUtils extends HintMessageUtils {
                     duplicateVariables.add(nextCursorVarName);
                 }
             } else {
+                // Fork: no Appsmith name in user-visible messages.
                 throw new AppsmithPluginException(
                         GraphQLPluginError.QUERY_EXECUTION_FAILED,
-                        "Appsmith server encountered an unexpected error: unrecognized pagination type: "
+                        "The server encountered an unexpected error: unrecognized pagination type: "
                                 + actionConfiguration.getPaginationType()
-                                + ". Please reach out to our customer support to resolve this.");
+                                + ". Please contact your administrator to resolve this.");
             }
 
             if (!isEmpty(duplicateVariables)) {

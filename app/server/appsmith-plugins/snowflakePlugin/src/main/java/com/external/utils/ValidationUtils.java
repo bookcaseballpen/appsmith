@@ -60,7 +60,8 @@ public class ValidationUtils {
     // Construct error message string.
     private static String getWarehouseDatabaseSchemaErrorMessage(String key) {
         String fieldName = StringUtils.capitalize(key.toLowerCase());
-        return "Appsmith could not find any valid " + key.toLowerCase() + " configured for this datasource. "
+        // Fork: no Appsmith name in user-visible messages.
+        return "Could not find any valid " + key.toLowerCase() + " configured for this datasource. "
                 + "Please provide a valid "
                 + key.toLowerCase() + " by editing the " + fieldName + " field in the "
                 + "datasource configuration page.";

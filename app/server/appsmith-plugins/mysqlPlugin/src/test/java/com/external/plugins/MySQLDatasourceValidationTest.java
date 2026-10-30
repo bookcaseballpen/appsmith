@@ -250,8 +250,8 @@ public class MySQLDatasourceValidationTest {
 
         StepVerifier.create(invalidsMono)
                 .assertNext(invalids -> {
-                    String expectedError = "Appsmith server has failed to fetch SSL configuration from datasource "
-                            + "configuration form. Please reach out to Appsmith customer support to resolve this.";
+                    String expectedError = "The server has failed to fetch SSL configuration from datasource "
+                            + "configuration form. Please contact your administrator to resolve this.";
                     assertTrue(invalids.stream().anyMatch(error -> expectedError.equals(error)));
                 })
                 .verifyComplete();

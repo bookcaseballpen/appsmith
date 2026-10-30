@@ -6,24 +6,25 @@ import lombok.NoArgsConstructor;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE) // To prevent instantiation
 public class S3ErrorMessages extends BasePluginErrorMessages {
+    // Fork: no Appsmith name in user-visible messages.
     public static final String FILE_CONTENT_FETCHING_ERROR_MSG =
-            "Appsmith server has encountered an unexpected error when fetching file "
-                    + "content from AWS S3 server. Please reach out to Appsmith customer support to resolve this.";
+            "The server has encountered an unexpected error when fetching file "
+                    + "content from AWS S3 server. Please contact your administrator to resolve this.";
 
     public static final String CONNECTIVITY_ERROR_MSG =
-            "Appsmith server has encountered an unexpected error when establishing "
-                    + "connection with AWS S3 server. Please reach out to Appsmith customer support to resolve this.";
+            "The server has encountered an unexpected error when establishing "
+                    + "connection with AWS S3 server. Please contact your administrator to resolve this.";
 
     public static final String EMPTY_BUCKET_ERROR_MSG =
-            "Appsmith has encountered an unexpected error when getting bucket name. Please reach out to "
-                    + "Appsmith customer support to resolve this.";
+            "The server has encountered an unexpected error when getting bucket name. Please contact "
+                    + "your administrator to resolve this.";
 
     public static final String NON_EXITED_BUCKET_ERROR_MSG =
-            "Appsmith has encountered an unexpected error when getting bucket name. The specified bucket does not exist in Google Cloud Storage. ";
+            "The server has encountered an unexpected error when getting bucket name. The specified bucket does not exist in Google Cloud Storage. ";
 
     public static final String EMPTY_PREFIX_ERROR_MSG =
-            "Appsmith has encountered an unexpected error when getting path prefix. Please reach out to "
-                    + "Appsmith customer support to resolve this.";
+            "The server has encountered an unexpected error when getting path prefix. Please contact "
+                    + "your administrator to resolve this.";
 
     public static final String UNPARSABLE_CONTENT_ERROR_MSG =
             "Unable to parse content. Expected to receive an object with `data` and `type`.";
@@ -33,8 +34,8 @@ public class S3ErrorMessages extends BasePluginErrorMessages {
                     + "'File data type: Base64/Text' field is selected 'Yes'.";
 
     public static final String SIGNED_URL_FETCHING_ERROR_MSG =
-            "Appsmith has encountered an unexpected error while fetching url from AmazonS3 after file "
-                    + "creation. Please reach out to Appsmith customer support to resolve this.";
+            "The server has encountered an unexpected error while fetching url from AmazonS3 after file "
+                    + "creation. Please contact your administrator to resolve this.";
 
     public static final String MANDATORY_FIELD_MISSING_ERROR_MSG =
             "At least one of the mandatory fields in S3 query creation form is empty - 'Action'/"
@@ -64,24 +65,24 @@ public class S3ErrorMessages extends BasePluginErrorMessages {
                     + "duration supported by Amazon S3 is 7 days i.e. 10080 minutes.";
 
     public static final String ACTION_LIST_OF_FILE_FETCHING_ERROR_MSG =
-            "Appsmith server has encountered an unexpected error when getting "
-                    + "list of files from AWS S3 server. Please reach out to Appsmith customer "
-                    + "support to resolve this.";
+            "The server has encountered an unexpected error when getting "
+                    + "list of files from AWS S3 server. Please contact your administrator "
+                    + "to resolve this.";
 
     public static final String UNSUPPORTED_ACTION_ERROR_MSG =
             "It seems that the query has requested an unsupported action: %s"
-                    + ". Please reach out to Appsmith customer support to resolve this.";
+                    + ". Please contact your administrator to resolve this.";
 
     public static final String LIST_OF_BUCKET_FETCHING_ERROR_MSG =
-            "Appsmith server has failed to fetch list of buckets from database. Please check if \" +\n"
+            "The server has failed to fetch list of buckets from database. Please check if \" +\n"
                     + "            \"the database credentials are valid and/or you have the required permissions.";
 
-    public static final String S3_SERVICE_PROVIDER_IDENTIFICATION_ERROR_MSG = "Appsmith S3 plugin service has "
-            + "failed to identify the S3 service provider type. Please reach out to Appsmith customer support"
+    public static final String S3_SERVICE_PROVIDER_IDENTIFICATION_ERROR_MSG = "The S3 plugin has "
+            + "failed to identify the S3 service provider type. Please contact your administrator"
             + " to resolve this.";
 
     public static final String AWS_CREDENTIALS_PARSING_ERROR_MSG =
-            "Appsmith server has encountered an error when parsing AWS credentials from datasource.";
+            "The server has encountered an error when parsing AWS credentials from datasource.";
 
     public static final String INCORRECT_S3_ENDPOINT_URL_ERROR_MSG = "Your S3 endpoint"
             + " URL seems to be incorrect for the selected S3 service provider. Please check your endpoint URL "
@@ -95,11 +96,11 @@ public class S3ErrorMessages extends BasePluginErrorMessages {
     public static final String FILE_CANNOT_BE_DELETED_ERROR_MSG = "One or more files could not be deleted.";
 
     public static final String S3_DRIVER_LOADING_ERROR_MSG =
-            "Appsmith server has failed to load AWS S3 driver class. Please reach out to Appsmith "
-                    + "customer support to resolve this.";
+            "The server has failed to load AWS S3 driver class. Please contact your administrator "
+                    + "to resolve this.";
 
     public static final String LIST_OF_FILE_PARSING_ERROR_MSG =
-            "Appsmith server failed to parse the list of files. Please provide the list of files in the "
+            "The server failed to parse the list of files. Please provide the list of files in the "
                     + "correct format e.g. [\"file1\", \"file2\"].";
 
     public static final String QUERY_EXECUTION_FAILED_ERROR_MSG =
@@ -125,8 +126,8 @@ public class S3ErrorMessages extends BasePluginErrorMessages {
                     + "Key.";
 
     public static final String DS_S3_SERVICE_PROVIDER_PROPERTIES_FETCHING_ERROR_MSG =
-            "Appsmith has failed to fetch the 'S3 service provider' field properties. Please "
-                    + "reach out to Appsmith customer support to resolve this.";
+            "The server has failed to fetch the 'S3 service provider' field properties. Please "
+                    + "contact your administrator to resolve this.";
 
     public static final String DS_MANDATORY_PARAMETER_ENDPOINT_URL_MISSING_ERROR_MSG =
             "Required parameter 'Endpoint URL' is empty. Did you forget to edit the 'Endpoint"

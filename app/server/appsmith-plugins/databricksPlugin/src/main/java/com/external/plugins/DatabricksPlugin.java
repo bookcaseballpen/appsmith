@@ -278,9 +278,10 @@ public class DatabricksPlugin extends BasePlugin {
                                 String useCatalogQuery = "USE CATALOG " + catalog;
                                 statement.execute(useCatalogQuery);
                             } catch (SQLException e) {
+                                // Fork: no Appsmith name in user-visible messages.
                                 return Mono.error(new AppsmithPluginException(
                                         AppsmithPluginError.PLUGIN_EXECUTE_ARGUMENT_ERROR,
-                                        "The Appsmith server has failed to change the catalog.",
+                                        "The server has failed to change the catalog.",
                                         e.getMessage()));
                             }
 
@@ -297,7 +298,7 @@ public class DatabricksPlugin extends BasePlugin {
                             } catch (SQLException e) {
                                 return Mono.error(new AppsmithPluginException(
                                         AppsmithPluginError.PLUGIN_EXECUTE_ARGUMENT_ERROR,
-                                        "The Appsmith server has failed to change the schema",
+                                        "The server has failed to change the schema",
                                         e.getMessage()));
                             }
                         }
@@ -373,7 +374,7 @@ public class DatabricksPlugin extends BasePlugin {
                         } catch (SQLException e) {
                             return Mono.error(new AppsmithPluginException(
                                     AppsmithPluginError.PLUGIN_GET_STRUCTURE_ERROR,
-                                    "The Appsmith server has failed to fetch the structure of your schema.",
+                                    "The server has failed to fetch the structure of your schema.",
                                     e.getMessage(),
                                     "SQLSTATE: " + e.getSQLState()));
                         }
