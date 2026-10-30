@@ -1,2 +1,4 @@
 node_modules/
 .test-tmp/
+# The repo root ignores lock files; this one is committed so installs are reproducible.
+!package-lock.json
