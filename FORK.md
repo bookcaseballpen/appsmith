@@ -90,7 +90,8 @@ package. Classes, not test methods:
 | 3 | `helpers` | 32 | 0 | 0 |
 | 4 | `solutions` | 18 | 1 | 0 |
 | 5 | `git` | 13 | 2 | 1 |
-| 6 | `services` | | | |
+| 6a | `services.ce` | 26 | 0 | 0 |
+| 6b | `services` (the rest) | | | |
 
 Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
 alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
