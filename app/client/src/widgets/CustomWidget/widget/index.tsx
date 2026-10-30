@@ -34,6 +34,8 @@ import { ReduxActionTypes } from "ee/constants/ReduxActionConstants";
 import { Colors } from "constants/Colors";
 import { DynamicHeight, type WidgetFeatures } from "utils/WidgetFeatures";
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
+import { PRODUCT_NAME } from "constants/Brand";
 
 const StyledLink = styled(Link)`
   display: inline-block;
@@ -92,14 +94,17 @@ class CustomWidget extends BaseWidget<CustomWidgetProps, WidgetState> {
               <div className="leading-5 mt-[10px]">
                 For the auto-height feature to function correctly, the custom
                 widget&apos;s container should not have a fixed height set.{" "}
-                <StyledLink
-                  kind="secondary"
-                  rel="noopener noreferrer"
-                  target="_blank"
-                  to={CUSTOM_WIDGET_HEIGHT_DOC_URL}
-                >
-                  Read more
-                </StyledLink>
+                {/* Fork: "Read more" links go to Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+                {!areAppsmithLinksHidden() && (
+                  <StyledLink
+                    kind="secondary"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    to={CUSTOM_WIDGET_HEIGHT_DOC_URL}
+                  >
+                    Read more
+                  </StyledLink>
+                )}
               </div>
             );
           } else {
@@ -178,14 +183,16 @@ class CustomWidget extends BaseWidget<CustomWidgetProps, WidgetState> {
             helperText: (
               <div className="leading-5" style={{ marginTop: "10px" }}>
                 The source editor lets you add your own HTML, CSS and JS.{" "}
-                <StyledLink
-                  kind="secondary"
-                  rel="noopener noreferrer"
-                  target="_blank"
-                  to={CUSTOM_WIDGET_DOC_URL}
-                >
-                  Read more
-                </StyledLink>
+                {!areAppsmithLinksHidden() && (
+                  <StyledLink
+                    kind="secondary"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    to={CUSTOM_WIDGET_DOC_URL}
+                  >
+                    Read more
+                  </StyledLink>
+                )}
               </div>
             ),
           },
@@ -198,15 +205,17 @@ class CustomWidget extends BaseWidget<CustomWidgetProps, WidgetState> {
             propertyName: "defaultModel",
             helperText: (
               <div className="leading-5" style={{ marginTop: "10px" }}>
-                This model exposes Appsmith data to the widget editor.{" "}
-                <StyledLink
-                  kind="secondary"
-                  rel="noopener noreferrer"
-                  target="_blank"
-                  to={CUSTOM_WIDGET_DEFAULT_MODEL_DOC_URL}
-                >
-                  Read more
-                </StyledLink>
+                This model exposes {PRODUCT_NAME} data to the widget editor.{" "}
+                {!areAppsmithLinksHidden() && (
+                  <StyledLink
+                    kind="secondary"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    to={CUSTOM_WIDGET_DEFAULT_MODEL_DOC_URL}
+                  >
+                    Read more
+                  </StyledLink>
+                )}
               </div>
             ),
             label: "",

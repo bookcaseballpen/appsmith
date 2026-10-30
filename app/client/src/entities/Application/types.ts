@@ -49,6 +49,8 @@ export interface ApplicationPayload {
   forkedFromTemplateTitle?: string;
   connectedWorkflowId?: string;
   isFavorited?: boolean;
+  // Fork: free-text tags for the home page catalog (normalised by the server).
+  tags?: string[];
   staticUrlSettings?: {
     enabled: boolean;
     uniqueSlug: string;

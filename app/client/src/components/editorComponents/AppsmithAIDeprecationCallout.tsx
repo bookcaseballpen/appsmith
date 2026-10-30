@@ -2,6 +2,7 @@ import React from "react";
 import styled from "styled-components";
 import { Callout } from "@appsmith/ads";
 import { DocsLink, openDoc } from "constants/DocumentationLinks";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import {
   APPSMITH_AI_DEPRECATION_LEARN_MORE,
   APPSMITH_AI_DEPRECATION_MESSAGE,
@@ -23,12 +24,17 @@ function AppsmithAIDeprecationCallout() {
     <CalloutWrapper data-testid="t--appsmith-ai-deprecation-callout">
       <Callout
         kind="warning"
-        links={[
-          {
-            children: createMessage(APPSMITH_AI_DEPRECATION_LEARN_MORE),
-            onClick: () => openDoc(DocsLink.APPSMITH_AI_DEPRECATION),
-          },
-        ]}
+        // Fork: "Learn more" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+        links={
+          areAppsmithLinksHidden()
+            ? undefined
+            : [
+                {
+                  children: createMessage(APPSMITH_AI_DEPRECATION_LEARN_MORE),
+                  onClick: () => openDoc(DocsLink.APPSMITH_AI_DEPRECATION),
+                },
+              ]
+        }
       >
         {createMessage(APPSMITH_AI_DEPRECATION_MESSAGE)}
       </Callout>

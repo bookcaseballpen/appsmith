@@ -3,11 +3,13 @@ package com.appsmith.server.exceptions;
 import com.appsmith.external.constants.ErrorReferenceDocUrl;
 import com.appsmith.external.exceptions.AppsmithErrorAction;
 import com.appsmith.external.models.ErrorType;
+import com.appsmith.server.constants.Brand;
 import lombok.Getter;
 import lombok.NonNull;
 
 import java.text.MessageFormat;
 
+// Fork: messages name the fork's product (Brand) and send users to their administrator instead of Appsmith support.
 @Getter
 public enum AppsmithError {
     // Ref syntax for message templates:
@@ -87,7 +89,7 @@ public enum AppsmithError {
     DEPRECATED_API(
             400,
             AppsmithErrorCode.DEPRECATED_API.getCode(),
-            "This API has been deprecated, please contact the Appsmith support for more details.",
+            "This API has been deprecated, please contact your administrator for more details.",
             AppsmithErrorAction.DEFAULT,
             "Deprecated API",
             ErrorType.BAD_REQUEST,
@@ -144,7 +146,7 @@ public enum AppsmithError {
     INVALID_ACTION_NAME(
             400,
             AppsmithErrorCode.INVALID_ACTION_NAME.getCode(),
-            "Appsmith expects all entities to follow Javascript variable naming conventions. "
+            Brand.PRODUCT_NAME + " expects all entities to follow Javascript variable naming conventions. "
                     + "It must be a single word containing alphabets, numbers, or \"_\". Any other special characters like hyphens (\"-\"), comma (\",\"), hash (\"#\") etc. "
                     + "are not allowed. "
                     + "Please change the name.",
@@ -171,7 +173,7 @@ public enum AppsmithError {
     PAGE_DOESNT_BELONG_TO_APPLICATION(
             400,
             AppsmithErrorCode.PAGE_DOESNT_BELONG_TO_APPLICATION.getCode(),
-            "Unexpected state. Page {0} does not seem belong to the application {1}. Please reach out to Appsmith customer support to resolve this.",
+            "Unexpected state. Page {0} does not seem belong to the application {1}. Please contact your administrator to resolve this.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Page doesn''t belong to this application",
             ErrorType.BAD_REQUEST,
@@ -181,7 +183,7 @@ public enum AppsmithError {
             AppsmithErrorCode.INVALID_DYNAMIC_BINDING_REFERENCE.getCode(),
             "  \"widgetType\" : \"{0}\"," + "  \"bindingPath\" : \"{3}\","
                     + "  \"currentKey\" : \"{7}\","
-                    + "  \"message\" : \"Binding path in the widget not found. Please reach out to Appsmith customer support to resolve this.\","
+                    + "  \"message\" : \"Binding path in the widget not found. Please contact your administrator to resolve this.\","
                     + "  \"widgetName\" : \"{1}\","
                     + "  \"widgetId\" : \"{2}\","
                     + "  \"creatorId\" : \"{4}\","
@@ -261,7 +263,7 @@ public enum AppsmithError {
     DUPLICATE_KEY(
             409,
             AppsmithErrorCode.DUPLICATE_KEY.getCode(),
-            "Duplicate key error: An object with the name {0} already exists. Please use a different name or reach out to Appsmith customer support to resolve this.",
+            "Duplicate key error: An object with the name {0} already exists. Please use a different name or contact your administrator to resolve this.",
             AppsmithErrorAction.DEFAULT,
             "Duplicate key",
             ErrorType.BAD_REQUEST,
@@ -358,7 +360,7 @@ public enum AppsmithError {
     INVALID_LOGIN_METHOD(
             401,
             AppsmithErrorCode.INVALID_LOGIN_METHOD.getCode(),
-            "Please use {0} authentication to login to Appsmith",
+            "Please use {0} authentication to login to " + Brand.PRODUCT_NAME,
             AppsmithErrorAction.DEFAULT,
             "Invalid login method",
             ErrorType.INTERNAL_ERROR,
@@ -400,7 +402,7 @@ public enum AppsmithError {
     DEFAULT_RESOURCES_UNAVAILABLE(
             400,
             AppsmithErrorCode.DEFAULT_RESOURCES_UNAVAILABLE.getCode(),
-            "Unexpected state. Default resources are unavailable for {0} with id {1}. Please reach out to Appsmith customer support to resolve this.",
+            "Unexpected state. Default resources are unavailable for {0} with id {1}. Please contact your administrator to resolve this.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Default resources not found",
             ErrorType.BAD_REQUEST,
@@ -587,7 +589,8 @@ public enum AppsmithError {
     SIGNUP_DISABLED(
             403,
             AppsmithErrorCode.SIGNUP_DISABLED.getCode(),
-            "Signup is restricted on this instance of Appsmith. Please contact the administrator to get an invite for user {0}.",
+            "Signup is restricted on this instance of " + Brand.PRODUCT_NAME
+                    + ". Please contact the administrator to get an invite for user {0}.",
             AppsmithErrorAction.DEFAULT,
             "Signup disabled",
             ErrorType.INTERNAL_ERROR,
@@ -635,8 +638,8 @@ public enum AppsmithError {
     UNKNOWN_ACTION_RESULT_DATA_TYPE(
             500,
             AppsmithErrorCode.UNKNOWN_ACTION_RESULT_DATA_TYPE.getCode(),
-            "Appsmith has encountered an unknown action result data type: {0}. "
-                    + "Please contact Appsmith customer support to resolve this.",
+            Brand.PRODUCT_NAME + " has encountered an unknown action result data type: {0}. "
+                    + "Please contact your administrator to resolve this.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Unexpected data type",
             ErrorType.BAD_REQUEST,
@@ -724,7 +727,7 @@ public enum AppsmithError {
     GIT_EXECUTION_TIMEOUT(
             504,
             AppsmithErrorCode.GIT_EXECUTION_TIMEOUT.getCode(),
-            "Git command execution exceeded the maximum allowed time, please contact Appsmith support for more details",
+            "Git command execution exceeded the maximum allowed time, please contact your administrator for more details",
             AppsmithErrorAction.DEFAULT,
             "Timeout in Git command execution",
             ErrorType.CONNECTIVITY_ERROR,
@@ -756,7 +759,7 @@ public enum AppsmithError {
     SSH_KEY_GENERATION_ERROR(
             500,
             AppsmithErrorCode.SSH_KEY_GENERATION_ERROR.getCode(),
-            "Failed to generate SSH keys, please contact Appsmith support for more details",
+            "Failed to generate SSH keys, please contact your administrator for more details",
             AppsmithErrorAction.DEFAULT,
             "Failed to generate SSH keys",
             ErrorType.GIT_CONFIGURATION_ERROR,
@@ -820,7 +823,7 @@ public enum AppsmithError {
     UNKNOWN_PLUGIN_REFERENCE(
             400,
             AppsmithErrorCode.UNKNOWN_PLUGIN_REFERENCE.getCode(),
-            "Unable to find the plugin {0}. Please reach out to Appsmith customer support to resolve this.",
+            "Unable to find the plugin {0}. Please contact your administrator to resolve this.",
             AppsmithErrorAction.DEFAULT,
             "Unknown plugin",
             ErrorType.CONFIGURATION_ERROR,
@@ -836,7 +839,7 @@ public enum AppsmithError {
     PUBLIC_APP_NO_PERMISSION_GROUP(
             500,
             AppsmithErrorCode.PUBLIC_APP_NO_PERMISSION_GROUP.getCode(),
-            "Invalid state. Public application does not have the required roles set for public access. Please reach out to Appsmith customer support to resolve this.",
+            "Invalid state. Public application does not have the required roles set for public access. Please contact your administrator to resolve this.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Required permission missing for public access",
             ErrorType.INTERNAL_ERROR,
@@ -860,7 +863,7 @@ public enum AppsmithError {
     SCHEMA_VERSION_NOT_FOUND_ERROR(
             500,
             AppsmithErrorCode.SCHEMA_VERSION_NOT_FOUND_ERROR.getCode(),
-            "Could not find mandatory instance schema version config. Please reach out to Appsmith customer support to resolve this.",
+            "Could not find mandatory instance schema version config. Please contact your administrator to resolve this.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Schema version not found",
             ErrorType.INTERNAL_ERROR,
@@ -876,7 +879,7 @@ public enum AppsmithError {
     SERVER_NOT_READY(
             500,
             AppsmithErrorCode.SERVER_NOT_READY.getCode(),
-            "Appsmith server is not ready. Please try again in some time.",
+            Brand.PRODUCT_NAME + " server is not ready. Please try again in some time.",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Server not ready",
             ErrorType.INTERNAL_ERROR,
@@ -916,7 +919,7 @@ public enum AppsmithError {
     DUPLICATE_DATASOURCE_CONFIGURATION(
             409,
             AppsmithErrorCode.DUPLICATE_DATASOURCE_CONFIGURATION.getCode(),
-            "Duplicate Configuration error: Configuration for datasource id: {0} & environment id: {1} already exists. Please reach out to Appsmith customer support to resolve this.",
+            "Duplicate Configuration error: Configuration for datasource id: {0} & environment id: {1} already exists. Please contact your administrator to resolve this.",
             AppsmithErrorAction.DEFAULT,
             "Duplicate Configuration",
             ErrorType.BAD_REQUEST,
@@ -995,7 +998,7 @@ public enum AppsmithError {
     INVALID_METHOD_LEVEL_ANNOTATION_USAGE(
             403,
             AppsmithErrorCode.INVALID_METHOD_LEVEL_ANNOTATION_USAGE.getCode(),
-            "Invalid usage for {0} annotation from class {1} on method {2}. {3}. Please contact Appsmith support for more details!",
+            "Invalid usage for {0} annotation from class {1} on method {2}. {3}. Please contact your administrator for more details!",
             AppsmithErrorAction.LOG_EXTERNALLY,
             "Invalid usage for custom annotation",
             ErrorType.CONFIGURATION_ERROR,

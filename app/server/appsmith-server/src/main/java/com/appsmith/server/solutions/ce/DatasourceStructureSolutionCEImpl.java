@@ -12,6 +12,7 @@ import com.appsmith.external.models.DatasourceStorageStructure;
 import com.appsmith.external.models.DatasourceStructure;
 import com.appsmith.external.models.DatasourceStructure.Template;
 import com.appsmith.external.plugins.PluginExecutor;
+import com.appsmith.server.constants.Brand;
 import com.appsmith.server.constants.FieldName;
 import com.appsmith.server.datasources.base.DatasourceService;
 import com.appsmith.server.datasourcestorages.base.DatasourceStorageService;
@@ -127,15 +128,16 @@ public class DatasourceStructureSolutionCEImpl implements DatasourceStructureSol
                 .timeout(Duration.ofSeconds(GET_STRUCTURE_TIMEOUT_SECONDS))
                 .onErrorMap(TimeoutException.class, error -> new AppsmithPluginException(
                                 AppsmithPluginError.PLUGIN_GET_STRUCTURE_TIMEOUT_ERROR,
-                                "Appsmith server timed out when fetching structure. Please reach out to appsmith "
-                                        + "customer support to resolve this.")
+                                // Fork: the fork's product name (Brand), no Appsmith support.
+                                Brand.PRODUCT_NAME + " server timed out when fetching structure. Please contact your "
+                                        + "administrator to resolve this.")
                         .hideStackTraceInLogs())
                 .onErrorMap(
                         StaleConnectionException.class,
                         error -> new AppsmithPluginException(
                                 AppsmithPluginError.PLUGIN_ERROR,
-                                "Appsmith server found a secondary stale connection. Please reach out to appsmith "
-                                        + "customer support to resolve this."))
+                                Brand.PRODUCT_NAME + " server found a secondary stale connection. Please contact your "
+                                        + "administrator to resolve this."))
                 .onErrorMap(
                         IllegalArgumentException.class,
                         error -> new AppsmithPluginException(
@@ -253,8 +255,8 @@ public class DatasourceStructureSolutionCEImpl implements DatasourceStructureSol
                         StaleConnectionException.class,
                         error -> new AppsmithPluginException(
                                 AppsmithPluginError.PLUGIN_ERROR,
-                                "Appsmith server found a secondary stale connection. Please reach out to appsmith "
-                                        + "customer support to resolve this."))
+                                Brand.PRODUCT_NAME + " server found a secondary stale connection. Please contact your "
+                                        + "administrator to resolve this."))
                 .onErrorMap(e -> {
                     log.error("In the datasourceStorage fetching preview data error mode.", e);
                     if (!(e instanceof AppsmithPluginException)) {

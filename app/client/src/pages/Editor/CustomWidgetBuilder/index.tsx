@@ -13,6 +13,7 @@ import useHorizontalResize from "utils/hooks/useHorizontalResize";
 import styled from "styled-components";
 import classNames from "classnames";
 import useLocalStorageState from "utils/hooks/useLocalStorageState";
+import { PRODUCT_NAME } from "constants/Brand";
 
 export const CustomWidgetBuilderContext = React.createContext<
   Partial<CustomWidgetBuilderContextType>
@@ -67,7 +68,8 @@ export default function CustomWidgetBuilder() {
     <CustomWidgetBuilderContext.Provider value={context}>
       <Helmet>
         <meta charSet="utf-8" />
-        <title>{`${context.name} | Builder | Appsmith`}</title>
+        {/* Fork: the fork's product name (constants/Brand.ts). */}
+        <title>{`${context.name} | Builder | ${PRODUCT_NAME}`}</title>
       </Helmet>
       <Header />
       {loading ? (

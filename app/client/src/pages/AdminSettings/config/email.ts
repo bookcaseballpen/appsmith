@@ -1,5 +1,6 @@
 import { EMAIL_SETUP_DOC } from "constants/ThirdPartyConstants";
 import { isEmail } from "utils/formhelpers";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import type { Dispatch } from "react";
 import type { ReduxAction } from "actions/ReduxActionTypes";
 import { ReduxActionTypes } from "ee/constants/ReduxActionConstants";
@@ -30,6 +31,8 @@ export const config: AdminConfigType = {
       controlType: SettingTypes.CALLOUT,
       label: "How to configure?",
       url: EMAIL_SETUP_DOC,
+      // Fork: only a link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+      isVisible: () => !areAppsmithLinksHidden(),
     },
     {
       id: "APPSMITH_MAIL_WARNING",

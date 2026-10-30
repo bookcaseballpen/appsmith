@@ -1,4 +1,5 @@
 import { createReducer } from "utils/ReducerUtils";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 import type { ReduxAction } from "actions/ReduxActionTypes";
 import {
   ReduxActionTypes,
@@ -68,7 +69,14 @@ const pluginsReducer = createReducer(initialState, {
     return {
       ...state,
       loading: false,
-      list: action.payload,
+      // Fork: plugins store Appsmith docs links; drop them so no "Documentation" button opens them
+      // (ce/utils/forkHiddenFeatures.ts).
+      list: action.payload.map((plugin) =>
+        withoutAppsmithLink(plugin.documentationLink) ===
+        plugin.documentationLink
+          ? plugin
+          : { ...plugin, documentationLink: undefined },
+      ),
     };
   },
   [ReduxActionErrorTypes.FETCH_PLUGINS_ERROR]: (state: PluginDataState) => {

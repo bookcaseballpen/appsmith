@@ -5,6 +5,7 @@ import { NO_SEARCH_DATA_TEXT } from "ee/constants/messages";
 import { getTypographyByKey } from "@appsmith/ads-old";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import { importSvg } from "@appsmith/ads-old";
 import { DISCORD_URL } from "constants/ThirdPartyConstants";
 
@@ -55,7 +56,8 @@ function ResultsNotFound() {
     <Container>
       <img alt="No data" src={NoSearchDataImage} />
       <div className="no-data-title">{NO_SEARCH_DATA_TEXT()}</div>
-      {!isAirgappedInstance && (
+      {/* Fork: no Discord link (ce/utils/forkHiddenFeatures.ts). */}
+      {!isAirgappedInstance && !areAppsmithLinksHidden() && (
         <span className="discord">
           🤖 Join our{"  "}
           <span

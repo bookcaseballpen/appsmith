@@ -86,6 +86,8 @@ import {
   normalizeAppDescription,
 } from "utils/appDescription";
 import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+import AppTagsSetting from "ee/pages/AppSettings/AppTagsSetting";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 const IconSelectorWrapper = styled.div`
   position: relative;
@@ -608,6 +610,9 @@ function GeneralSettings() {
         />
       </div>
 
+      {/* Fork: tags for the home page catalog; editable while the editor is read-only. */}
+      <AppTagsSetting />
+
       <Text kind="action-m">
         {createMessage(GENERAL_SETTINGS_APP_ICON_LABEL)}
       </Text>
@@ -667,15 +672,18 @@ function GeneralSettings() {
           >
             <Flex alignItems="center" gap="spaces-2">
               <Text kind="action-m">Static URL</Text>
-              <Tooltip content={createMessage(STATIC_URL_DOCS_LINK_TEXT)}>
-                <Button
-                  isIconButton
-                  kind="tertiary"
-                  onClick={openStaticUrlDocs}
-                  size="sm"
-                  startIcon="question-line"
-                />
-              </Tooltip>
+              {/* Fork: the "?" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+              {!areAppsmithLinksHidden() && (
+                <Tooltip content={createMessage(STATIC_URL_DOCS_LINK_TEXT)}>
+                  <Button
+                    isIconButton
+                    kind="tertiary"
+                    onClick={openStaticUrlDocs}
+                    size="sm"
+                    startIcon="question-line"
+                  />
+                </Tooltip>
+              )}
             </Flex>
           </Switch>
         </div>

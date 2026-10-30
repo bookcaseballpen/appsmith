@@ -17,7 +17,7 @@ import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
 import { getSelectedAppTheme } from "selectors/appThemingSelectors";
 import { NAVIGATION_SETTINGS } from "constants/AppConstants";
 import { get } from "lodash";
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import BrandLogo from "components/BrandLogo";
 import { getCurrentApplication } from "ee/selectors/applicationSelectors";
 
 const StyledPageHeader = styled(StyledHeader)`
@@ -85,10 +85,11 @@ export function ErrorPageHeader(props: ErrorPageHeaderProps) {
             }}
             to={APPLICATIONS_URL}
           >
-            <img
-              alt="Logo"
-              className="h-6"
-              src={getAssetUrl(organizationConfig.brandLogoUrl)}
+            {/* Fork: the fork's wordmark with the product name. */}
+            <BrandLogo
+              height={20}
+              logoUrl={organizationConfig.brandLogoUrl}
+              onDark={false}
             />
           </Link>
         )}

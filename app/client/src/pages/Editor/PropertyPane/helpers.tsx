@@ -6,6 +6,7 @@ import type {
   PropertyPaneSectionConfig,
 } from "constants/PropertyControlConstants";
 import { Callout } from "@appsmith/ads";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 import { debounce } from "lodash";
 import React, { useCallback, useState } from "react";
 import { layoutSystemBasedPropertyFilter } from "sagas/WidgetEnhancementHelpers";
@@ -118,12 +119,15 @@ export function renderWidgetCallouts(props: WidgetProps): JSX.Element[] {
     const callouts: WidgetCallout[] = getEditorCallouts(props);
 
     return callouts.map((callout, index) => {
-      const links = callout.links?.map((link) => {
-        return {
-          children: link.text,
-          to: link.url,
-        };
-      });
+      // Fork: no links to Appsmith's docs or blog (ce/utils/forkHiddenFeatures.ts).
+      const links = callout.links
+        ?.filter((link) => withoutAppsmithLink(link.url))
+        .map((link) => {
+          return {
+            children: link.text,
+            to: link.url,
+          };
+        });
 
       return (
         <Callout

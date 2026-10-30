@@ -1,4 +1,4 @@
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import BrandLogo from "components/BrandLogo";
 import { APPLICATIONS_URL, AUTH_LOGIN_URL } from "constants/routes";
 import { ANONYMOUS_USERNAME } from "constants/userConstants";
 import { Button } from "@appsmith/ads";
@@ -37,6 +37,7 @@ import Fuse from "fuse.js";
 import { useOutsideClick } from "ee/hooks";
 import type { PageDefaultMeta } from "ee/api/ApplicationApi";
 import log from "loglevel";
+import { isWorkspaceUiHidden } from "ee/utils/forkHiddenFeatures";
 
 const HeaderSection = styled.div`
   display: flex;
@@ -245,16 +246,19 @@ function EntitySearchBar(props: any) {
         <HeaderSection>
           {organizationConfig.brandLogoUrl && (
             <Link className="t--appsmith-logo" to={APPLICATIONS_URL}>
-              <img
-                alt="Logo"
-                className="h-6"
-                src={getAssetUrl(organizationConfig.brandLogoUrl)}
+              {/* Fork: the fork's wordmark with the product name. */}
+              <BrandLogo
+                height={20}
+                logoUrl={organizationConfig.brandLogoUrl}
+                onDark={false}
               />
             </Link>
           )}
         </HeaderSection>
       </div>
+      {/* Fork: the home page catalog has its own server-side search (ee/pages/Applications/Catalog). */}
       {!isCreateNewAppFlow &&
+        !isWorkspaceUiHidden() &&
         (isMobile ? (
           <Button
             isIconButton

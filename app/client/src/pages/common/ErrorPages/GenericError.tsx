@@ -10,25 +10,29 @@ import {
 import { flushErrors } from "actions/errorActions";
 import { useDispatch } from "react-redux";
 import { DISCORD_URL } from "constants/ThirdPartyConstants";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 function GenericError(props: { errorCode?: string }) {
   const dispatch = useDispatch();
 
   return (
     <Page
+      // Fork: no "Contact us on discord" (ce/utils/forkHiddenFeatures.ts).
       cta={
-        <Button
-          className="button-position"
-          endIcon="right-arrow"
-          kind="primary"
-          onClick={() => {
-            dispatch(flushErrors());
-            window.open(DISCORD_URL, "_blank");
-          }}
-          size="md"
-        >
-          Contact us on discord
-        </Button>
+        !areAppsmithLinksHidden() && (
+          <Button
+            className="button-position"
+            endIcon="right-arrow"
+            kind="primary"
+            onClick={() => {
+              dispatch(flushErrors());
+              window.open(DISCORD_URL, "_blank");
+            }}
+            size="md"
+          >
+            Contact us on discord
+          </Button>
+        )
       }
       description={createMessage(PAGE_CLIENT_ERROR_DESCRIPTION)}
       errorCode={props.errorCode}

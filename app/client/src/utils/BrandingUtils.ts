@@ -9,8 +9,7 @@ import {
   ADMIN_BRANDING_FAVICON_DIMENSION_ERROR,
 } from "ee/constants/messages";
 import { toast } from "@appsmith/ads";
-import { ASSETS_CDN_URL } from "constants/ThirdPartyConstants";
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import { BRAND_FAVICON_URL, BRAND_LOGO_URL } from "constants/Brand";
 import { LightModeTheme } from "@appsmith/wds-theming";
 
 const FAVICON_MAX_WIDTH = 48;
@@ -22,12 +21,9 @@ export const APPSMITH_BRAND_PRIMARY_COLOR =
     "--ads-v2-color-bg-brand",
   ) || DEFAULT_BRANDING_PRIMARY_COLOR;
 export const APPSMITH_BRAND_BG_COLOR = "#F1F5F9";
-export const APPSMITH_BRAND_FAVICON_URL = getAssetUrl(
-  `${ASSETS_CDN_URL}/appsmith-favicon-orange.ico`,
-);
-export const APPSMITH_BRAND_LOGO_URL = getAssetUrl(
-  `${ASSETS_CDN_URL}/appsmith-logo-no-margin.png`,
-);
+// Fork: the default logo and favicon are the fork's brand files (constants/Brand.ts).
+export const APPSMITH_BRAND_FAVICON_URL = BRAND_FAVICON_URL;
+export const APPSMITH_BRAND_LOGO_URL = BRAND_LOGO_URL;
 
 /**
  * create brand colors from primary color

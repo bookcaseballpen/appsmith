@@ -5,6 +5,7 @@ import { ternDocsInfo } from "ee/utils/autocomplete/EntityDefinitions";
 import type { Completion, TernCompletionResult } from "./CodemirrorTernService";
 import { CodeEditorColors } from "components/editorComponents/CodeEditor/constants";
 import { Link } from "@appsmith/ads";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 
 export function renderTernTooltipContent(
   element: HTMLElement,
@@ -18,9 +19,11 @@ export function TernDocToolTip(props: {
 }) {
   const { completion } = props;
   const {
-    data: { doc, url },
+    data: { doc },
     displayText,
   } = completion;
+  // Fork: no [docs] link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+  const url = withoutAppsmithLink(completion.data.url);
 
   if (!doc || !displayText) return null;
 

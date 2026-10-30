@@ -80,6 +80,7 @@ import type { ActiveField } from "reducers/uiReducers/activeFieldEditorReducer";
 import type { SelectedWorkspaceReduxState } from "ee/reducers/uiReducers/selectedWorkspaceReducer";
 import type { ConsolidatedPageLoadState } from "reducers/uiReducers/consolidatedPageLoadReducer";
 import type { CopyEntityToAppReduxState } from "reducers/uiReducers/copyEntityToAppReducer";
+import type { CatalogReduxState } from "ee/reducers/uiReducers/catalogReducer";
 import type { BuildingBlocksReduxState } from "reducers/uiReducers/buildingBlockReducer";
 import type {
   GitArtifactRootReduxState,
@@ -156,6 +157,8 @@ export interface AppState {
     pluginActionEditor: PluginActionEditorState;
     windowDimensions: WindowDimensionsState;
     copyEntityToApp: CopyEntityToAppReduxState;
+    // Fork: the home page catalog.
+    catalog: CatalogReduxState;
   };
   entities: {
     canvasWidgetsStructure: CanvasWidgetStructure;

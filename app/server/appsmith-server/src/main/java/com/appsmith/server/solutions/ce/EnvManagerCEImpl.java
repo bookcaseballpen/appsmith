@@ -5,6 +5,7 @@ import com.appsmith.external.helpers.AppsmithBeanUtils;
 import com.appsmith.server.configurations.CommonConfig;
 import com.appsmith.server.configurations.EmailConfig;
 import com.appsmith.server.configurations.GoogleRecaptchaConfig;
+import com.appsmith.server.constants.Brand;
 import com.appsmith.server.constants.EnvVariables;
 import com.appsmith.server.constants.FieldName;
 import com.appsmith.server.domains.Organization;
@@ -1116,9 +1117,11 @@ public class EnvManagerCEImpl implements EnvManagerCE {
                     SimpleMailMessage message = new SimpleMailMessage();
                     message.setFrom(requestDTO.getFromEmail());
                     message.setTo(user.getEmail());
-                    message.setSubject("Test email from Appsmith");
+                    // Fork: the fork's product name (Brand).
+                    message.setSubject("Test email from " + Brand.PRODUCT_NAME);
                     message.setText(
-                            "This is a test email from Appsmith, initiated from Admin Settings page. If you are seeing this, your email configuration is working!\n");
+                            "This is a test email from " + Brand.PRODUCT_NAME
+                                    + ", initiated from Admin Settings page. If you are seeing this, your email configuration is working!\n");
 
                     try {
                         mailSender.testConnection();

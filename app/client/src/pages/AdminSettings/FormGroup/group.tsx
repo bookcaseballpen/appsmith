@@ -10,6 +10,7 @@ import { getFormValues } from "redux-form";
 import { SETTINGS_FORM_NAME } from "ee/constants/forms";
 import { useDispatch, useSelector } from "react-redux";
 import { createMessage, LEARN_MORE } from "ee/constants/messages";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 import { Callout, Text } from "@appsmith/ads";
 import CopyUrlForm from "./CopyUrlForm";
 import Accordion from "./Accordion";
@@ -189,11 +190,14 @@ export default function Group({
                     <Callout
                       kind={setting?.calloutType || "info"}
                       links={
-                        setting.url || setting.action
+                        // Fork: no "Learn more" to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+                        withoutAppsmithLink(setting.url) || setting.action
                           ? [
                               {
                                 children: createMessage(LEARN_MORE),
-                                ...(setting.url && { to: setting.url }),
+                                ...(withoutAppsmithLink(setting.url) && {
+                                  to: setting.url,
+                                }),
                                 ...(setting.action && {
                                   onClick: () => {
                                     if (setting.action) {

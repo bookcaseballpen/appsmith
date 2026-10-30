@@ -59,6 +59,10 @@ jest.mock("ee/pages/Applications", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   NoAppsFound: ({ children }: any) => <div>{children}</div>,
 }));
+jest.mock("ee/pages/Applications/Catalog/CatalogSection", () => ({
+  __esModule: true,
+  default: () => <div>app-catalog</div>,
+}));
 jest.mock("pages/Applications/ApplicationCard", () => ({
   __esModule: true,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,7 +120,7 @@ describe("Home page (fork: hidden workspace, templates and Git)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("lists the apps with the create menu, but no workspace menu, members, templates or Git import", () => {
+  it("shows the app catalog with the create menu, but no workspace menu, members, templates or Git import", () => {
     renderWithStore(
       <ApplicationsSection
         activeWorkspaceId={workspace.id}
@@ -129,7 +133,9 @@ describe("Home page (fork: hidden workspace, templates and Git)", () => {
       />,
     );
 
-    expect(screen.getByText("Sales report")).toBeInTheDocument();
+    // The catalog (searched and paged on the server) replaces the workspace's app list.
+    expect(screen.getByText("app-catalog")).toBeInTheDocument();
+    expect(screen.queryByText("Sales report")).not.toBeInTheDocument();
     expect(screen.getByText("create-new-menu")).toBeInTheDocument();
     expect(screen.queryByText("workspace-menu")).not.toBeInTheDocument();
     expect(screen.queryByText("workspace-members")).not.toBeInTheDocument();

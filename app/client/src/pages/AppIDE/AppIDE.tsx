@@ -39,6 +39,7 @@ import { IDE_HEADER_HEIGHT } from "@appsmith/ads";
 import { GitApplicationContextProvider } from "git-artifact-helpers/application/components";
 import { AppIDEModals } from "ee/pages/AppIDE/components/AppIDEModals";
 import { updateWindowDimensions } from "actions/windowActions";
+import { PRODUCT_NAME } from "constants/Brand";
 
 interface EditorProps {
   currentApplicationId?: string;
@@ -238,8 +239,9 @@ class Editor extends Component<Props> {
         <div>
           <Helmet>
             <meta charSet="utf-8" />
+            {/* Fork: the fork's product name (constants/Brand.ts). */}
             <title>
-              {`${this.props.currentApplicationName} | Editor | Appsmith`}
+              {`${this.props.currentApplicationName} | Editor | ${PRODUCT_NAME}`}
             </title>
           </Helmet>
           <GitApplicationContextProvider>

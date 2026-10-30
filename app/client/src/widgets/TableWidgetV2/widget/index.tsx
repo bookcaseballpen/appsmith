@@ -448,7 +448,8 @@ class TableWidgetV2 extends BaseWidget<TableWidgetProps, WidgetState> {
     return (widget: TableWidgetProps, extraDefsToDefine?: ExtraDef) => {
       const config: AutocompletionDefinitions = {
         "!doc":
-          "The Table is the hero widget of Appsmith. You can display data from an API in a table, trigger an action when a user selects a row and even work with large paginated data sets",
+          // Fork: no Appsmith name in the autocomplete description.
+          "The Table is the hero widget of CreativeAppBuilder. You can display data from an API in a table, trigger an action when a user selects a row and even work with large paginated data sets",
         "!url": "https://docs.appsmith.com/widget-reference/table",
         selectedRow: generateTypeDef(widget.selectedRow, extraDefsToDefine),
         selectedRows: generateTypeDef(widget.selectedRows, extraDefsToDefine),

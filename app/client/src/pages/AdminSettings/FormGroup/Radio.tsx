@@ -19,8 +19,8 @@ type RadioOption = {
   tooltip?: {
     icon: string;
     text: string;
-    linkText: string;
-    link: string;
+    linkText?: string;
+    link?: string;
   };
   label: string;
 } & RadioProps;
@@ -166,14 +166,17 @@ function RadioFieldWrapper(
                         >
                           {item.tooltip.text}
                         </Text>
-                        <Link
-                          endIcon="arrow-right-line"
-                          kind="primary"
-                          target="_blank"
-                          to={item.tooltip.link}
-                        >
-                          {item.tooltip.linkText}
-                        </Link>
+                        {/* Fork: the link is optional (no link to Appsmith's docs). */}
+                        {item.tooltip.link && (
+                          <Link
+                            endIcon="arrow-right-line"
+                            kind="primary"
+                            target="_blank"
+                            to={item.tooltip.link}
+                          >
+                            {item.tooltip.linkText}
+                          </Link>
+                        )}
                       </TooltipContent>
                     }
                     interactionKind="hover"

@@ -1,5 +1,6 @@
 package com.appsmith.server.helpers.ce;
 
+import com.appsmith.server.constants.Appsmith;
 import com.appsmith.server.domains.OrganizationConfiguration;
 import com.appsmith.server.services.OrganizationService;
 import lombok.AllArgsConstructor;
@@ -29,8 +30,11 @@ public class EmailServiceHelperCEImpl implements EmailServiceHelperCE {
     public Mono<Map<String, String>> enrichWithBrandParams(Map<String, String> params, String origin) {
         return organizationService.getOrganizationConfiguration().map(organization -> {
             final OrganizationConfiguration organizationConfiguration = organization.getOrganizationConfiguration();
+            // Fork: the fork's product name when no instance name is set.
             params.put(
-                    INSTANCE_NAME, StringUtils.defaultIfEmpty(organizationConfiguration.getInstanceName(), "Appsmith"));
+                    INSTANCE_NAME,
+                    StringUtils.defaultIfEmpty(
+                            organizationConfiguration.getInstanceName(), Appsmith.DEFAULT_INSTANCE_NAME));
             return params;
         });
     }

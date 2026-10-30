@@ -6,6 +6,7 @@ import type { Message, SourceEntity } from "entities/AppsmithConsole";
 import { PropertyEvaluationErrorType } from "utils/DynamicBindingUtils";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { isPylonChatAvailable } from "utils/bootPylon";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import { getAppsmithConfigs } from "ee/configs";
 import { getCurrentUser } from "selectors/usersSelectors";
 import {
@@ -128,14 +129,16 @@ const ContextualMenu = ({
   const user = useSelector(getCurrentUser);
   const isPylonConsentSatisfied =
     cloudHosting || Boolean(user?.isIntercomConsentGiven);
-  const visibleOptions = getOptions(
-    props.error.type,
-    props.error.subType,
-  ).filter(
-    (e) =>
-      e !== CONTEXT_MENU_ACTIONS.CHAT_WIDGET ||
-      (isPylonChatAvailable() && isPylonConsentSatisfied),
-  );
+  const visibleOptions = getOptions(props.error.type, props.error.subType)
+    .filter(
+      (e) =>
+        e !== CONTEXT_MENU_ACTIONS.CHAT_WIDGET ||
+        (isPylonChatAvailable() && isPylonConsentSatisfied),
+    )
+    // Fork: "Open documentation" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+    .filter(
+      (e) => e !== CONTEXT_MENU_ACTIONS.DOCS || !areAppsmithLinksHidden(),
+    );
 
   if (!visibleOptions.length) {
     return props.children;

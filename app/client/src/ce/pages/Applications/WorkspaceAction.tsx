@@ -23,6 +23,8 @@ import { getIsFetchingApplications } from "ee/selectors/selectedWorkspaceSelecto
 import { hasCreateNewAppPermission } from "ee/utils/permissionHelpers";
 import { isAirgapped } from "ee/utils/airgapHelpers";
 import { areTemplatesHidden } from "ee/utils/forkHiddenFeatures";
+import { createsAppsRole, getInstanceRole } from "ee/utils/instanceRoles";
+import { getCurrentUser } from "selectors/usersSelectors";
 
 export interface WorkspaceActionProps {
   workspace: Workspace;
@@ -52,6 +54,7 @@ function WorkspaceAction({
     useSelector(getIsCreatingApplicationByWorkspaceId(workspace.id)),
   );
   const isAirgappedInstance = isAirgapped();
+  const role = getInstanceRole(useSelector(getCurrentUser));
 
   const openActionMenu = useCallback(() => {
     setIsActionMenuOpen(true);
@@ -63,8 +66,11 @@ function WorkspaceAction({
 
   if (!workspace) return null;
 
+  // Fork: only Devs and Admins create or import apps, whatever the workspace permissions say.
   const hasCreateNewApplicationPermission =
-    hasCreateNewAppPermission(workspace.userPermissions) && !isMobile;
+    hasCreateNewAppPermission(workspace.userPermissions) &&
+    createsAppsRole(role) &&
+    !isMobile;
 
   if (!hasCreateNewApplicationPermission || isFetchingApplications) return null;
 

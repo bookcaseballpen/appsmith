@@ -13,6 +13,7 @@ import { selectFeatureFlags } from "ee/selectors/featureFlagsSelectors";
 import store from "store";
 import { isMultiOrgFFEnabled } from "ee/utils/planHelpers";
 import { isAirgapped } from "ee/utils/airgapHelpers";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 const featureFlags = selectFeatureFlags(store.getState());
 const isMultiOrgEnabled = isMultiOrgFFEnabled(featureFlags);
@@ -38,6 +39,8 @@ export const APPSMITH_HIDE_WATERMARK_SETTING: Setting = {
   isFeatureEnabled: false,
   isDisabled: () => true,
   textSuffix: <BrandingBadge />,
+  // Fork: the app viewer never shows the badge (ce/utils/forkHiddenFeatures.ts).
+  isVisible: () => !areAppsmithLinksHidden(),
 };
 
 export const config: AdminConfigType = {

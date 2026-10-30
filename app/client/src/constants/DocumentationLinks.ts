@@ -1,4 +1,5 @@
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 
 export enum DocsLink {
   CAPTURE_DATA = "CAPTURE_DATA",
@@ -36,5 +37,9 @@ export const openDoc = (type: DocsLink, link?: string, subType?: string) => {
   }
 
   AnalyticsUtil.logEvent("OPEN_DOCS", { source: type, queryType: subType });
+
+  // Fork: never opens Appsmith's docs; callers hide their buttons too (ce/utils/forkHiddenFeatures.ts).
+  if (!withoutAppsmithLink(linkToOpen)) return;
+
   window.open(linkToOpen, "_blank");
 };

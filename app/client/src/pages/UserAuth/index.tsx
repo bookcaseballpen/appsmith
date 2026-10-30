@@ -15,7 +15,7 @@ import VerifyUser from "./VerifyUser";
 import VerificationError from "./VerificationError";
 import FooterLinks from "./FooterLinks";
 import { useIsMobileDevice } from "utils/hooks/useDeviceDetect";
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import BrandLogo from "components/BrandLogo";
 import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
 import { getAppsmithConfigs } from "ee/configs";
 import { SentryRoute } from "components/SentryRoute";
@@ -38,10 +38,13 @@ export function UserAuth() {
           !isMobileDevice ? "p-4" : "px-6 py-12"
         } t--auth-container justify-between`}
       >
+        {/* Fork: the fork's wordmark with the product name (components/BrandLogo). */}
         {isMobileDevice && (
-          <img
-            className="h-8 mx-auto"
-            src={getAssetUrl(organizationConfig.brandLogoUrl)}
+          <BrandLogo
+            className="mx-auto"
+            height={32}
+            logoUrl={organizationConfig.brandLogoUrl}
+            onDark={false}
           />
         )}
         <Switch location={location}>
