@@ -17,6 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -84,6 +85,11 @@ public class TeamService {
                     team.setAssignedToUserIds(new HashSet<>());
                     return permissionGroupRepository.save(team);
                 })
+                .flatMap(saved -> undoIfNameTaken(
+                                name,
+                                saved.getId(),
+                                Mono.defer(() -> permissionGroupRepository.archiveById(saved.getId())))
+                        .thenReturn(saved))
                 .flatMap(this::toDto);
     }
 
@@ -103,24 +109,46 @@ public class TeamService {
                                 teamId,
                                 Bridge.update()
                                         .set(PermissionGroup.Fields.name, name)
-                                        .set(PermissionGroup.Fields.description, request.description()))))
+                                        .set(PermissionGroup.Fields.description, request.description())))
+                        .then(undoIfNameTaken(
+                                name,
+                                teamId,
+                                Mono.defer(() -> permissionGroupRepository.updateById(
+                                        teamId,
+                                        Bridge.update()
+                                                .set(PermissionGroup.Fields.name, team.getName())
+                                                .set(PermissionGroup.Fields.description, team.getDescription()))))))
                 .then(Mono.defer(() -> appGrantService.findTeam(teamId)))
                 .flatMap(this::toDto);
     }
 
     /**
-     * Revokes every grant the team holds, then deletes it; its members lose what the team gave them.
+     * Deletes the team, then revokes every grant it holds; its members lose what the team gave them. The team goes
+     * first, so a failure partway never leaves a live team holding only some of its grants. A retry finds the team
+     * gone and revokes the grants left over, so deleting a team that is already gone succeeds; an id of any other live
+     * group is refused.
      */
     public Mono<Void> delete(String teamId) {
         return appGrantService
                 .requireAdmin()
-                .then(appGrantService.findTeam(teamId))
-                .flatMap(team -> appGrantService
-                        .revokeEverywhere(teamId)
-                        .then(permissionGroupRepository.archiveById(teamId))
-                        .thenMany(members(team))
-                        .concatMap(appGrantService::evictPermissionGroupCache)
-                        .then());
+                .then(permissionGroupRepository
+                        .findById(teamId)
+                        .map(Optional::of)
+                        .defaultIfEmpty(Optional.empty()))
+                .flatMap(group -> {
+                    if (group.isEmpty()) {
+                        return appGrantService.revokeEverywhere(teamId);
+                    }
+                    PermissionGroup team = group.get();
+                    if (!GrantGroups.TEAM.equals(team.getDefaultDomainType())) {
+                        return Mono.error(new AppsmithException(AppsmithError.NO_RESOURCE_FOUND, "team", teamId));
+                    }
+                    return permissionGroupRepository
+                            .archiveById(teamId)
+                            .thenMany(members(team))
+                            .concatMap(appGrantService::evictPermissionGroupCache)
+                            .then(appGrantService.revokeEverywhere(teamId));
+                });
     }
 
     public Mono<TeamDTO> addMember(String teamId, String userId) {
@@ -163,6 +191,17 @@ public class TeamService {
                         ? Mono.error(new AppsmithException(
                                 AppsmithError.DUPLICATE_KEY_USER_ERROR, "Team " + name, FieldName.NAME))
                         : Mono.empty());
+    }
+
+    /**
+     * Two administrators may give two teams the same name at once: each checks the name before writing and neither
+     * sees the other. So the name is checked again after writing, and a writer that now sees another live team with it
+     * undoes its write and gets the duplicate error. Of two such writes, the one checked last sees the other, so no
+     * duplicate stays (rarely both undo).
+     */
+    private Mono<Void> undoIfNameTaken(String name, String teamId, Mono<?> undo) {
+        return requireFreeName(name, teamId)
+                .onErrorResume(AppsmithException.class, error -> undo.then(Mono.error(error)));
     }
 
     private Mono<TeamDTO> toDto(PermissionGroup team) {

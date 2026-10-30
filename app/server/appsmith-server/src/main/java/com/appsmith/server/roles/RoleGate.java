@@ -4,18 +4,17 @@ import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.NewAction;
 import com.appsmith.server.domains.NewPage;
-import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.domains.Theme;
+import com.appsmith.server.domains.User;
 import com.appsmith.server.grants.GrantGroups;
-import com.appsmith.server.helpers.ce.bridge.Bridge;
-import com.appsmith.server.repositories.PermissionGroupRepository;
+import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * App grants go to teams, and a team may hold USER-role members. A USER never edits, so for a USER the grant groups
@@ -33,19 +32,20 @@ public class RoleGate {
             Set.of(Application.class, NewPage.class, NewAction.class, Theme.class);
 
     private final DefaultWorkspaceService defaultWorkspaceService;
-    private final PermissionGroupRepository permissionGroupRepository;
+    private final CacheableRepositoryHelper cacheableRepositoryHelper;
 
-    // Lazy: every repository depends on this gate, and both of these depend on repositories.
+    // Lazy: every repository depends on this gate, and the workspace service depends on repositories.
     public RoleGate(
             @Lazy DefaultWorkspaceService defaultWorkspaceService,
-            @Lazy PermissionGroupRepository permissionGroupRepository) {
+            CacheableRepositoryHelper cacheableRepositoryHelper) {
         this.defaultWorkspaceService = defaultWorkspaceService;
-        this.permissionGroupRepository = permissionGroupRepository;
+        this.cacheableRepositoryHelper = cacheableRepositoryHelper;
     }
 
     /**
      * The caller's groups that may give {@code permission}: all of them, except the grant groups when the caller is a
-     * USER and the permission changes an app.
+     * USER and the permission changes an app. The caller's grant groups are cached with their permission groups and
+     * cleared with them on every membership or grant change.
      */
     public Mono<Set<String>> groupsFor(Set<String> permissionGroups, AclPermission permission) {
         String userRoleGroupId = defaultWorkspaceService
@@ -59,14 +59,10 @@ public class RoleGate {
                 || !permissionGroups.contains(userRoleGroupId)) {
             return Mono.justOrEmpty(permissionGroups);
         }
-        return permissionGroupRepository
-                .queryBuilder()
-                .criteria(Bridge.<PermissionGroup>in(PermissionGroup.Fields.id, permissionGroups)
-                        .in(PermissionGroup.Fields.defaultDomainType, GrantGroups.TYPES))
-                .fields(PermissionGroup.Fields.id)
-                .all()
-                .map(PermissionGroup::getId)
-                .collect(Collectors.toSet())
+        return ReactiveSecurityContextHolder.getContext()
+                .map(context -> (User) context.getAuthentication().getPrincipal())
+                .flatMap(cacheableRepositoryHelper::getGrantGroupsOfUser)
+                .defaultIfEmpty(Set.of())
                 .map(grantGroups -> {
                     Set<String> others = new HashSet<>(permissionGroups);
                     others.removeAll(grantGroups);

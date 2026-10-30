@@ -1,5 +1,9 @@
 package com.appsmith.server.roles;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.models.Policy;
 import com.appsmith.server.acl.AclPermission;
@@ -22,14 +26,18 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.ConfigRepository;
 import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
+import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
 import com.appsmith.server.services.ApplicationPageService;
 import com.appsmith.server.services.UserService;
 import com.appsmith.server.services.WorkspaceService;
+import com.appsmith.server.solutions.PolicySolution;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -97,6 +105,12 @@ class DefaultWorkspaceServiceTest {
 
     @Autowired
     CacheableRepositoryHelper cacheableRepositoryHelper;
+
+    @Autowired
+    PluginRepository pluginRepository;
+
+    @Autowired
+    PolicySolution policySolution;
 
     Config storedIds;
 
@@ -278,6 +292,46 @@ class DefaultWorkspaceServiceTest {
                         .getPermissionGroups())
                 .doesNotContain(devGroupId)
                 .contains(adminGroupId);
+    }
+
+    @Test
+    void should_logMarkedError_when_reconcileFailsAtStartup() {
+        // Given
+        RoleGroupReconciler failingReconciler = Mockito.mock(RoleGroupReconciler.class);
+        Mockito.when(failingReconciler.reconcile(Mockito.any()))
+                .thenReturn(Mono.error(new IllegalStateException("database went away")));
+        DefaultWorkspaceService service = new DefaultWorkspaceService(
+                configRepository,
+                workspaceRepository,
+                permissionGroupRepository,
+                pluginRepository,
+                policySolution,
+                cacheableRepositoryHelper,
+                failingReconciler);
+        Logger logger = (Logger) LoggerFactory.getLogger(DefaultWorkspaceService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        // When
+        try {
+            service.bootstrapOnStartup();
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        // Then
+        assertThat(appender.list)
+                .filteredOn(event -> event.getLevel() == Level.ERROR)
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getFormattedMessage())
+                            .isEqualTo(DefaultWorkspaceService.RECONCILE_FAILED_MESSAGE)
+                            .startsWith("ROLES RECONCILE FAILED")
+                            .contains("may be out of date", "retry on the next start")
+                            .doesNotContain("\n");
+                    assertThat(event.getThrowableProxy().getMessage()).isEqualTo("database went away");
+                });
     }
 
     @Test
