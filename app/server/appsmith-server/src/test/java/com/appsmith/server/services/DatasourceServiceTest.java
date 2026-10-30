@@ -39,6 +39,8 @@ import com.appsmith.server.repositories.NewActionRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
+import com.appsmith.server.repositories.postgres.StoredValues;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.EnvironmentPermission;
 import com.appsmith.server.solutions.UserAndAccessManagementService;
@@ -140,6 +142,9 @@ public class DatasourceServiceTest {
 
     @Autowired
     ApplicationPermission applicationPermission;
+
+    @Autowired
+    PostgresOperations postgresOperations;
 
     String workspaceId = "";
     private String defaultEnvironmentId;
@@ -1494,7 +1499,9 @@ public class DatasourceServiceTest {
                     DBAuth authentication = (DBAuth)
                             datasourceStorageDTO.getDatasourceConfiguration().getAuthentication();
                     assertThat(authentication.getUsername()).isEqualTo(username);
-                    assertThat(EncryptionHelper.decrypt(authentication.getPassword()))
+                    // Fork: the saved entity keeps the plain password; the stored one is encrypted.
+                    assertThat(EncryptionHelper.decrypt(StoredValues.datasourcePassword(
+                                    postgresOperations, savedDatasource.getId(), defaultEnvironmentId)))
                             .isEqualTo(password);
                 })
                 .verifyComplete();
@@ -1625,7 +1632,10 @@ public class DatasourceServiceTest {
                             datasourceStorageDTO.getDatasourceConfiguration().getAuthentication();
 
                     assertThat(authentication.getUsername()).isEqualTo(username);
-                    assertThat(password).isEqualTo(EncryptionHelper.decrypt(authentication.getPassword()));
+                    // Fork: the saved entity keeps the plain password; the stored one is encrypted.
+                    assertThat(password)
+                            .isEqualTo(EncryptionHelper.decrypt(StoredValues.datasourcePassword(
+                                    postgresOperations, updatedDatasource.getId(), defaultEnvironmentId)));
                 })
                 .verifyComplete();
     }

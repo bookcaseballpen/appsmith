@@ -91,7 +91,7 @@ package. Classes, not test methods:
 | 4 | `solutions` | 18 | 1 | 0 |
 | 5 | `git` | 13 | 2 | 1 |
 | 6a | `services.ce` | 26 | 0 | 0 |
-| 6b | `services` (the rest) | | | |
+| 6b | `services` (the rest) | 31 | 4 | 0 |
 
 Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
 alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
@@ -100,7 +100,17 @@ default-workspace config of another context). `ActionExecutionSolutionCETest` (1
 `127.0.0.1:1`; it fails on MongoDB too. `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the
 client DSL migration) also fail when run alone: the app read back from the test's git repository has no pages, so
 nothing is committed. Their path is the git file system, Redis and mocks, with no database, and no git code differs
-from `release`; not yet checked against MongoDB on this PC.
+from `release`; not yet checked against MongoDB on this PC. `MockDataServiceTest` (4 tests) needs the cloud's mock
+datasources. `UserWorkspaceServiceUnitTest` (2 tests) expects exactly the workspaces it creates, but `api_user` also
+sees the fork's default "Apps" workspace; `UserServiceWithDisabledSignupTest` (2 tests alone, 3 in the batch) expects a
+new admin's own "'s apps" workspace, which the fork no longer creates (both from the roles work, not the port). That
+class's `@AfterAll` (upstream) never turns signup back on, so in a batch `WorkspaceServiceTest` (1 test, passes alone)
+gets "Signup is restricted"; the organization is also cached in Redis, so flush the test Redis between runs.
+
+Adapted from the suite: tests that read the encrypted password from the saved object
+(`DatasourceServiceTest`, `DatasourceContextServiceTest`) now read the stored one (`StoredValues`, as upstream's `pg`
+branch did): Mongo's save encrypted the entity in place, the port encrypts only the stored JSON.
+`LayoutActionServiceTest` reads nested DSL objects as `Map` (they come back as `JSONObject`, not `LinkedHashMap`).
 
 Fixed from the suite: `V5__remaining_unique_indexes.sql` adds the unique indexes Mongo had beyond names (one cached
 structure per datasource and environment, storages, snapshot chunks, custom JS libraries, reset tokens, URL slugs).
