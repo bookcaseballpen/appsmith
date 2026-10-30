@@ -71,7 +71,20 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
 - Not ported: the EE-downgrade guard (it read Mongock's audit log). The plugins' own Mongo use is untouched (they talk
   to user databases, not the internal one).
 - `scripts/fork-uat/up.ps1 -DbType postgres` (the default in a worktree that has `db/migration/postgres`) runs the instance
-  on its own PostgreSQL 16 container, `appsmith-dev-<Name>-postgres` on `127.0.0.1:<Port+5>`.
+  on its own PostgreSQL 16 container, `appsmith-dev-<Name>-postgres` on `127.0.0.1:<Port+5>`. In such a worktree
+  `-DbType mongo` is refused (the server would stop on the URL), and an instance that last ran on MongoDB (its
+  `instance.json` says `mongo`, or has no `dbKind`) moves to a new, empty PostgreSQL database, with a warning, on its
+  next `up.ps1` or `up.ps1 -Restart server`: the database step runs, the instance's Redis is emptied once (sessions
+  and the cached organization belonged to the MongoDB data), the dev admin is created again, and the MongoDB
+  database `appsmith_<Name>` in the shared `appsmith-dev-mongo` is left untouched. No data is copied.
+- **The main folder's instance on 8780** runs on MongoDB today. Once this branch is merged into `release` and the
+  main folder is updated, nothing needs to be done by hand: stop it as usual (`.\scripts\fork-uat\down.ps1`), then
+  start it with a plain `.\scripts\fork-uat\up.ps1 -Port 8780` (or `-Restart server`). It comes up on PostgreSQL
+  `appsmith-dev-appsmith-postgres` on `127.0.0.1:8785`, empty but for the dev admin; its test apps stay in MongoDB
+  (`appsmith_appsmith`) and are not moved. To bring a test app along, export it before the switch and import it
+  after. Once it is not needed, the old database can be dropped with
+  `docker exec appsmith-dev-mongo mongosh --quiet appsmith_appsmith --eval "db.dropDatabase()"` (the container is
+  shared with other worktrees; drop only that database).
 
 Status (milestone 1): on a `-DbType postgres` fork-uat database the server applies V1–V7 and passes an end-to-end check
 over HTTP: first-admin signup, app creation, export, import as a new app, direct publish refused, submit and approve
@@ -659,8 +672,9 @@ the controller.
 
 The fork builds its own image from source. Docker is the only tool needed on the build machine (no JDK, Maven,
 Node or yarn on the host), and nothing is pulled from Appsmith: base layers are official Docker Hub images
-(`ubuntu`, `redis`, `caddy`, `golang`, `node`, `maven` with Temurin 25) plus the MongoDB, PostgreSQL, Adoptium,
-Node.js, npm, Maven Central and GitHub (mongo-tools) downloads the upstream base already used.
+(`ubuntu`, `redis`, `caddy`, `node`, `maven` with Temurin 25, and `postgres:16` in the compose file) plus the
+PostgreSQL apt, Adoptium, Node.js, npm and Maven Central downloads the upstream base already used. The base has no
+MongoDB server, shell or tools (upstream also built mongo-tools from GitHub).
 
 ```sh
 scripts/fork-build/build-image.sh            # Linux, macOS, Git Bash
@@ -685,11 +699,29 @@ docker compose -f deploy/fork/docker-compose.yml up -d
    stdin with CRs stripped (its heredocs fail on CRLF), and `deploy/fork/Dockerfile` uses no heredocs.
 4. Type checks (`tsc`, `check-types`) and `app/server/scripts/check-field-constants.mjs` are not part of the image
    build; run them as usual before merging.
-5. `deploy/fork/docker-compose.yml` runs the image with its embedded MongoDB and Redis (as upstream's single image)
-   and a named volume `creative-app-builder-stacks`. The port binds to `127.0.0.1:8000` by default; override with
-   `APPSMITH_HTTP_PORT`, `APPSMITH_BIND_ADDRESS`, `APPSMITH_CONTAINER_NAME`, `APPSMITH_VOLUME_NAME`,
-   `APPSMITH_IMAGE`. `pull_policy: never`, so compose never tries a registry. On first start the container writes
-   `stacks/configuration/docker.env` with generated MongoDB, Redis and encryption secrets: keep the volume.
+5. `deploy/fork/docker-compose.yml` runs the image with a `postgres:16` service as the internal database (volume
+   `creative-app-builder-postgres`, no published port; a commented `ports` line binds it to `127.0.0.1` if needed)
+   and the image's embedded Redis, in a named volume `creative-app-builder-stacks`. It needs
+   `APPSMITH_POSTGRES_PASSWORD` (letters and digits; it goes into the database URL) and refuses to start without it:
+   `APPSMITH_POSTGRES_PASSWORD=... docker compose -f deploy/fork/docker-compose.yml up -d`, or `--env-file`. The
+   port binds to `127.0.0.1:8000` by default; override with `APPSMITH_HTTP_PORT`, `APPSMITH_BIND_ADDRESS`,
+   `APPSMITH_CONTAINER_NAME`, `APPSMITH_VOLUME_NAME`, `APPSMITH_POSTGRES_CONTAINER_NAME`,
+   `APPSMITH_POSTGRES_VOLUME_NAME`, `APPSMITH_IMAGE`. `pull_policy: never`, so compose never tries a registry. On
+   first start the container writes `stacks/configuration/docker.env` with generated Redis and encryption secrets:
+   keep the volume.
+   Without `APPSMITH_DB_URL` (a plain `docker run` of the image), the entrypoint runs an embedded PostgreSQL 16 in
+   the stacks volume (`data/postgres/main`), and `docker.env` gets `APPSMITH_DB_URL=postgresql://appsmith:<generated
+   password>@localhost:5432/appsmith`. The embedded one runs only when the URL is local; `run-java.sh` creates the
+   `appsmith` user, schema and `pg_trgm` there before the server starts, and Flyway creates the tables. A
+   `mongodb://` URL (a volume first started by a MongoDB image) stops the container with what to do: start on a
+   fresh volume, or set a `postgresql://` URL. `pg-upgrade.sh` upgrades an older embedded data folder (14, from
+   earlier images) to 16. `appsmithctl backup` / `restore` still run `mongodump` / `mongorestore` (in
+   `app/client/packages/rts/src/ctl`), so they don't work on this image yet; use `pg_dump` on the database.
+   Checked on `creative-app-builder:fork-postgres` (October 2026), each on a fresh volume: `docker run` with the
+   embedded PostgreSQL 16 (Flyway V1–V7, `/api/v1/health` 200 about 25 s after start, first-admin signup and login,
+   login again after `docker restart`), the compose file with its `postgres` service (same checks; no PostgreSQL in
+   the app container, only `127.0.0.1:<port>` published), and a `mongodb://` URL (the container stops with the
+   message, exit code 1).
 6. Health: `docker inspect --format '{{.State.Health.Status}}' creative-app-builder` (the image's healthcheck), or
    `http://127.0.0.1:8000/api/v1/health`. The healthcheck turns `healthy` about a minute before the backend is up:
    until then the editor shows "Appsmith is starting" and `/api/v1/health` answers 502. Wait for the 200.
@@ -878,7 +910,8 @@ from `download.redis.io` only when the host page size is above 4 KB (for example
 `install_docker.sh` (not called by the image) uses `download.docker.com` and GitHub.
 
 Checked at run time on `creative-app-builder:local` (October 2026), with a `tcpdump` container sharing the app
-container's network namespace: a first boot on an empty volume (MongoDB init, migrations), the first-admin signup,
+container's network namespace (on the MongoDB image, before the PostgreSQL port): a first boot on an empty volume
+(MongoDB init, migrations), the first-admin signup,
 the login page and its APIs, logged-in API calls, a restart of backend, RTS and MCP, and about 15 minutes of idle
 running. The capture held only the HTTP requests from the host on port 80: no DNS query and no outbound connection
 of any kind. The container logs have no Appsmith host (the only URLs are `localhost`, `slf4j.org` and a Micrometer

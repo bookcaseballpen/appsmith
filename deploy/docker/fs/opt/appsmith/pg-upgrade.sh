@@ -42,8 +42,9 @@ top_available_version="$(postgres --version | grep -o '[[:digit:]]\+' | head -1)
 declare -a to_uninstall
 to_uninstall=()
 
-# 13 to 14
-if [[ "$old_version" == 13 && "$top_available_version" > "$old_version" ]]; then
+# Fork: any older major version straight to the installed one (pg_upgrade skips versions), e.g. 14 (the embedded
+# PostgreSQL of earlier images) to 16. Upstream only went from 13 to 14.
+if [[ "$old_version" -lt "$top_available_version" ]]; then
 	if [[ ! -e "$postgres_path/$old_version" ]]; then
 		apt-get update
 		apt-get install --yes "postgresql-$old_version"
@@ -66,7 +67,7 @@ if [[ "$old_version" == 13 && "$top_available_version" > "$old_version" ]]; then
 		tlog "PostgreSQL $old_version has been shut down."
 	fi
 
-	new_version="$((old_version + 1))"
+	new_version="$top_available_version"
 	new_data_dir="$pg_data_dir-$new_version"
 
 	# `pg_upgrade` writes log to current folder. So change to a temp folder first.

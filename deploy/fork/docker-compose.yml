@@ -1,25 +1,52 @@
 # Fork: runs the image built by scripts/fork-build/build-image.sh (or .ps1). See FORK.md "Build and deploy".
 #
-#   docker compose -f deploy/fork/docker-compose.yml up -d
+#   APPSMITH_POSTGRES_PASSWORD=<letters and digits> docker compose -f deploy/fork/docker-compose.yml up -d
 #
-# The container runs its own MongoDB and Redis, as upstream's single image does; data lives in the named volume.
+# (or put APPSMITH_POSTGRES_PASSWORD in a file and pass --env-file <file>; compose refuses to start without it).
+# The internal database is the postgres service (PostgreSQL 16, its own volume, no published port: only the app
+# container reaches it). The app container runs its own Redis, as upstream's single image does; its data lives in the
+# stacks volume. Without APPSMITH_DB_URL (plain `docker run` of the image), the container runs an embedded PostgreSQL
+# 16 in the stacks volume instead.
 # Ports bind to 127.0.0.1 only. Put a reverse proxy in front, or change APPSMITH_BIND_ADDRESS, to expose it.
-# On first start the container writes stacks/configuration/docker.env with generated MongoDB, Redis and
-# encryption secrets; keep the volume (or back that file up), or encrypted datasource credentials are lost.
+# On first start the container writes stacks/configuration/docker.env with generated Redis and encryption secrets;
+# keep the volume (or back that file up), or encrypted datasource credentials are lost.
 
 name: creative-app-builder
 
 services:
+  postgres:
+    image: postgres:16
+    container_name: ${APPSMITH_POSTGRES_CONTAINER_NAME:-creative-app-builder-postgres}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: appsmith
+      POSTGRES_PASSWORD: ${APPSMITH_POSTGRES_PASSWORD:?Set APPSMITH_POSTGRES_PASSWORD (letters and digits)}
+      POSTGRES_DB: appsmith
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "appsmith", "-d", "appsmith"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    # No ports: only the appsmith service uses it. To reach it from the host, publish it on 127.0.0.1 only:
+    # ports:
+    #   - "127.0.0.1:${APPSMITH_POSTGRES_PORT:-5432}:5432"
+
   appsmith:
     image: ${APPSMITH_IMAGE:-creative-app-builder:local}
     container_name: ${APPSMITH_CONTAINER_NAME:-creative-app-builder}
     pull_policy: never
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${APPSMITH_BIND_ADDRESS:-127.0.0.1}:${APPSMITH_HTTP_PORT:-8000}:80"
       # HTTPS through the built-in Caddy, only useful with APPSMITH_CUSTOM_DOMAIN set:
       # - "${APPSMITH_BIND_ADDRESS:-127.0.0.1}:${APPSMITH_HTTPS_PORT:-8443}:443"
     environment:
+      APPSMITH_DB_URL: postgresql://appsmith:${APPSMITH_POSTGRES_PASSWORD}@postgres:5432/appsmith
       # Off by default in the image already; set here so the intent is visible.
       APPSMITH_CLOUD_SERVICES_ENABLED: "false"
       APPSMITH_DISABLE_TELEMETRY: "true"
@@ -29,3 +56,5 @@ services:
 volumes:
   stacks:
     name: ${APPSMITH_VOLUME_NAME:-creative-app-builder-stacks}
+  postgres:
+    name: ${APPSMITH_POSTGRES_VOLUME_NAME:-creative-app-builder-postgres}

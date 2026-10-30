@@ -10,7 +10,6 @@ set -e
 stacks_path=/appsmith-stacks
 
 export SUPERVISORD_CONF_TARGET="$TMP/supervisor-conf.d/"  # export for use in supervisord.conf
-export MONGODB_TMP_KEY_PATH="$TMP/mongodb-key"  # export for use in supervisor process mongodb.conf
 
 mkdir -pv "$SUPERVISORD_CONF_TARGET" "$WWW_PATH"
 
@@ -72,11 +71,6 @@ init_env_file() {
   ENV_PATH="$CONF_PATH/docker.env"
   TEMPLATES_PATH="/opt/appsmith/templates"
 
-  if [[ -n "$APPSMITH_MONGODB_URI" ]]; then
-    export APPSMITH_DB_URL="$APPSMITH_MONGODB_URI"
-    unset APPSMITH_MONGODB_URI
-  fi
-
   # Preserve externally supplied values verbatim, including embedded newlines.
   (umask 077; /usr/bin/python3 /opt/appsmith/env-file.py snapshot "$TMP/pre-define.json")
 
@@ -86,8 +80,8 @@ init_env_file() {
     tlog "Generating default configuration file"
     mkdir -p "$CONF_PATH"
 
-    local default_appsmith_mongodb_user="appsmith"
-    local generated_appsmith_mongodb_password=$(
+    # Fork: the password of the embedded PostgreSQL's appsmith user (letters and digits, so the URL needs no escaping).
+    local generated_appsmith_db_password=$(
       tr -dc A-Za-z0-9 </dev/urandom | head -c 13
       echo ""
     )
@@ -104,7 +98,7 @@ init_env_file() {
       echo ''
     )
 
-    bash "$TEMPLATES_PATH/docker.env.sh" "$default_appsmith_mongodb_user" "$generated_appsmith_mongodb_password" "$generated_appsmith_encryption_password" "$generated_appsmith_encription_salt" "$generated_appsmith_redis_password" > "$ENV_PATH"
+    bash "$TEMPLATES_PATH/docker.env.sh" "$generated_appsmith_db_password" "$generated_appsmith_encryption_password" "$generated_appsmith_encription_salt" "$generated_appsmith_redis_password" > "$ENV_PATH"
   else
     tlog "Configuration file already exists"
     # Validate before backfills mutate the persistent configuration.
@@ -130,11 +124,6 @@ init_env_file() {
 
   # Load the ones in `docker.env` in the stacks folder.
   load_env_file env "$ENV_PATH" || exit 1
-
-  if [[ -n "$APPSMITH_MONGODB_URI" ]]; then
-    export APPSMITH_DB_URL="$APPSMITH_MONGODB_URI"
-    unset APPSMITH_MONGODB_URI
-  fi
 
   # Load the ones set from outside, should take precedence, and so will overwrite anything from `docker.env` above.
   load_env_file json "$TMP/pre-define.json" || exit 1
@@ -202,16 +191,26 @@ unset_unused_variables() {
   fi
 }
 
+# Fork: the server only runs on PostgreSQL. A volume first started by a MongoDB build still has a mongodb:// URL in
+# docker.env; stop with what to do rather than let the server fail on it. There is no import of MongoDB data.
 configure_database_connection_url() {
   tlog "Configuring database connection URL"
-  isPostgresUrl=0
-  isMongoUrl=0
-
-  if [[ "${APPSMITH_DB_URL}" == "postgresql:"* ]]; then
-    isPostgresUrl=1
-  elif [[ "${APPSMITH_DB_URL}" == "mongodb"* ]]; then
-    isMongoUrl=1
+  if [[ "${APPSMITH_DB_URL-}" == "postgresql://"* ]]; then
+    return
   fi
+  tlog "====================================================================================================" >&2
+  tlog "==" >&2
+  if [[ "${APPSMITH_DB_URL-}" == "mongodb"* ]]; then
+    tlog "== APPSMITH_DB_URL is a MongoDB URL. This image runs only on PostgreSQL and does not import MongoDB data." >&2
+  else
+    tlog "== APPSMITH_DB_URL is not set or not a postgresql:// URL." >&2
+  fi
+  tlog "== Start on a fresh volume (the embedded PostgreSQL is then set up), or set APPSMITH_DB_URL to" >&2
+  tlog "== postgresql://<user>:<password>@<host>:<port>/<database>, in the container's environment or in" >&2
+  tlog "== $ENV_PATH. For the embedded PostgreSQL, use postgresql://appsmith:<password>@localhost:5432/appsmith." >&2
+  tlog "==" >&2
+  tlog "====================================================================================================" >&2
+  exit 1
 }
 
 check_db_uri() {
@@ -221,170 +220,6 @@ check_db_uri() {
     tlog "Detected local DB"
     isUriLocal=0
   fi
-}
-
-init_mongodb() {
-  if [[ $isUriLocal -eq 0 ]]; then
-    tlog "Initializing local database"
-    MONGO_DB_PATH="$stacks_path/data/mongodb"
-    MONGO_LOG_PATH="$MONGO_DB_PATH/log"
-    MONGO_DB_KEY="$MONGO_DB_PATH/key"
-    mkdir -p "$MONGO_DB_PATH"
-    touch "$MONGO_LOG_PATH"
-
-    if [[ ! -f "$MONGO_DB_KEY" ]]; then
-      openssl rand -base64 756 > "$MONGO_DB_KEY"
-    fi
-    use-mongodb-key "$MONGO_DB_KEY"
-
-    ./mongodb-fixer.sh &
-  fi
-}
-
-init_replica_set() {
-  tlog "Checking initialized database"
-  shouldPerformInitdb=1
-  for path in \
-    "$MONGO_DB_PATH/WiredTiger" \
-    "$MONGO_DB_PATH/journal" \
-    "$MONGO_DB_PATH/local.0" \
-    "$MONGO_DB_PATH/storage.bson"; do
-    if [ -e "$path" ]; then
-      shouldPerformInitdb=0
-      break
-    fi
-  done
-
-  if [[ $isUriLocal -gt 0 && -f /proc/cpuinfo ]] && ! grep --quiet avx /proc/cpuinfo; then
-    tlog "====================================================================================================" >&2
-    tlog "==" >&2
-    tlog "== AVX instruction not found in your CPU. Appsmith's embedded MongoDB may not start. Please use an external MongoDB instance instead." >&2
-    tlog "== See https://docs.appsmith.com/getting-started/setup/instance-configuration/custom-mongodb-redis#custom-mongodb for instructions." >&2
-    tlog "==" >&2
-    tlog "====================================================================================================" >&2
-  fi
-
-  if [[ $shouldPerformInitdb -gt 0 && $isUriLocal -eq 0 ]]; then
-    tlog "Initializing Replica Set for local database"
-    # Start installed MongoDB service - Dependencies Layer
-    mongod --fork --port 27017 --dbpath "$MONGO_DB_PATH" --logpath "$MONGO_LOG_PATH"
-    tlog "Waiting 10s for MongoDB to start"
-    sleep 10
-    tlog "Creating MongoDB user"
-    mongosh "127.0.0.1/appsmith" --eval "db.createUser({
-        user: '$APPSMITH_MONGODB_USER',
-        pwd: '$APPSMITH_MONGODB_PASSWORD',
-        roles: [{
-            role: 'root',
-            db: 'admin'
-        }, 'readWrite']
-      }
-    )"
-    tlog "Enabling Replica Set"
-    mongod --dbpath "$MONGO_DB_PATH" --shutdown || true
-    mongod --fork --port 27017 --dbpath "$MONGO_DB_PATH" --logpath "$MONGO_LOG_PATH" --replSet mr1 --keyFile "$MONGODB_TMP_KEY_PATH" --bind_ip localhost
-    tlog "Waiting 10s for MongoDB to start with Replica Set"
-    sleep 10
-    mongosh "$APPSMITH_DB_URL" --eval 'rs.initiate()'
-    mongod --dbpath "$MONGO_DB_PATH" --shutdown || true
-  fi
-
-  if [[ $isUriLocal -gt 0 ]]; then
-    tlog "Checking Replica Set of external MongoDB"
-
-    if appsmithctl check-replica-set; then
-      tlog "MongoDB ReplicaSet is enabled"
-    else
-      echo -e "\033[0;31m***************************************************************************************\033[0m"
-      echo -e "\033[0;31m*      MongoDB Replica Set is not enabled                                             *\033[0m"
-      echo -e "\033[0;31m*      Please ensure the credentials provided for MongoDB, has 'readWrite' role.      *\033[0m"
-      echo -e "\033[0;31m***************************************************************************************\033[0m"
-      exit 1
-    fi
-  fi
-}
-
-# Pre-flight check for embedded MongoDB 7.0 upgrades on existing data.
-#
-# MongoDB 7.0 refuses to start on data whose featureCompatibilityVersion (FCV)
-# is below 6.0. Without a check up front, supervisord would retry mongod a few
-# times and give up, leaving the container in a confusing degraded state with
-# no clear error for the administrator.
-#
-# Fast path: marker file ($MONGO_DB_PATH/.appsmith-mongo-fcv-min) is written by
-# mongodb-fixer.sh only after mongod is confirmed running under this Appsmith
-# release. Its presence proves this release has already booted successfully on
-# this data, so the probe can be skipped with zero overhead. Contents record
-# the FCV floor this release commits to, for future upgrade decisions; they
-# aren't consulted here.
-#
-# First boot after upgrade: no marker yet. Do a one-time mongod --fork probe
-# to verify the data is compatible. If it starts, proceed; the fixer will
-# write the marker after supervisord brings mongod up for real. If it fails,
-# print an actionable error and exit.
-ensure_mongodb_fcv_compatible() {
-  # Only applies to existing local-Mongo data — fresh installs have nothing to
-  # check, and external Mongo is out of our control.
-  if [[ $shouldPerformInitdb -gt 0 || $isUriLocal -gt 0 ]]; then
-    return
-  fi
-
-  local marker="$MONGO_DB_PATH/.appsmith-mongo-fcv-min"
-  if [[ -f "$marker" ]]; then
-    tlog "MongoDB FCV marker present; skipping pre-flight check"
-    return
-  fi
-
-  tlog "No MongoDB FCV marker found on existing data; running one-time compatibility probe"
-  # Persist the probe log inside the Mongo data directory so it survives container
-  # restarts. $TMP would be wiped, leaving no forensic trail when an admin comes
-  # back to investigate why their container exited. Append rather than truncate so
-  # repeated probe runs (e.g. multiple failed upgrade attempts) all stay on record.
-  local probe_log="$MONGO_DB_PATH/fcv-probe.log"
-  printf '\n===== Appsmith MongoDB FCV pre-flight probe @ %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$probe_log" 2>/dev/null || true
-  if mongod --fork --port 27017 --dbpath "$MONGO_DB_PATH" --logpath "$probe_log" --logappend --bind_ip localhost >/dev/null 2>&1; then
-    if ! mongod --dbpath "$MONGO_DB_PATH" --shutdown >/dev/null 2>&1; then
-      tlog "ERROR: Pre-flight mongod probe started but shutdown failed. The probe mongod may still hold port 27017 or the data lock, which would prevent supervisord from starting mongod. Aborting. See $probe_log for details." >&2
-      exit 1
-    fi
-    tlog "Pre-flight probe succeeded; mongodb-fixer will write the FCV marker after supervisord starts mongod"
-    return
-  fi
-
-  local probe_err
-  probe_err="$(grep -Ei 'featurecompatibilityversion|upgrade|downgrade' "$probe_log" 2>/dev/null | tail -n 1 || true)"
-  tlog "====================================================================================================" >&2
-  tlog "==" >&2
-  tlog "== ERROR: Embedded MongoDB 7.0 failed to start on the existing data. The most common cause is that the data is at featureCompatibilityVersion below the required 6.0 minimum." >&2
-  if [[ -n "$probe_err" ]]; then
-    tlog "== mongod log: $probe_err" >&2
-  fi
-  tlog "==" >&2
-  tlog "== About this error:" >&2
-  tlog "==   Appsmith 2.x ships with MongoDB 7.x, which requires the database to be at featureCompatibilityVersion (FCV) 6.0 or higher. Appsmith releases 1.96 to 1.99 automatically raise FCV to 6.0 on boot, so any instance that has run one of those releases is fine. Instances that have only ever run Appsmith older than 1.70 may still be at FCV 5.0, which MongoDB 7.x refuses to load." >&2
-  tlog "==" >&2
-  tlog "==   This check only runs for instances using the embedded MongoDB. Instances configured with an external MongoDB are not affected." >&2
-  tlog "==" >&2
-  tlog "==   The failure happens during MongoDB pre-flight, before any Appsmith service comes online. No Appsmith database migrations have been attempted, so rolling back to a 1.x release is simply a matter of changing the image version on your deployment." >&2
-  tlog "==" >&2
-  tlog "== To recover:" >&2
-  tlog "==" >&2
-  tlog "==   1. Alter your Appsmith deployment to use a release in the 1.96 to 1.99 range (we recommend the latest, 1.99). These ship with MongoDB 6.x and will raise the compatibility version automatically." >&2
-  tlog "==   2. Let the container start fully so the MongoDB FCV upgrade completes." >&2
-  tlog "==   3. Shut down, then alter your Appsmith deployment to use this version again." >&2
-  tlog "==" >&2
-  tlog "== Full mongod log: $probe_log" >&2
-  tlog "====================================================================================================" >&2
-  exit 1
-}
-
-use-mongodb-key() {
-  # We copy the MongoDB key file to `$MONGODB_TMP_KEY_PATH`, so that we can reliably set its permissions to 600.
-  # Why? When the host machine of this Docker container is Windows, file permissions cannot be set on files in volumes.
-  # So the key file should be somewhere inside the container, and not in a volume.
-  mkdir -pv "$(dirname "$MONGODB_TMP_KEY_PATH")"
-  cp -v "$1" "$MONGODB_TMP_KEY_PATH"
-  chmod 600 "$MONGODB_TMP_KEY_PATH"
 }
 
 is_empty_directory() {
@@ -483,9 +318,6 @@ configure_supervisord() {
 
   # Disable services based on configuration
   if [[ -z "${DYNO}" ]]; then
-    if [[ $isUriLocal -eq 0 && $isMongoUrl -eq 1 ]]; then
-      cp "$supervisord_conf_source/mongodb.conf" "$SUPERVISORD_CONF_TARGET"
-    fi
     if [[ $APPSMITH_REDIS_URL == *"localhost"* || $APPSMITH_REDIS_URL == *"127.0.0.1"* ]]; then
       cp "$supervisord_conf_source/redis.conf" "$SUPERVISORD_CONF_TARGET"
       mkdir -p "$stacks_path/data/redis"
@@ -529,8 +361,9 @@ check_redis_compatible_page_size() {
 }
 
 init_postgres() {
-  # Initialize embedded postgres by default; set APPSMITH_ENABLE_EMBEDDED_DB to 0, to use existing cloud postgres mockdb instance
-  if [[ ${APPSMITH_ENABLE_EMBEDDED_DB: -1} != 0 ]]; then
+  # Fork: the embedded PostgreSQL is the internal database, so it runs when APPSMITH_DB_URL points at this container
+  # (the default docker.env), and not with an external database. APPSMITH_ENABLE_EMBEDDED_DB=0 still turns it off.
+  if [[ $isUriLocal -eq 0 && ${APPSMITH_ENABLE_EMBEDDED_DB: -1} != 0 ]]; then
     if [[ "$(id -u)" != "0" ]]; then
       tlog "== When running as a non-root user embedded PostgreSQL cannot be used. Please use an external PostgreSQL instance instead." >&2
       exit 1
@@ -565,16 +398,14 @@ init_postgres() {
 
 safe_init_postgres() {
   runEmbeddedPostgres=1
-  # fail safe to prevent entrypoint from exiting, and prevent postgres from starting
-  # when runEmbeddedPostgres=0 , postgres conf file for supervisord will not be copied
-  # so postgres will not be started by supervisor. Explicit message helps us to know upgrade script failed.
-
+  # Fork: upstream carried on without the embedded PostgreSQL (it only held sample data). It is the internal database
+  # now, so the container stops instead of starting a server that cannot reach its database.
   if init_postgres; then
     tlog "init_postgres succeeded."
   else
     local exit_status=$?
-    tlog "init_postgres failed with exit status $exit_status."
-    runEmbeddedPostgres=0
+    tlog "init_postgres failed with exit status $exit_status; the embedded PostgreSQL cannot start." >&2
+    exit 1
   fi
 }
 
@@ -672,16 +503,7 @@ unset_unused_variables
 
 configure_database_connection_url
 check_db_uri
-# Don't run MongoDB if running in a Heroku dyno.
-if [[ -z "${DYNO}" ]]; then
-  if [[ $isMongoUrl -eq 1 ]]; then
-    # Setup MongoDB and initialize replica set
-    tlog "Initializing MongoDB"
-    init_mongodb
-    init_replica_set
-    ensure_mongodb_fcv_compatible
-  fi
-else
+if [[ -n "${DYNO}" ]]; then
   # These functions are used to limit heap size for Backend process when deployed on Heroku
   get_maximum_heap
   setup_backend_heap_arg
@@ -703,7 +525,7 @@ mkdir -p /appsmith-stacks/data/{backup,restore} /appsmith-stacks/ssl
 
 # Create sub-directory to store services log in the container mounting folder
 export APPSMITH_LOG_DIR="${APPSMITH_LOG_DIR:-/appsmith-stacks/logs}"
-mkdir -p "$APPSMITH_LOG_DIR"/{supervisor,backend,mcp,cron,editor,rts,mongodb,redis,postgres,appsmithctl}
+mkdir -p "$APPSMITH_LOG_DIR"/{supervisor,backend,mcp,cron,editor,rts,redis,postgres,appsmithctl}
 
 setup_auto_heal
 capture_infra_details

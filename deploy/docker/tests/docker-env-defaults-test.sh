@@ -23,10 +23,25 @@ if [[ ! -e "$template" ]]; then
 fi
 
 # Render with dummy positional args matching entrypoint.sh's init_env_file() invocation:
-# mongo user, mongo pw, encryption pw, encryption salt, redis pw.
-rendered="$(bash "$template" appsmith dbpw encpw encsalt redispw)"
+# database pw, encryption pw, encryption salt, redis pw.
+rendered="$(bash "$template" dbpw encpw encsalt redispw)"
 
 fail=0
+
+# Fork: the generated database URL is the embedded PostgreSQL, and nothing configures MongoDB.
+if printf '%s\n' "$rendered" | grep -qxF 'APPSMITH_DB_URL=postgresql://appsmith:dbpw@localhost:5432/appsmith'; then
+  echo "OK: APPSMITH_DB_URL is the embedded PostgreSQL"
+else
+  echo "FAILED: APPSMITH_DB_URL is not postgresql://appsmith:<password>@localhost:5432/appsmith"
+  fail=$((fail + 1))
+fi
+if printf '%s\n' "$rendered" | grep -qi 'mongo'; then
+  echo "FAILED: docker.env.sh still writes MongoDB settings:"
+  printf '%s\n' "$rendered" | grep -i 'mongo'
+  fail=$((fail + 1))
+else
+  echo "OK: no MongoDB settings"
+fi
 
 # The rendered env must not set an uncommented APPSMITH_ALLOWED_FRAME_ANCESTORS that permits any origin.
 # A leading "#" (optionally indented) means the line is commented out and therefore not shipped as a value.

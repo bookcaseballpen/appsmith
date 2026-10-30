@@ -37,10 +37,6 @@ mkdir -pv "$APPSMITH_GIT_ROOT"
 
 echo "APPSMITH_GIT_ROOT: ${APPSMITH_GIT_ROOT}" >&2
 
-# Check if APPSMITH_DB_URL is set
-if [[ -z "${APPSMITH_DB_URL}" ]]; then
-  # If APPSMITH_DB_URL is not set, fall back to APPSMITH_MONGODB_URI
-  export APPSMITH_DB_URL="${APPSMITH_MONGODB_URI}"
-fi
+# Fork: no APPSMITH_MONGODB_URI fallback; APPSMITH_DB_URL is the PostgreSQL URL (see entrypoint.sh).
 
 exec "$@"
