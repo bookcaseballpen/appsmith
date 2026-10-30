@@ -4,6 +4,7 @@ import com.appsmith.external.services.RTSCaller;
 import com.appsmith.server.configurations.CloudServicesConfig;
 import com.appsmith.server.configurations.CommonConfig;
 import com.appsmith.server.domains.Config;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.ConfigService;
 import com.appsmith.server.services.FeatureFlagService;
@@ -15,7 +16,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationContext;
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -38,7 +38,7 @@ class InstanceConfigHelperImplTest {
     private ApplicationContext applicationContext;
 
     @Mock
-    private ReactiveMongoTemplate reactiveMongoTemplate;
+    private PostgresOperations postgresOperations;
 
     @Mock
     private FeatureFlagService featureFlagService;

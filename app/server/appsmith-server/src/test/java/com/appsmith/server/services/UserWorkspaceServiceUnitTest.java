@@ -14,6 +14,7 @@ import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.helpers.CollectionUtils;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserDataRepository;
+import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
@@ -71,6 +72,9 @@ public class UserWorkspaceServiceUnitTest {
     @Autowired
     SessionUserService sessionUserService;
 
+    @Autowired
+    DefaultWorkspaceService defaultWorkspaceService;
+
     ModelMapper modelMapper;
 
     Workspace workspace;
@@ -109,6 +113,14 @@ public class UserWorkspaceServiceUnitTest {
                     workspaceIds.add(workspace.getId());
                     return workspace;
                 });
+    }
+
+    // Fork: every instance has the default "Apps" workspace (DefaultWorkspaceService), which api_user also sees.
+    private List<Workspace> withoutDefaultWorkspace(List<Workspace> workspaces) {
+        String defaultWorkspaceId = defaultWorkspaceService.getIds().block().workspaceId();
+        return workspaces.stream()
+                .filter(workspace -> !defaultWorkspaceId.equals(workspace.getId()))
+                .toList();
     }
 
     @AfterEach
@@ -249,7 +261,8 @@ public class UserWorkspaceServiceUnitTest {
         createDummyWorkspaces().blockLast();
 
         StepVerifier.create(userWorkspaceService.getUserWorkspacesByRecentlyUsedOrder())
-                .assertNext(workspaces -> {
+                .assertNext(allWorkspaces -> {
+                    List<Workspace> workspaces = withoutDefaultWorkspace(allWorkspaces);
                     assertThat(workspaces).hasSize(4);
                     workspaces.forEach(workspace -> {
                         assertThat(workspaceIds.contains(workspace.getId())).isTrue();
@@ -276,7 +289,8 @@ public class UserWorkspaceServiceUnitTest {
         doReturn(Mono.just(userData)).when(userDataService).getForCurrentUser();
 
         StepVerifier.create(userWorkspaceService.getUserWorkspacesByRecentlyUsedOrder())
-                .assertNext(workspaces -> {
+                .assertNext(allWorkspaces -> {
+                    List<Workspace> workspaces = withoutDefaultWorkspace(allWorkspaces);
                     assertThat(workspaces).hasSize(4);
                     List<String> fetchedWorkspaceIds = new ArrayList<>();
                     workspaces.forEach(workspace -> {

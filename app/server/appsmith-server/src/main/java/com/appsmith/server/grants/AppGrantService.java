@@ -295,11 +295,13 @@ public class AppGrantService {
      * Sets both stored forms of a document's policies: the permission checks query {@code policyMap}, but
      * {@code getPolicies()} returns the deprecated {@code policies} set when it is not empty, and CE code that adds
      * policies to a child (a new page, an imported page) starts from that set. Both must stay the same.
+     * <p>
+     * Fork: on PostgreSQL {@code policyMap} is the only stored form ({@code policies} is not a column, and
+     * {@code getPolicies()} derives it from {@code policyMap}).
      */
     public static BridgeUpdate policiesUpdate(Map<String, Policy> policyMap) {
-        return Bridge.update()
-                .set(BaseDomain.Fields.policyMap, policyMap)
-                .set(BaseDomain.Fields.policies, Set.copyOf(policyMap.values()));
+        // Only policyMap: policies is @Transient on PostgreSQL, so setting it fails as an unknown field.
+        return Bridge.update().set(BaseDomain.Fields.policyMap, policyMap);
     }
 
     private Mono<List<AppGrantDTO>> grantsOf(Application application) {

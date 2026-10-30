@@ -1,16 +1,19 @@
 package com.appsmith.server.domains;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.views.Views;
 import com.appsmith.server.constants.Url;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.hibernate.annotations.Type;
 
 import java.util.Set;
 
@@ -18,7 +21,7 @@ import java.util.Set;
 @Setter
 @ToString
 @NoArgsConstructor
-@Document
+@Entity
 @FieldNameConstants
 public class Workspace extends BaseDomain {
 
@@ -34,6 +37,8 @@ public class Workspace extends BaseDomain {
     @JsonView(Views.Public.class)
     private String email;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     private Set<WorkspacePlugin> plugins;
 
@@ -57,6 +62,8 @@ public class Workspace extends BaseDomain {
     @JsonView(Views.Internal.class)
     private Boolean hasEnvironments;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Internal.class)
     private Set<String> defaultPermissionGroups;
 

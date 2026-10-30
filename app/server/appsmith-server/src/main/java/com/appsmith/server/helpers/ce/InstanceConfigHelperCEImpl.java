@@ -12,6 +12,7 @@ import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
 import com.appsmith.server.helpers.LoadShifter;
 import com.appsmith.server.helpers.NetworkUtils;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import com.appsmith.server.services.AnalyticsService;
 import com.appsmith.server.services.ConfigService;
 import com.appsmith.server.services.FeatureFlagService;
@@ -21,11 +22,9 @@ import com.appsmith.util.WebClientUtils;
 import joptsimple.internal.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.Document;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -51,7 +50,7 @@ public class InstanceConfigHelperCEImpl implements InstanceConfigHelperCE {
 
     private final ApplicationContext applicationContext;
 
-    private final ReactiveMongoTemplate reactiveMongoTemplate;
+    private final PostgresOperations postgresOperations;
 
     private final FeatureFlagService featureFlagService;
     private final AnalyticsService analyticsService;
@@ -213,16 +212,18 @@ public class InstanceConfigHelperCEImpl implements InstanceConfigHelperCE {
 
     @Override
     public Mono<String> checkMongoDBVersion() {
-        return reactiveMongoTemplate
-                .executeCommand(new Document("buildInfo", 1))
-                .map(buildInfo -> {
-                    commonConfig.setMongoDBVersion(buildInfo.getString("version"));
-                    log.info("Fetched and set conenncted mongo db version as: {}", commonConfig.getMongoDBVersion());
+        // Fork: the database is PostgreSQL; its server version takes the place of the MongoDB version.
+        return postgresOperations
+                .read(em -> String.valueOf(
+                        em.createNativeQuery("SHOW server_version").getSingleResult()))
+                .map(version -> {
+                    commonConfig.setMongoDBVersion("PostgreSQL " + version);
+                    log.info("Fetched and set connected database version as: {}", commonConfig.getMongoDBVersion());
                     return commonConfig.getMongoDBVersion();
                 })
                 .onErrorResume(error -> {
                     log.error(
-                            "Error while getting mongo db version. Hence current mongo db version will remain unavailable in context",
+                            "Error while getting the database version. Hence it will remain unavailable in context",
                             error);
                     return Mono.just(Strings.EMPTY);
                 });

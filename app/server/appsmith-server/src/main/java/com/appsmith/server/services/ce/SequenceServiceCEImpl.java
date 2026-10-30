@@ -1,29 +1,27 @@
 package com.appsmith.server.services.ce;
 
 import com.appsmith.external.models.BaseDomain;
-import com.appsmith.server.domains.Sequence;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
-import org.springframework.data.mongodb.core.query.Update;
 import reactor.core.publisher.Mono;
-
-import static org.springframework.data.mongodb.core.FindAndModifyOptions.options;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
-import static org.springframework.data.mongodb.core.query.Query.query;
 
 @RequiredArgsConstructor
 public class SequenceServiceCEImpl implements SequenceServiceCE {
 
-    private final ReactiveMongoTemplate mongoTemplate;
+    private final PostgresOperations postgresOperations;
 
+    /**
+     * Fork: an atomic upsert on the unique {@code sequence.name} (Mongo used findAndModify with upsert).
+     */
     private Mono<Long> getNext(String name) {
-        return mongoTemplate
-                .findAndModify(
-                        query(where("name").is(name)),
-                        new Update().inc("nextNumber", 1),
-                        options().returnNew(true).upsert(true),
-                        Sequence.class)
-                .map(Sequence::getNextNumber);
+        return postgresOperations.write(em -> {
+            final Object next = em.createNativeQuery("INSERT INTO sequence (name, next_number) VALUES (?1, 1)"
+                            + " ON CONFLICT (name) DO UPDATE SET next_number = COALESCE(sequence.next_number, 0) + 1"
+                            + " RETURNING next_number")
+                    .setParameter(1, name)
+                    .getSingleResult();
+            return ((Number) next).longValue();
+        });
     }
 
     @Override

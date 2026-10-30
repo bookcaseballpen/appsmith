@@ -3,19 +3,22 @@ package com.appsmith.server.configurations;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.autoconfigure.mongo.MongoProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Class to configure beans based on DB url. This could have been implemented in {@link MongoConfig} or
- * {@link DBConfig} but extracted to seperate class as we were facing cyclical dependency issue with the other approach
+ * Class to configure beans based on DB url. This could have been implemented in {@link DBConfig} but extracted to
+ * seperate class as we were facing cyclical dependency issue with the other approach.
+ * <p>
+ * Fork: PostgreSQL is the only internal database. {@code APPSMITH_DB_URL} must be
+ * {@code postgresql://user:password@host:port/database}; a {@code mongodb://} URL stops the server with an error.
  */
 @Configuration
 @Slf4j
@@ -28,22 +31,11 @@ public class CommonDBConfig {
 
     @Bean
     @Primary
-    @Profile("!test")
-    public MongoProperties configureMongoDB() {
-        if (!appsmithDbUrl.startsWith("mongodb")) {
-            return null;
-        }
-        log.info("Found MongoDB uri configuring now");
-        MongoProperties mongoProperties = new MongoProperties();
-        mongoProperties.setUri(appsmithDbUrl);
-        return mongoProperties;
-    }
-
-    @Bean
-    @Primary
     public DataSourceProperties configurePostgresDB() {
-        if (!appsmithDbUrl.contains("postgresql")) {
-            return null;
+        if (!StringUtils.hasText(appsmithDbUrl) || !appsmithDbUrl.startsWith("postgresql://")) {
+            throw new IllegalStateException(
+                    "APPSMITH_DB_URL must be a PostgreSQL URL, postgresql://{username}:{password}@{host}:{port}/{db_name}."
+                            + " This build of the server does not support MongoDB.");
         }
         log.info("Found PostgreSQL uri configuring now");
         return extractJdbcProperties(appsmithDbUrl);
@@ -60,14 +52,16 @@ public class CommonDBConfig {
             if (!StringUtils.hasLength(uri.getHost())) {
                 String errorString = String.format(
                         "Malformed DB URL! Expected format: postgresql://{username}:{password}@localhost:{port}/{db_name}, provided url is %s",
-                        dbUrl);
+                        dbUrl.replaceAll("//[^@/]*@", "//***@"));
                 throw new IllegalArgumentException(errorString);
             }
-            String userInfo = uri.getUserInfo();
+            String userInfo = uri.getRawUserInfo();
             if (StringUtils.hasLength(userInfo)) {
-                String[] userDetails = userInfo.split(":");
-                ds.setUsername(userDetails[0]);
-                ds.setPassword(userDetails[1]);
+                String[] userDetails = userInfo.split(":", 2);
+                ds.setUsername(URLDecoder.decode(userDetails[0], StandardCharsets.UTF_8));
+                if (userDetails.length > 1) {
+                    ds.setPassword(URLDecoder.decode(userDetails[1], StandardCharsets.UTF_8));
+                }
             }
             // If the port is not mentioned, default it to the standard PostgreSQL port 5432
             int port = uri.getPort() == -1 ? 5432 : uri.getPort();

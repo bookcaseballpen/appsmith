@@ -52,6 +52,7 @@ import com.appsmith.server.exports.internal.ExportService;
 import com.appsmith.server.helpers.MockPluginExecutor;
 import com.appsmith.server.helpers.PluginExecutorHelper;
 import com.appsmith.server.helpers.TextUtils;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.jslibs.base.CustomJSLibService;
 import com.appsmith.server.layouts.UpdateLayoutService;
@@ -67,6 +68,7 @@ import com.appsmith.server.repositories.NewPageRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
 import com.appsmith.server.repositories.UserRepository;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
 import com.appsmith.server.roles.PublishApproval;
 import com.appsmith.server.services.ConsolidatedAPIService;
 import com.appsmith.server.services.LayoutActionService;
@@ -106,8 +108,6 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
@@ -170,7 +170,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 @SpringBootTest
 @Slf4j
@@ -259,7 +258,7 @@ public class ApplicationServiceCETest {
     PluginExecutor pluginExecutor;
 
     @Autowired
-    ReactiveMongoOperations mongoOperations;
+    PostgresOperations postgresOperations;
 
     @Autowired
     PermissionGroupRepository permissionGroupRepository;
@@ -428,8 +427,12 @@ public class ApplicationServiceCETest {
         Workspace deletedWorkspace = workspaceService.archiveById(workspaceId).block();
     }
 
-    private Mono<? extends BaseDomain> getArchivedResource(String id, Class<? extends BaseDomain> domainClass) {
-        return mongoOperations.findOne(new Query(where("id").is(id)), domainClass);
+    // Fork: reads the row whether or not it is archived (no deleted_at filter), from PostgreSQL.
+    private <T extends BaseDomain> Mono<T> getArchivedResource(String id, Class<T> domainClass) {
+        return postgresOperations
+                .read(em -> PostgresOperations.select(
+                        em, domainClass, List.of(Bridge.<T>equal(BaseDomain.Fields.id, id)), null, 1, 0))
+                .flatMap(rows -> Mono.justOrEmpty(rows.stream().findFirst()));
     }
 
     private List<String> createDummyApplications(String workspaceId) {

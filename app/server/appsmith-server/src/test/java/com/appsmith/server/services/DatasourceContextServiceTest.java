@@ -34,6 +34,8 @@ import com.appsmith.server.plugins.base.PluginService;
 import com.appsmith.server.repositories.DatasourceRepository;
 import com.appsmith.server.repositories.NewActionRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.repositories.postgres.PostgresOperations;
+import com.appsmith.server.repositories.postgres.StoredValues;
 import com.appsmith.server.solutions.ApplicationPermission;
 import com.appsmith.server.solutions.DatasourcePermission;
 import com.appsmith.server.solutions.EnvironmentPermission;
@@ -117,6 +119,9 @@ public class DatasourceContextServiceTest {
 
     @Autowired
     ApplicationPermission applicationPermission;
+
+    @Autowired
+    PostgresOperations postgresOperations;
 
     String defaultEnvironmentId;
 
@@ -277,12 +282,11 @@ public class DatasourceContextServiceTest {
                             savedDatasource.getDatasourceConfiguration().getAuthentication();
                     assertEquals(password, authentication.getPassword());
 
-                    DatasourceStorageDTO savedDatasourceStorageDTO =
-                            createdDatasource.getDatasourceStorages().get(defaultEnvironmentId);
-                    DBAuth encryptedAuthentication = (DBAuth) savedDatasourceStorageDTO
-                            .getDatasourceConfiguration()
-                            .getAuthentication();
-                    assertEquals(password, EncryptionHelper.decrypt(encryptedAuthentication.getPassword()));
+                    // Fork: the created entity keeps the plain password; the stored one is encrypted.
+                    assertEquals(
+                            password,
+                            EncryptionHelper.decrypt(StoredValues.datasourcePassword(
+                                    postgresOperations, createdDatasource.getId(), defaultEnvironmentId)));
                 })
                 .verifyComplete();
     }

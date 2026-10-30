@@ -1,15 +1,21 @@
 package com.appsmith.server.repositories;
 
-import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.data.repository.NoRepositoryBean;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import org.springframework.data.repository.reactive.ReactiveSortingRepository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.Serializable;
 import java.util.Collection;
 
+/**
+ * Fork: extends Spring Data's store-neutral reactive interfaces instead of {@code ReactiveMongoRepository}. The
+ * implementation is {@link BaseRepositoryImpl}, on PostgreSQL.
+ */
 @NoRepositoryBean
-public interface BaseRepository<T, ID extends Serializable> extends ReactiveMongoRepository<T, ID> {
+public interface BaseRepository<T, ID extends Serializable>
+        extends ReactiveCrudRepository<T, ID>, ReactiveSortingRepository<T, ID> {
 
     /**
      * This function sets the deleted flag to true and then saves the modified document.
@@ -42,4 +48,11 @@ public interface BaseRepository<T, ID extends Serializable> extends ReactiveMong
      * @return
      */
     Flux<T> retrieveAll();
+
+    /**
+     * Inserts a new document (Mongo's insert). Fork: the same as save for a new entity.
+     */
+    <S extends T> Mono<S> insert(S entity);
+
+    <S extends T> Flux<S> insert(Iterable<S> entities);
 }

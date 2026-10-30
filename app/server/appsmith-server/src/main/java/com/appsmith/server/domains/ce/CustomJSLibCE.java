@@ -1,16 +1,22 @@
 package com.appsmith.server.domains.ce;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.models.RefAwareDomain;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
 import com.appsmith.server.helpers.CollectionUtils;
+import com.appsmith.server.repositories.postgres.NulSafeTextConverter;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
+import org.hibernate.annotations.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,6 +27,7 @@ import java.util.Set;
 @Setter
 @ToString
 @NoArgsConstructor
+@MappedSuperclass
 @FieldNameConstants
 public class CustomJSLibCE extends BaseDomain {
     /* Library name */
@@ -32,16 +39,20 @@ public class CustomJSLibCE extends BaseDomain {
      * JS library
      */
     @JsonView({Views.Public.class, Git.class})
+    @Column(columnDefinition = "text")
     String uidString;
 
     /**
      * These are the namespaces under which the library functions reside. User would access lib methods like
      * `accessor.method`
      */
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     Set<String> accessor;
 
     /* Library UMD src url */
+    @Column(columnDefinition = "text")
     @JsonView({Views.Public.class, Git.class})
     String url;
 
@@ -56,6 +67,8 @@ public class CustomJSLibCE extends BaseDomain {
     /* `Tern` tool definitions - it defines the methods exposed by the library. It helps us with auto-complete
     feature i.e. the function name showing up as suggestion when user has partially typed it. */
     @JsonView({Views.Public.class, Git.class})
+    // Fork: a text column; the value is JSON, so a raw NUL (which text can't hold) is stored escaped.
+    @Convert(converter = NulSafeTextConverter.class)
     String defs;
 
     public CustomJSLibCE(String name, Set<String> accessor, String url, String docsUrl, String version, String defs) {

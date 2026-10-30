@@ -14,8 +14,9 @@ RUN <<END
     exit 1
   fi
 
-  if ! [ -f server/mongo/server.jar ]; then
-    echo "Missing MongoDB server.jar file. Are you using the build script?" >&2
+  # Fork: the server only runs on PostgreSQL, from server/pg (see deploy/fork/Dockerfile).
+  if ! [ -f server/pg/server.jar ]; then
+    echo "Missing server/pg/server.jar file. Are you using the build script?" >&2
     exit 1
   fi
 END
@@ -46,9 +47,9 @@ RUN <<END
   # Disable setuid/setgid bits for the files inside container.
   find / \( -path /proc -prune \) -o \( \( -perm -2000 -o -perm -4000 \) -exec chmod -s '{}' + \) || true
 
-  mkdir -p /.mongodb/mongosh /appsmith-stacks
+  mkdir -p /appsmith-stacks
   chmod ugo+w /etc /appsmith-stacks
-  chmod -R ugo+w /var/run /.mongodb /etc/ssl /usr/local/share
+  chmod -R ugo+w /var/run /etc/ssl /usr/local/share
 END
 
 LABEL com.centurylinklabs.watchtower.lifecycle.pre-check=/watchtower-hooks/pre-check.sh

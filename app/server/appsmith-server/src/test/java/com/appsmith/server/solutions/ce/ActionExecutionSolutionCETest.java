@@ -70,6 +70,7 @@ import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -335,7 +336,8 @@ public class ActionExecutionSolutionCETest {
                             .usingRecursiveFieldByFieldElementComparator()
                             .containsExactlyInAnyOrderElementsOf(expectedWidgets);
                     assertThat(result.getRequest().getActionId()).isEqualTo(executeActionDTO.getActionId());
-                    assertThat(result.getRequest().getRequestedAt()).isBefore(Instant.now());
+                    // Fork: or equal; Windows' clock can give both instants the same value.
+                    assertThat(result.getRequest().getRequestedAt()).isBeforeOrEqualTo(Instant.now());
                 })
                 .verifyComplete();
     }
@@ -566,7 +568,8 @@ public class ActionExecutionSolutionCETest {
                     assertThat(result.getStatusCode()).isEqualTo(pluginException.getAppErrorCode());
                     assertThat(result.getTitle()).isEqualTo(pluginException.getTitle());
                     assertThat(result.getRequest().getActionId()).isEqualTo(createdAction.getId());
-                    assertThat(result.getRequest().getRequestedAt()).isBefore(Instant.now());
+                    // Fork: or equal; Windows' clock can give both instants the same value.
+                    assertThat(result.getRequest().getRequestedAt()).isBeforeOrEqualTo(Instant.now());
                 })
                 .verifyComplete();
     }
@@ -1897,6 +1900,8 @@ public class ActionExecutionSolutionCETest {
         executeAndAssertAction(executeActionDTO, mockResult, List.of(new ParsedDataType(DisplayDataType.RAW)));
     }
 
+    // Fork: mock datasources come from Appsmith's cloud, which this fork turns off (FORK.md, "Sample databases").
+    @Disabled("Fork: needs the cloud's mock datasources, which are off by design (see FORK.md)")
     @Test
     @WithUserDetails(value = "api_user")
     public void executeAction_actionOnMockDatasource_success() {

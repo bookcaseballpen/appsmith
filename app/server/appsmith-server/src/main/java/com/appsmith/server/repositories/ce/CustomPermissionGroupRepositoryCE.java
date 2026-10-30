@@ -3,8 +3,8 @@ package com.appsmith.server.repositories.ce;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.domains.User;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.repositories.AppsmithRepository;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -17,7 +17,7 @@ public interface CustomPermissionGroupRepositoryCE extends AppsmithRepository<Pe
     Flux<PermissionGroup> findAllByAssignedToUserIdAndDefaultWorkspaceId(
             String userId, String workspaceId, AclPermission permission);
 
-    Mono<Integer> updateById(String id, UpdateDefinition updateObj);
+    Mono<Integer> updateById(String id, BridgeUpdate updateObj);
 
     Flux<PermissionGroup> findByDefaultWorkspaceId(String workspaceId, AclPermission permission);
 

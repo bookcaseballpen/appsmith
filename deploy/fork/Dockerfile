@@ -50,11 +50,12 @@ RUN --mount=type=cache,target=/root/.m2/repository \
     mvn --batch-mode --no-transfer-progress clean package -DskipTests -Dspotless.skip=true
 
 # Same layout as app/server/build.sh followed by scripts/prepare_server_artifacts.sh: the plugin jars directly in
-# each target/, not the dependency jars some plugins also copy into target/lib/.
-RUN mkdir -p /dist/mongo/plugins \
-  && cp -v appsmith-server/target/server-*.jar /dist/mongo/server.jar \
+# each target/, not the dependency jars some plugins also copy into target/lib/. Fork: in server/pg (run-java.sh
+# runs the server from there), as the server only runs on PostgreSQL; upstream's server/mongo is gone.
+RUN mkdir -p /dist/pg/plugins \
+  && cp -v appsmith-server/target/server-*.jar /dist/pg/server.jar \
   && find appsmith-plugins -mindepth 3 -maxdepth 3 -path '*/target/*.jar' ! -name 'original-*.jar' \
-       -exec cp -v '{}' /dist/mongo/plugins/ ';'
+       -exec cp -v '{}' /dist/pg/plugins/ ';'
 
 # ---- Container filesystem ----
 FROM ${BASE} AS fs
@@ -75,7 +76,7 @@ FROM ${BASE}
 
 COPY --from=fs /fs /
 
-COPY --from=server /dist/mongo server/mongo/
+COPY --from=server /dist/pg server/pg/
 
 # Add client UI - Application Layer
 COPY --from=client /src/app/client/build editor/
@@ -99,9 +100,9 @@ RUN set -o errexit \
   && find . \( -name node_modules -prune \) -o \( -type f -name '*.sh' \) -exec chmod +x '{}' + \
   && chmod +x /opt/bin/* /watchtower-hooks/*.sh \
   && { find / \( -path /proc -prune \) -o \( \( -perm -2000 -o -perm -4000 \) -exec chmod -s '{}' + \) || true; } \
-  && mkdir -p /.mongodb/mongosh /appsmith-stacks \
+  && mkdir -p /appsmith-stacks \
   && chmod ugo+w /etc /appsmith-stacks \
-  && chmod -R ugo+w /var/run /.mongodb /etc/ssl /usr/local/share
+  && chmod -R ugo+w /var/run /etc/ssl /usr/local/share
 
 EXPOSE 80
 EXPOSE 443

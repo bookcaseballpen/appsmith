@@ -3,13 +3,13 @@ package com.appsmith.server.repositories.ce.params;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.constants.FieldName;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
+import com.appsmith.server.helpers.ce.bridge.BridgeUpdate;
 import com.appsmith.server.repositories.ce.BaseAppsmithRepositoryCEImpl;
 import lombok.Getter;
 import lombok.NonNull;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -25,7 +25,8 @@ import static com.appsmith.server.repositories.ce.BaseAppsmithRepositoryCEImpl.N
 public class QueryAllParams<T extends BaseDomain> {
     // TODO(Shri): There's a cyclic dependency between the repository and this class. Remove it.
     private final BaseAppsmithRepositoryCEImpl<T> repo;
-    private final List<Criteria> criteria = new ArrayList<>();
+    // Fork: database-neutral criteria only (rendered to SQL on PostgreSQL).
+    private final List<BridgeQuery<T>> criteria = new ArrayList<>();
 
     @Deprecated
     private final List<String> fields = new ArrayList<>();
@@ -72,7 +73,7 @@ public class QueryAllParams<T extends BaseDomain> {
         return repo.countExecute(this);
     }
 
-    public Mono<Integer> updateAll(@NonNull UpdateDefinition update) {
+    public Mono<Integer> updateAll(@NonNull BridgeUpdate update) {
         scope = Scope.ALL;
         return repo.updateExecute(this, update);
     }
@@ -82,17 +83,24 @@ public class QueryAllParams<T extends BaseDomain> {
         return repo.updateExecute(this, resource);
     }
 
-    public Mono<Integer> updateFirst(@NonNull UpdateDefinition update) {
+    public Mono<Integer> updateFirst(@NonNull BridgeUpdate update) {
         scope = Scope.FIRST;
         return repo.updateExecute(this, update);
     }
 
-    public QueryAllParams<T> criteria(Criteria c) {
+    /**
+     * Fork: takes a query of any domain type, as the Mongo version took any {@code Criteria}; chained
+     * {@code Bridge.equal(..).equal(..)} calls infer {@code BridgeQuery<BaseDomain>}. The checks are field names, so
+     * they apply to {@code T} as they are.
+     */
+    @SuppressWarnings("unchecked")
+    public QueryAllParams<T> criteria(BridgeQuery<? extends BaseDomain> query) {
+        final BridgeQuery<T> c = (BridgeQuery<T>) query;
         if (c == null) {
             return this;
         }
 
-        if (c instanceof BridgeQuery<?> bq && bq.isEmpty()) {
+        if (c.isEmpty()) {
             // Empty bridge criteria leads to subtle bugs. Just don't call `.criteria()` in such cases.
             // So ignore it and act as if this method hasn't been called at all, because there's some styles of using
             // this API that make such use just so convenient.
@@ -104,13 +112,13 @@ public class QueryAllParams<T extends BaseDomain> {
     }
 
     public QueryAllParams<T> byId(String id) {
-        final Criteria w = Criteria.where(FieldName.ID);
-        return criteria(id == null ? w.isNull() : w.is(id));
+        return criteria(id == null ? Bridge.isNull(FieldName.ID) : Bridge.equal(FieldName.ID, id));
     }
 
     /**
      * @deprecated Use class based projections instead.
      * Refer to {@link #all(Class)} and {@link #one(Class)}.
+     * Fork: on PostgreSQL whole rows are loaded; the field list is only kept for API compatibility.
      * @param fields
      * @return
      */

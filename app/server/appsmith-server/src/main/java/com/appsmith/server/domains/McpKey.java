@@ -1,7 +1,7 @@
 package com.appsmith.server.domains;
 
 import com.appsmith.server.domains.ce.McpKeyCE;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.Entity;
 
-@Document
+@Entity
 public class McpKey extends McpKeyCE {}

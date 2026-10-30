@@ -1,17 +1,24 @@
 package com.appsmith.server.domains;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.models.PluginType;
 import com.appsmith.external.views.Views;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Transient;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.annotation.Transient;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.hibernate.annotations.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -19,8 +26,10 @@ import java.util.Map;
 @Getter
 @Setter
 @ToString
+@Builder
+@AllArgsConstructor
 @NoArgsConstructor
-@Document
+@Entity
 @FieldNameConstants
 public class Plugin extends BaseDomain {
 
@@ -33,6 +42,7 @@ public class Plugin extends BaseDomain {
     String name;
 
     @JsonView(Views.Public.class)
+    @Enumerated(EnumType.STRING)
     PluginType type;
 
     @JsonView(Views.Public.class)
@@ -51,12 +61,17 @@ public class Plugin extends BaseDomain {
     String documentationLink;
 
     @JsonView(Views.Public.class)
+    @Enumerated(EnumType.STRING)
     ResponseType responseType;
 
     @JsonView(Views.Public.class)
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     List<PluginParameterType> datasourceParams;
 
     @JsonView(Views.Public.class)
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     List<PluginParameterType> actionParams;
 
     @JsonView(Views.Public.class)
@@ -98,10 +113,14 @@ public class Plugin extends BaseDomain {
     boolean isRemotePlugin = false;
 
     // Stores the equivalent of editor.json for remote plugins
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     Map<?, ?> actionUiConfig;
 
     // Stores the equivalent of form.json for remote plugins
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     Map<?, ?> datasourceUiConfig;
 

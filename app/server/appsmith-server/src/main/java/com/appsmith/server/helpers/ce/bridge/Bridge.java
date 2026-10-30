@@ -2,10 +2,9 @@ package com.appsmith.server.helpers.ce.bridge;
 
 import com.appsmith.external.models.BaseDomain;
 import lombok.NonNull;
-import org.bson.types.ObjectId;
-import org.springframework.data.mongodb.core.query.Criteria;
 
 import java.util.Collection;
+import java.util.List;
 
 public final class Bridge {
     private Bridge() {}
@@ -25,22 +24,19 @@ public final class Bridge {
 
     @SafeVarargs
     public static <T extends BaseDomain> BridgeQuery<T> or(BridgeQuery<T>... items) {
-        final BridgeQuery<T> q = new BridgeQuery<>();
-        q.checks.add(new Criteria().orOperator(items));
-        return q;
+        return or(List.of(items));
     }
 
     public static <T extends BaseDomain> BridgeQuery<T> or(Collection<BridgeQuery<T>> items) {
         final BridgeQuery<T> q = new BridgeQuery<>();
-        q.checks.add(
-                new Criteria().orOperator(items.stream().map(c -> (Criteria) c).toList()));
+        q.checks.add(new Check.Or<>(List.copyOf(items)));
         return q;
     }
 
     @SafeVarargs
     public static <T extends BaseDomain> BridgeQuery<T> and(BridgeQuery<T>... items) {
         final BridgeQuery<T> q = new BridgeQuery<>();
-        q.checks.add(new Criteria().andOperator(items));
+        q.checks.add(new Check.And<>(List.of(items)));
         return q;
     }
 
@@ -66,10 +62,6 @@ public final class Bridge {
 
     public static <T extends BaseDomain> BridgeQuery<T> equalIgnoreCase(@NonNull String key, @NonNull String value) {
         return Bridge.<T>query().equalIgnoreCase(key, value);
-    }
-
-    public static <T extends BaseDomain> BridgeQuery<T> equal(@NonNull String key, @NonNull ObjectId value) {
-        return Bridge.<T>query().equal(key, value);
     }
 
     /**
@@ -114,5 +106,12 @@ public final class Bridge {
 
     public static <T extends BaseDomain> BridgeQuery<T> notExists(@NonNull String key) {
         return Bridge.<T>query().notExists(key);
+    }
+
+    /**
+     * Check that the string `needle` is present in the JSON array at `key`.
+     */
+    public static <T extends BaseDomain> BridgeQuery<T> jsonIn(@NonNull String needle, @NonNull String key) {
+        return Bridge.<T>query().jsonIn(needle, key);
     }
 }

@@ -1,5 +1,6 @@
 package com.appsmith.server.domains.ce;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
@@ -13,6 +14,9 @@ import com.appsmith.server.domains.GitArtifactMetadata;
 import com.appsmith.server.dtos.CustomJSLibContextDTO;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,8 +25,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.annotation.Transient;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.hibernate.annotations.Type;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
@@ -43,8 +46,8 @@ import static com.appsmith.server.helpers.DateUtils.ISO_FORMATTER;
 @Setter
 @ToString
 @NoArgsConstructor
-@Document
 @FieldNameConstants
+@MappedSuperclass
 public class ApplicationCE extends BaseDomain implements ArtifactCE {
 
     @NotNull @JsonView(Views.Public.class)
@@ -57,11 +60,15 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @Deprecated(forRemoval = true)
     @JsonView(Views.Public.class)
-    Boolean isPublic = false;
+    Boolean isPublic;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     List<ApplicationPage> pages;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Internal.class)
     List<ApplicationPage> publishedPages;
 
@@ -73,16 +80,16 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
     @JsonView({Views.Public.class, Git.class})
     boolean appIsExample = false;
 
-    @Transient
-    @JsonView(Views.Public.class)
-    long unreadCommentThreads;
-
     @JsonView(Views.Internal.class)
     String clonedFromApplicationId;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Internal.class, Git.class})
     ApplicationDetail unpublishedApplicationDetail;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Internal.class)
     ApplicationDetail publishedApplicationDetail;
 
@@ -101,27 +108,41 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
 
     // Fork: free-text labels for the home page catalog, normalised by ApplicationTags (see setTags). Exported and
     // imported with the app JSON, so they travel to the projects repo.
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     List<String> tags;
 
     @JsonView(Views.Public.class)
     private String slug;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Views.Export.class, Git.class})
     StaticUrlSettings staticUrlSettings;
 
+    @Type(CustomJsonType.class)
     @JsonView({Views.Internal.class, Git.class})
+    @Column(columnDefinition = "jsonb")
     Application.AppLayout unpublishedAppLayout;
 
+    @Type(CustomJsonType.class)
     @JsonView(Views.Internal.class)
+    @Column(columnDefinition = "jsonb")
     Application.AppLayout publishedAppLayout;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     Set<CustomJSLibContextDTO> unpublishedCustomJSLibs;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     Set<CustomJSLibContextDTO> publishedCustomJSLibs;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView(Views.Public.class)
     GitArtifactMetadata gitApplicationMetadata;
 
@@ -151,6 +172,8 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
     @JsonView(Views.Internal.class)
     Instant lastEditedAt;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     Application.EmbedSetting embedSetting;
 

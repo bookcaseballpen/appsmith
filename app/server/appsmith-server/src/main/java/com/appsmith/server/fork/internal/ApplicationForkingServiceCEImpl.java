@@ -4,6 +4,7 @@ import com.appsmith.external.constants.ActionCreationSourceTypeEnum;
 import com.appsmith.external.constants.AnalyticsEvents;
 import com.appsmith.external.helpers.AppsmithEventContext;
 import com.appsmith.external.helpers.AppsmithEventContextType;
+import com.appsmith.external.helpers.ObjectIds;
 import com.appsmith.external.models.ActionDTO;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.models.Datasource;
@@ -51,7 +52,6 @@ import com.appsmith.server.solutions.WorkspacePermission;
 import com.appsmith.server.themes.base.ThemeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
@@ -174,7 +174,7 @@ public class ApplicationForkingServiceCEImpl implements ApplicationForkingServic
 
                     if (page.getLayouts() != null) {
                         for (final Layout layout : page.getLayouts()) {
-                            layout.setId(new ObjectId().toString());
+                            layout.setId(ObjectIds.newId());
                         }
                     }
 

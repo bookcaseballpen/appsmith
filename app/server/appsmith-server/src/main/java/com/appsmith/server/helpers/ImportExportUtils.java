@@ -9,7 +9,6 @@ import com.appsmith.server.dtos.ApplicationJson;
 import com.appsmith.server.dtos.ArtifactExchangeJson;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
-import org.springframework.data.mongodb.MongoTransactionException;
 import org.springframework.transaction.TransactionException;
 
 import java.time.Instant;
@@ -81,9 +80,7 @@ public class ImportExportUtils {
         log.error("Error while importing the application, reason: {}", throwable.getMessage());
         // TODO provide actionable insights for different error messages generated from import-export flow
         // Filter out transactional error as these are cryptic and don't provide much info on the error
-        return throwable instanceof TransactionException
-                        || throwable instanceof MongoTransactionException
-                        || throwable instanceof InvalidDataAccessApiUsageException
+        return throwable instanceof TransactionException || throwable instanceof InvalidDataAccessApiUsageException
                 ? ""
                 : "Error: " + throwable.getMessage();
     }

@@ -24,11 +24,6 @@ while read -r line
            echo 'ERROR: Server is down';
            healthy=false
         fi
-      elif [[ "$process" == "mongo" ]]; then
-        if [[ $(mongo --eval  'db.runCommand("ping").ok') -ne 1 ]]; then
-            echo 'ERROR: Mongo is down';
-            healthy=false
-        fi
       elif [[ "$process" == "redis" ]]; then
         if [[ $(redis-cli ping) != 'PONG' ]]; then
             echo 'ERROR: Redis is down';

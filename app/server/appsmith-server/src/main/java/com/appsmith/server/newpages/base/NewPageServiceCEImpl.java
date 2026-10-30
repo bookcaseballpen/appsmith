@@ -2,6 +2,7 @@ package com.appsmith.server.newpages.base;
 
 import com.appsmith.external.enums.WorkspaceResourceContext;
 import com.appsmith.external.git.constants.ce.RefType;
+import com.appsmith.external.helpers.ObjectIds;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.applications.base.ApplicationService;
 import com.appsmith.server.constants.FieldName;
@@ -31,7 +32,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
 import net.minidev.json.parser.ParseException;
-import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -214,7 +214,7 @@ public class NewPageServiceCEImpl extends BaseService<NewPageRepository, NewPage
     @Override
     public Layout createDefaultLayout() {
         Layout layout = new Layout();
-        String id = new ObjectId().toString();
+        String id = ObjectIds.newId();
         layout.setId(id);
         try {
             layout.setDsl((JSONObject) new JSONParser(JSONParser.MODE_PERMISSIVE).parse(FieldName.DEFAULT_PAGE_LAYOUT));

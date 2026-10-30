@@ -12,6 +12,165 @@ switched on (see "Hidden features").
 - **Git host:** AWS CodeCommit will be the Git host later. Git sync has no private-repo limit and does not ask
   Appsmith's cloud for anything, so it works on any host.
 
+## PostgreSQL (in progress, branch `fork/postgres`)
+
+The internal database moves from MongoDB to PostgreSQL. Fresh installs only; there is no Mongo data import, and the
+Mongo path is dropped (not kept compiling): `APPSMITH_DB_URL` must be `postgresql://user:password@host:port/db`.
+
+**Rule: new code uses only the database-neutral query API** (`Bridge`, `BridgeQuery`, `BridgeUpdate`,
+`queryBuilder()`, the repository interfaces). Never import `org.springframework.data.mongodb`, `com.mongodb` or
+`org.bson`, and never write SQL outside `repositories/postgres`.
+
+Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity annotations and jsonb types are reused):
+
+- Entities are JPA/Hibernate classes; nested objects are `jsonb` columns (hypersistence-utils, `CustomJsonType`).
+  Table and column names are the quoted snake_case of class and field names (`SnakeCaseNamingStrategy`).
+- The repositories keep their **reactive API** (Mono/Flux), unlike `pg`, which rewrote ~300 service files to
+  generated "cake" wrappers. `repositories/postgres` implements the repository interfaces itself
+  (`@EnableAppsmithRepositories`): `BaseRepositoryImpl` for CRUD, the `Custom*Impl` fragments as before, and
+  `PartTreeAppsmithQuery` for derived methods (`findByEmail`, ...). Blocking JDBC runs on `boundedElastic`, one
+  transaction per call (`PostgresOperations`). So services stay as upstream wrote them and cherry-picks keep applying.
+- `BridgeQuery`/`BridgeUpdate` are plain data now; `SqlRenderer` turns them into SQL with MongoDB's matching rules
+  (array fields match on any element, negated checks match missing fields, nested keys address jsonb).
+- The ACL check is `jsonb_exists_any` on `policy_map`, built by the `permissionCriteria` hook of
+  `BaseAppsmithRepositoryCEImpl`; `CustomApplicationRepositoryImpl` overrides it for "Users see only live apps".
+- Ids keep MongoDB's 24-hex format (`ObjectIds`), so ids embedded elsewhere (MCP user keys) are unchanged.
+- Flyway owns the schema (schema `appsmith`): `db/migration/postgres/V1__baseline.sql` (tables generated from the
+  entities, then edited: `text` columns, no enum CHECKs, NOT NULL only on keys, the indexes the code relies on) and
+  `migrations/postgres/V2__seed_fresh_install.java`, which loads `db/seed/fresh-install.json` (plugins, themes, the
+  organization with its policies, the instance roles, the anonymous user, instance config; a snapshot of a real fresh
+  Mongo install of this fork after all Mongock migrations) and generates the `instance-id`. Mongock and its
+  changelogs are gone; later schema or data changes are new Flyway versions.
+- Mongo-only operations became SQL in `Custom*RepositoryCEImpl`: publishing pages and actions is one UPDATE that copies
+  the unpublished column, the first-admin setup lock is `INSERT ... ON CONFLICT DO NOTHING` on
+  `super_user_setup_lock`, the sequence is an upsert, `setDefaultPage` rewrites the `pages` jsonb array.
+- Transactions: the `TransactionalOperator` bean is `PostgresTransactionalOperator`. `transactional(...)` opens one JPA
+  transaction on a thread of its own and puts it in the Reactor context; every `PostgresOperations` call inside runs on
+  that thread and joins it, so an import (or any other upstream `transactional` block) commits or rolls back as a
+  whole. It commits when the publisher completes, rolls back on error or cancel; a nested `transactional` joins the
+  outer one.
+- Unique violations (SQLSTATE 23505) become Spring's `DuplicateKeyException` with the constraint name in the message,
+  and a failed insert resets the id `save` generated to null, as on MongoDB, so a retry (with a suffixed name, say)
+  inserts again instead of looking the object up. Services find name clashes by Mongo index
+  name, so `V3__unique_name_indexes.sql` creates `workspace_app_deleted_gitApplicationMetadata` and
+  `workspace_datasource_deleted_compound_index` under those names (`NULLS NOT DISTINCT`, PostgreSQL 15+). This keeps
+  "App (1)" naming on fork and import. The "An object with the name … already exists" message takes the name from
+  PostgreSQL's `Key (…)=(…)` detail (`DuplicateKeyExceptionUtils`), as it did from Mongo's `dup key`.
+- Soft delete: entities have no Hibernate `@Where(deleted_at IS NULL)`; every repository query filters `deleted_at`
+  itself. With the filter, saving an archived row could not see it and inserted it again (duplicate primary key).
+- `APPSMITH_ADMIN_EMAILS` is applied at every start by `migrations/SuperUserSync` (an `ApplicationRunner`, replacing
+  Mongock's `Migration10000`): the listed users become exactly the instance and organization admins, missing users are
+  created disabled, and an empty value removes every admin, as upstream did.
+- Release approvals are the `application_approval` table (`V4__application_approval.sql`).
+- App tags are a `jsonb` array column with a GIN index, and one live team per name (ignoring case) is a partial unique
+  index (`V7__app_tags_and_team_names.sql`; Mongo had Mongock `Migration077`'s tags index and only `TeamService`'s
+  check-write-recheck). A whole JSON column checked against a scalar (`equal`/`in`, as the catalog's tag filters and
+  `assignedToUserIds` do) renders as `@>`, which the GIN indexes serve; `searchIgnoreCase` on JSON matches any string
+  element. `TeamService` turns the index's refusal into its duplicate-name error. The grant code writes `policyMap`
+  only (`policies` is not a column).
+- Not ported: the EE-downgrade guard (it read Mongock's audit log). The plugins' own Mongo use is untouched (they talk
+  to user databases, not the internal one).
+- `scripts/fork-uat/up.ps1 -DbType postgres` (the default in a worktree that has `db/migration/postgres`) runs the instance
+  on its own PostgreSQL 16 container, `appsmith-dev-<Name>-postgres` on `127.0.0.1:<Port+5>`. In such a worktree
+  `-DbType mongo` is refused (the server would stop on the URL), and an instance that last ran on MongoDB (its
+  `instance.json` says `mongo`, or has no `dbKind`) moves to a new, empty PostgreSQL database, with a warning, on its
+  next `up.ps1` or `up.ps1 -Restart server`: the database step runs, the instance's Redis is emptied once (sessions
+  and the cached organization belonged to the MongoDB data), the dev admin is created again, and the MongoDB
+  database `appsmith_<Name>` in the shared `appsmith-dev-mongo` is left untouched. No data is copied.
+- **The main folder's instance on 8780** runs on MongoDB today. Once this branch is merged into `release` and the
+  main folder is updated, nothing needs to be done by hand: stop it as usual (`.\scripts\fork-uat\down.ps1`), then
+  start it with a plain `.\scripts\fork-uat\up.ps1 -Port 8780` (or `-Restart server`). It comes up on PostgreSQL
+  `appsmith-dev-appsmith-postgres` on `127.0.0.1:8785`, empty but for the dev admin; its test apps stay in MongoDB
+  (`appsmith_appsmith`) and are not moved. To bring a test app along, export it before the switch and import it
+  after. Once it is not needed, the old database can be dropped with
+  `docker exec appsmith-dev-mongo mongosh --quiet appsmith_appsmith --eval "db.dropDatabase()"` (the container is
+  shared with other worktrees; drop only that database).
+
+Status (milestone 1): on a `-DbType postgres` fork-uat database the server applies V1–V7 and passes an end-to-end check
+over HTTP: first-admin signup, app creation, export, import as a new app, direct publish refused, submit and approve
+publishes, an admin import onto the live app turns the approval back to draft, a Dev cannot import over the live app,
+publish or approve but can submit, the admin rejects, and the published version stays as approved. The full
+`up.ps1 -DbType postgres` instance (dependencies linked from the main folder, webpack client) also passes in a headless
+browser: the login page, a Dev's "Submit for approval" in the editor, the admin's Approve in the home page's "Waiting for
+approval" list, and the published page then carrying the Dev's change. Tested on Testcontainers PostgreSQL: the repository tests,
+imports and exports (`ImportServiceTests` 64, `ExportServiceTests` 23, partial import/export 4 + 4,
+`ImportApplicationTransactionServiceTest` 2), forking (`ApplicationForkingServiceTests` 19), release approvals
+(`ApplicationApprovalServiceTest` 49, `InstanceRolePermissionsTest` 83, `EditorReadOnlyHttpTest` 5), the projects repo
+(`ProjectsRepoServiceTest` 19, `EditCopyJsonTest` 39), teams and per-app grants (`AppGrantServiceTest` 22,
+`TeamServiceTest` 13, `DefaultWorkspaceServiceTest` 8, `PolicyGeneratorTest` 9), app tags and the catalog
+(`ApplicationCatalogTest` 26, `ApplicationTagsTest` 8, `McpAllowlistWebFilterTest` 36) and the Postgres
+tests (transactions, unique names including team names, soft delete, admin sync, JSON array queries and the tags index). The datasource plugins postgres, mysql, mssql and REST API
+and JS objects run on a live server in edit and view mode.
+The REST API plugin refuses loopback hosts (SSRF filter); for local tests only, `APPSMITH_DISABLE_SSRF_FILTER=true`.
+
+Server test suite on PostgreSQL (`appsmith-server`, Testcontainers, one JVM per batch as in CI), in batches by
+package, after merging `release` (#289, #290, #294, then #291, #292, #295). Classes, not test methods:
+
+| Batch | Packages | Passed | Failed | Skipped |
+|---|---|---|---|---|
+| 1 | every package but those below (acl … widgets, approvals, catalog, controllers, grants, imports, exports, projectsrepo, roles), `ServerApplicationTests` | 72 | 0 | 0 |
+| 2 | `repositories`, `configurations` | 33 | 0 | 1 |
+| 3 | `helpers` | 32 | 0 | 0 |
+| 4 | `solutions` | 19 | 0 | 0 |
+| 5 | `git` | 13 | 2 | 1 |
+| 6a | `services.ce` | 26 | 0 | 0 |
+| 6b | `services` (the rest) | 34 | 0 | 1 |
+| | **Total** | **229** | **2** | **3** |
+
+Each batch is from one run after the merge of #291, #292 and #295. The MCP package (`packages/mcp`, jest 1597 passed,
+5 skipped, `tsc` clean) and `tools/cab-sync` (33 passed) don't touch the database and pass unchanged.
+History note: the WIP commit `ee105d20d3` ("V5 adds Mongo's remaining unique indexes") says batch 4 still fails
+(`CreateDBTablePageSolutionTests`, `ActionExecutionSolutionCETest`) and batches 5 and 6 were not run. That was the
+state at that commit only; later commits fixed those failures and ran every batch, as the table shows.
+
+Fixed in the tests after the first run (none came from the port):
+- `UserWorkspaceServiceUnitTest` leaves out the fork's default "Apps" workspace, which `api_user` also sees.
+- `UserServiceWithDisabledSignupTest` checks that a new admin joins the default workspace's administrator group (the
+  fork creates no "'s apps" workspace). Its `@AfterAll` now really turns signup back on; upstream's never did, so
+  `WorkspaceServiceTest` later in a batch got "Signup is restricted".
+- `DefaultWorkspaceServiceTest` gets a context of its own: a cached context keeps the ids it bootstrapped with, while
+  another context may have replaced the stored default workspace since.
+- `SearchEntitySolutionCETest` (no search string) expects its app first, not alone: apps other classes left in the
+  shared default workspace are visible too.
+- `MockDataServiceTest` and `ActionExecutionSolutionCETest.executeAction_actionOnMockDatasource_success` are
+  `@Disabled`: they need the cloud's mock datasources, which are off by design ("Sample databases" below).
+- The test seed (`SeedMongoData`) keeps the default workspace. It deleted every workspace at each new context's start,
+  so each context bootstrapped its own "Apps" and the contexts cached earlier kept stale ids.
+- `UserServiceWithDisabledSignupTest.createNewUserValidWhenDisabled` uses a unique email: `UserServiceTest` creates the
+  same one earlier in the batch, and an existing user is refused before the signup check.
+- `ActionExecutionSolutionCETest` accepts a `requestedAt` equal to `Instant.now()`: on Windows the two can be the same.
+
+Failed, not from the port: `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the client DSL
+migration) fail on Windows only. Upstream's
+`FileUtilsCEImpl.getExistingFilesInRepo` / `isWhiteListedPath` and `getGitResourceIdentity` split the repository's
+relative paths on `/`, but on Windows they come as `pages\Page1\...`, so no page file is read back and nothing is
+committed. On Linux (CI, the Docker image) the paths use `/`: run on Linux in `maven:3.9-eclipse-temurin-25` (the
+worktree copied into the container, a throwaway PostgreSQL 16 through `APPSMITH_TEST_DB_URL` instead of
+Testcontainers, a throwaway Redis), both pass (`AutoCommitServiceTest` 7, `AutoCommitSolutionImplTest` 10 with its 2
+`@Disabled` skipped).
+The organization is cached in Redis, so flush the test Redis between runs.
+
+Adapted from the suite: tests that read the encrypted password from the saved object
+(`DatasourceServiceTest`, `DatasourceContextServiceTest`) now read the stored one (`StoredValues`, as upstream's `pg`
+branch did): Mongo's save encrypted the entity in place, the port encrypts only the stored JSON.
+`LayoutActionServiceTest` reads nested DSL objects as `Map` (they come back as `JSONObject`, not `LinkedHashMap`).
+
+Fixed from the suite: `V5__remaining_unique_indexes.sql` adds the unique indexes Mongo had beyond names (one cached
+structure per datasource and environment, storages, snapshot chunks, custom JS libraries, reset tokens, URL slugs).
+V2 now names the seed's columns with `SnakeCaseNamingStrategy`; its own function had turned `generateCRUDPageComponent`
+and `isDependentOnCS` into columns that do not exist, so the plugins lost them and "generate CRUD page" was refused.
+`V6__plugin_seed_acronym_columns.sql` fills them in on databases seeded before the fix.
+
+Skipped: `MockDataServiceTest` (above). `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a
+workspace over HTTP is a hidden endpoint). `GitBranchesWithCentralServiceIT` was left out: it starts the `appsmith/test-event-driver` git server image,
+which is not on this PC, and the Testcontainers pull hung for 25 minutes.
+Classes whose tests are all `@Nested` (`FSGitHandlerTest`, 31 tests) show 0 tests in surefire's text summary; they are
+counted from the XML report.
+
+Test setup: every cached test context has its own connection pool, so the test container allows 400 connections and
+each pool holds at most 5 (`PostgresTestContainerInitializer`); with the defaults (100 and 10) the later contexts in a
+batch failed with "too many clients".
+
 ## Roles (phase A)
 
 Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/roles/`.
@@ -617,8 +776,9 @@ Appsmith host: docs, community, Discord, Appsmith's GitHub, the blog, support ma
 
 The fork builds its own image from source. Docker is the only tool needed on the build machine (no JDK, Maven,
 Node or yarn on the host), and nothing is pulled from Appsmith: base layers are official Docker Hub images
-(`ubuntu`, `redis`, `caddy`, `golang`, `node`, `maven` with Temurin 25) plus the MongoDB, PostgreSQL, Adoptium,
-Node.js, npm, Maven Central and GitHub (mongo-tools) downloads the upstream base already used.
+(`ubuntu`, `redis`, `caddy`, `node`, `maven` with Temurin 25, and `postgres:16` in the compose file) plus the
+PostgreSQL apt, Adoptium, Node.js, npm and Maven Central downloads the upstream base already used. The base has no
+MongoDB server, shell or tools (upstream also built mongo-tools from GitHub).
 
 ```sh
 scripts/fork-build/build-image.sh            # Linux, macOS, Git Bash
@@ -643,11 +803,29 @@ docker compose -f deploy/fork/docker-compose.yml up -d
    stdin with CRs stripped (its heredocs fail on CRLF), and `deploy/fork/Dockerfile` uses no heredocs.
 4. Type checks (`tsc`, `check-types`) and `app/server/scripts/check-field-constants.mjs` are not part of the image
    build; run them as usual before merging.
-5. `deploy/fork/docker-compose.yml` runs the image with its embedded MongoDB and Redis (as upstream's single image)
-   and a named volume `creative-app-builder-stacks`. The port binds to `127.0.0.1:8000` by default; override with
-   `APPSMITH_HTTP_PORT`, `APPSMITH_BIND_ADDRESS`, `APPSMITH_CONTAINER_NAME`, `APPSMITH_VOLUME_NAME`,
-   `APPSMITH_IMAGE`. `pull_policy: never`, so compose never tries a registry. On first start the container writes
-   `stacks/configuration/docker.env` with generated MongoDB, Redis and encryption secrets: keep the volume.
+5. `deploy/fork/docker-compose.yml` runs the image with a `postgres:16` service as the internal database (volume
+   `creative-app-builder-postgres`, no published port; a commented `ports` line binds it to `127.0.0.1` if needed)
+   and the image's embedded Redis, in a named volume `creative-app-builder-stacks`. It needs
+   `APPSMITH_POSTGRES_PASSWORD` (letters and digits; it goes into the database URL) and refuses to start without it:
+   `APPSMITH_POSTGRES_PASSWORD=... docker compose -f deploy/fork/docker-compose.yml up -d`, or `--env-file`. The
+   port binds to `127.0.0.1:8000` by default; override with `APPSMITH_HTTP_PORT`, `APPSMITH_BIND_ADDRESS`,
+   `APPSMITH_CONTAINER_NAME`, `APPSMITH_VOLUME_NAME`, `APPSMITH_POSTGRES_CONTAINER_NAME`,
+   `APPSMITH_POSTGRES_VOLUME_NAME`, `APPSMITH_IMAGE`. `pull_policy: never`, so compose never tries a registry. On
+   first start the container writes `stacks/configuration/docker.env` with generated Redis and encryption secrets:
+   keep the volume.
+   Without `APPSMITH_DB_URL` (a plain `docker run` of the image), the entrypoint runs an embedded PostgreSQL 16 in
+   the stacks volume (`data/postgres/main`), and `docker.env` gets `APPSMITH_DB_URL=postgresql://appsmith:<generated
+   password>@localhost:5432/appsmith`. The embedded one runs only when the URL is local; `run-java.sh` creates the
+   `appsmith` user, schema and `pg_trgm` there before the server starts, and Flyway creates the tables. A
+   `mongodb://` URL (a volume first started by a MongoDB image) stops the container with what to do: start on a
+   fresh volume, or set a `postgresql://` URL. `pg-upgrade.sh` upgrades an older embedded data folder (14, from
+   earlier images) to 16. `appsmithctl backup` / `restore` still run `mongodump` / `mongorestore` (in
+   `app/client/packages/rts/src/ctl`), so they don't work on this image yet; use `pg_dump` on the database.
+   Checked on `creative-app-builder:fork-postgres` (October 2026), each on a fresh volume: `docker run` with the
+   embedded PostgreSQL 16 (Flyway V1–V7, `/api/v1/health` 200 about 25 s after start, first-admin signup and login,
+   login again after `docker restart`), the compose file with its `postgres` service (same checks; no PostgreSQL in
+   the app container, only `127.0.0.1:<port>` published), and a `mongodb://` URL (the container stops with the
+   message, exit code 1).
 6. Health: `docker inspect --format '{{.State.Health.Status}}' creative-app-builder` (the image's healthcheck), or
    `http://127.0.0.1:8000/api/v1/health`. The healthcheck turns `healthy` about a minute before the backend is up:
    until then the editor shows "Appsmith is starting" and `/api/v1/health` answers 502. Wait for the 200.
@@ -838,7 +1016,8 @@ from `download.redis.io` only when the host page size is above 4 KB (for example
 `install_docker.sh` (not called by the image) uses `download.docker.com` and GitHub.
 
 Checked at run time on `creative-app-builder:local` (October 2026), with a `tcpdump` container sharing the app
-container's network namespace: a first boot on an empty volume (MongoDB init, migrations), the first-admin signup,
+container's network namespace (on the MongoDB image, before the PostgreSQL port): a first boot on an empty volume
+(MongoDB init, migrations), the first-admin signup,
 the login page and its APIs, logged-in API calls, a restart of backend, RTS and MCP, and about 15 minutes of idle
 running. The capture held only the HTTP requests from the host on port 80: no DNS query and no outbound connection
 of any kind. The container logs have no Appsmith host (the only URLs are `localhost`, `slf4j.org` and a Micrometer

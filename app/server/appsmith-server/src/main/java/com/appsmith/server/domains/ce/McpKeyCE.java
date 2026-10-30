@@ -1,6 +1,7 @@
 package com.appsmith.server.domains.ce;
 
 import com.appsmith.external.models.BaseDomain;
+import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -12,6 +13,7 @@ import java.time.Instant;
 @Setter
 @ToString
 @FieldNameConstants
+@MappedSuperclass
 public class McpKeyCE extends BaseDomain {
 
     private String userId;

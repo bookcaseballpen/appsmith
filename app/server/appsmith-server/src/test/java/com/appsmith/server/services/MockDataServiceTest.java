@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +53,9 @@ import static com.appsmith.server.constants.FieldName.DEVELOPER;
 import static com.appsmith.server.constants.FieldName.VIEWER;
 import static org.assertj.core.api.Assertions.assertThat;
 
+// Fork: sample databases come from Appsmith's cloud, which this fork turns off (FORK.md, "Sample databases"); the
+// fork's behaviour is covered by MockDataServiceImplTest.
+@Disabled("Fork: needs the cloud's mock datasources, which are off by design (see FORK.md)")
 @SpringBootTest
 @Slf4j
 @DirtiesContext

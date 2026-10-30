@@ -18,6 +18,14 @@
     </properties>
 
     <dependencies>
+        <!-- Fork: PostgreSQL is the internal database (JPA/Hibernate, see FORK.md). Same pinned version as
+             postgresPlugin (CVE-2026-42198). -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.12</version>
+        </dependency>
+
         <dependency>
             <groupId>com.hierynomus</groupId>
             <artifactId>sshj</artifactId>
@@ -28,6 +36,17 @@
                     <artifactId>bcprov-jdk15on</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- jsonb column types. The hibernate-63 artifact covers Hibernate 6.3 to 6.6 (Spring Boot 3.5 ships 6.6). -->
+        <dependency>
+            <groupId>io.hypersistence</groupId>
+            <artifactId>hypersistence-utils-hibernate-63</artifactId>
+            <version>3.9.2</version>
         </dependency>
 
         <!-- Actual Junit5 implementation. Will transitively include junit-jupiter-api -->
@@ -69,17 +88,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.data</groupId>
-            <artifactId>spring-data-mongodb</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-mongodb-reactive</artifactId>
-        </dependency>
-
-        <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>20231013</version>
@@ -94,6 +102,12 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>32.0.1-jre</version>
         </dependency>
 
         <dependency>

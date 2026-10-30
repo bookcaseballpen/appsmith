@@ -2,18 +2,20 @@ package com.appsmith.server.domains;
 
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.server.enums.McpTokenStatus;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
 @Getter
 @Setter
 @ToString
-@Document
+@Entity
 @FieldNameConstants
 public class McpToken extends BaseDomain {
 
@@ -28,6 +30,7 @@ public class McpToken extends BaseDomain {
 
     // A given McpKey should have at most one ACTIVE token. Rotate marks that row ROTATED and inserts a new ACTIVE
     // row; revoke marks it REVOKED. Historical ROTATED/REVOKED rows are kept on purpose.
+    @Enumerated(EnumType.STRING)
     private McpTokenStatus status;
 
     private Instant expiresAt;

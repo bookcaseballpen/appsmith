@@ -9,6 +9,7 @@ import com.appsmith.server.domains.PricingPlan;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.domains.UserState;
 import com.appsmith.server.dtos.Permission;
+import com.appsmith.server.repositories.ConfigRepository;
 import com.appsmith.server.repositories.OrganizationRepository;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.PluginRepository;
@@ -35,6 +36,10 @@ import static com.appsmith.server.acl.AclPermission.USER_MANAGE_WORKSPACES;
 @Configuration
 public class SeedMongoData {
 
+    // DefaultWorkspaceService.CONFIG_NAME and WORKSPACE_ID_KEY (package-private there).
+    private static final String DEFAULT_WORKSPACE_CONFIG = "fork.defaultWorkspace";
+    private static final String DEFAULT_WORKSPACE_ID_KEY = "workspaceId";
+
     @Bean
     ApplicationRunner init(
             UserRepository userRepository,
@@ -42,6 +47,7 @@ public class SeedMongoData {
             PluginRepository pluginRepository,
             OrganizationRepository organizationRepository,
             PermissionGroupRepository permissionGroupRepository,
+            ConfigRepository configRepository,
             PolicySolution policySolution) {
 
         log.info("Seeding the data");
@@ -115,7 +121,10 @@ public class SeedMongoData {
                     log.debug("Create plugin: {}", plugin);
                     return plugin;
                 })
-                .flatMap(pluginRepository::save);
+                // Fork: every test context of the run shares one PostgreSQL container, so seed only what is missing.
+                .flatMap(plugin -> pluginRepository
+                        .findByPackageName(plugin.getPackageName())
+                        .switchIfEmpty(Mono.defer(() -> pluginRepository.save(plugin))));
 
         Organization defaultOrganization = new Organization();
         defaultOrganization.setDisplayName("Default");
@@ -130,6 +139,10 @@ public class SeedMongoData {
 
         Flux<User> userFlux = Flux.just(userData)
                 .zipWith(defaultOrganizationIdMono.repeat())
+                .filterWhen(tuple -> userRepository
+                        .findByEmailAndOrganizationId((String) tuple.getT1()[1], tuple.getT2())
+                        .hasElement()
+                        .map(exists -> !exists))
                 .flatMap(tuple -> {
                     Object[] array = tuple.getT1();
                     String organizationId = tuple.getT2();
@@ -158,8 +171,22 @@ public class SeedMongoData {
                     });
                 });
 
+        // Fork: every workspace but the default one (DefaultWorkspaceService). It cannot be deleted in production, and
+        // the contexts started earlier in the same JVM keep its ids; deleting it gave each context its own.
+        Mono<Void> deleteWorkspacesMono = configRepository
+                .findByName(DEFAULT_WORKSPACE_CONFIG)
+                .mapNotNull(config -> config.getConfig() == null
+                        ? null
+                        : (String) config.getConfig().get(DEFAULT_WORKSPACE_ID_KEY))
+                .defaultIfEmpty("")
+                .flatMapMany(defaultWorkspaceId -> workspaceRepository
+                        .retrieveAll()
+                        .filter(workspace -> !defaultWorkspaceId.equals(workspace.getId())))
+                .collectList()
+                .flatMap(workspaceRepository::deleteAll);
+
         return args -> {
-            Mono.when(workspaceRepository.deleteAll(), pluginFlux, userFlux).block();
+            Mono.when(deleteWorkspacesMono, pluginFlux, userFlux).block();
         };
     }
 }

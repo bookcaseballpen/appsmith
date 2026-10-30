@@ -1,11 +1,13 @@
 package com.appsmith.server.domains;
 
+import jakarta.persistence.Entity;
 import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.reflections.Reflections;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
 
 import java.lang.reflect.Field;
 import java.util.HashSet;
@@ -30,7 +32,15 @@ public class EqualityTest {
     @Test
     void testAffirmation() {
         // Test that all classes we suspect equality screw-up in, are accounted for in the TESTED_CLASSES set.
-        final Set<Class<?>> classes = new Reflections("com.appsmith").getTypesAnnotatedWith(Document.class);
+        // Fork: the stored domains are JPA entities (they were Mongo @Document classes).
+        final ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(Entity.class));
+        final Set<Class<?>> classes = new HashSet<>();
+        for (BeanDefinition candidate : scanner.findCandidateComponents("com.appsmith")) {
+            classes.add(Class.forName(candidate.getBeanClassName()));
+        }
+        assertThat(classes).isNotEmpty();
         final Set<Class<?>> fieldClasses = new HashSet<>();
 
         for (final Class<?> cls : classes) {
@@ -39,7 +49,7 @@ public class EqualityTest {
                 final Class<?> fieldCls = field.getType();
                 if (!fieldCls.isEnum()
                         && fieldCls.getPackageName().startsWith("com.appsmith.")
-                        && !fieldCls.isAnnotationPresent(Document.class)
+                        && !fieldCls.isAnnotationPresent(Entity.class)
                         && !fieldCls.getSuperclass().equals(Object.class)
                         && !fieldCls.isAnnotationPresent(Data.class)
                         && !TESTED_CLASSES.contains(fieldCls)) {

@@ -72,7 +72,7 @@ public class PageDTO implements LayoutContainer {
     @JsonView(Views.Internal.class)
     protected Map<String, Policy> policyMap = new HashMap<>();
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'", timezone = "UTC")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     @JsonView(Views.Public.class)
     Instant deletedAt = null;
 
@@ -99,12 +99,14 @@ public class PageDTO implements LayoutContainer {
      */
     @JsonView(Views.Internal.class)
     @Deprecated(forRemoval = true, since = "Use policyMap instead")
+    @Transient
     public Set<Policy> getPolicies() {
         return policyMap == null ? null : Set.copyOf(policyMap.values());
     }
 
     @JsonView(Views.Internal.class)
     @Deprecated(forRemoval = true, since = "Use policyMap instead")
+    @Transient
     public void setPolicies(Set<Policy> policies) {
         if (policies == null) {
             policyMap = null;

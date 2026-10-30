@@ -1,6 +1,6 @@
 package com.appsmith.server.helpers;
 
-import org.bson.types.ObjectId;
+import com.appsmith.external.helpers.ObjectIds;
 import org.springframework.util.StringUtils;
 
 import java.util.UUID;
@@ -43,7 +43,7 @@ public final class McpUserKeyCodec {
         if (uuidForm != null) {
             return uuidForm;
         }
-        return parseIdThenSecret(rest, OBJECT_ID_LENGTH, ObjectId::isValid);
+        return parseIdThenSecret(rest, OBJECT_ID_LENGTH, ObjectIds::isValid);
     }
 
     private static Expanded parseIdThenSecret(String rest, int idLength, Predicate<String> idValid) {

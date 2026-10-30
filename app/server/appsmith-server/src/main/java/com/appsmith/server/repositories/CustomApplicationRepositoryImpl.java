@@ -3,6 +3,7 @@ package com.appsmith.server.repositories;
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
+import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
 import com.appsmith.server.repositories.ce.CustomApplicationRepositoryCEImpl;
 import com.appsmith.server.roles.DefaultWorkspaceIds;
 import com.appsmith.server.roles.DefaultWorkspaceService;
@@ -11,12 +12,8 @@ import com.appsmith.server.solutions.ApplicationPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 
 @Component
@@ -43,23 +40,19 @@ public class CustomApplicationRepositoryImpl extends CustomApplicationRepository
      * from the app list and from every API that loads it. Other roles, and apps in any other workspace, are unchanged.
      */
     @Override
-    protected Query createQueryWithPermission(
-            List<Criteria> criterias,
-            List<String> projectionFieldNames,
-            Set<String> permissionGroups,
-            AclPermission aclPermission) {
+    protected BridgeQuery<Application> permissionCriteria(Set<String> permissionGroups, AclPermission aclPermission) {
         DefaultWorkspaceIds ids = defaultWorkspaceService.getResolvedIds().orElse(null);
         if (aclPermission != AclPermission.READ_APPLICATIONS
                 || ids == null
                 || permissionGroups == null
                 || !permissionGroups.contains(ids.groupId(InstanceRole.USER))) {
-            return super.createQueryWithPermission(criterias, projectionFieldNames, permissionGroups, aclPermission);
+            return super.permissionCriteria(permissionGroups, aclPermission);
         }
 
-        List<Criteria> liveOnly = new ArrayList<>(criterias);
-        liveOnly.add(Bridge.<Application>or(
-                Bridge.isNotNull(Application.Fields.lastDeployedAt),
-                Bridge.<Application>query().notEqual(Application.Fields.workspaceId, ids.workspaceId())));
-        return super.createQueryWithPermission(liveOnly, projectionFieldNames, permissionGroups, aclPermission);
+        return Bridge.and(
+                super.permissionCriteria(permissionGroups, aclPermission),
+                Bridge.<Application>or(
+                        Bridge.isNotNull(Application.Fields.lastDeployedAt),
+                        Bridge.<Application>query().notEqual(Application.Fields.workspaceId, ids.workspaceId())));
     }
 }

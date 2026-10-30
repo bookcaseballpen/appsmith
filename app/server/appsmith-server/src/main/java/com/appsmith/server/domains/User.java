@@ -1,15 +1,20 @@
 package com.appsmith.server.domains;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.views.Views;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-import org.springframework.data.annotation.Transient;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.hibernate.annotations.Type;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
@@ -26,7 +31,7 @@ import java.util.Set;
 @Getter
 @Setter
 @ToString
-@Document
+@Entity
 @FieldNameConstants
 public class User extends BaseDomain implements UserDetails, OidcUser {
 
@@ -48,9 +53,11 @@ public class User extends BaseDomain implements UserDetails, OidcUser {
     private Boolean passwordResetInitiated = false;
 
     @JsonView(Views.Public.class)
+    @Enumerated(EnumType.STRING)
     private LoginSource source = LoginSource.FORM;
 
     @JsonView(Views.Public.class)
+    @Enumerated(EnumType.STRING)
     private UserState state;
 
     @JsonView(Views.Public.class)
@@ -63,6 +70,8 @@ public class User extends BaseDomain implements UserDetails, OidcUser {
     private Boolean emailVerified;
 
     @JsonView(Views.Public.class)
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     private Set<String> workspaceIds;
 
     @JsonView(Views.Public.class)
@@ -96,12 +105,14 @@ public class User extends BaseDomain implements UserDetails, OidcUser {
     // TODO: Populate these attributes for a user. Generally required for OAuth2 logins
     @Override
     @JsonView(Views.Public.class)
+    @Transient
     public Map<String, Object> getAttributes() {
         return null;
     }
 
     @Override
     @JsonView(Views.Public.class)
+    @Transient
     public Collection<GrantedAuthority> getAuthorities() {
         return null;
     }
@@ -141,6 +152,7 @@ public class User extends BaseDomain implements UserDetails, OidcUser {
     // TODO: Check the return value for the functions below to ensure that correct values are being returned
     @Override
     @JsonView(Views.Public.class)
+    @Transient
     public Map<String, Object> getClaims() {
         return new HashMap<>();
     }

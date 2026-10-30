@@ -9,6 +9,7 @@ import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
@@ -83,7 +84,9 @@ public class TeamService {
                     team.setOrganizationId(organizationId);
                     team.setPermissions(Set.of());
                     team.setAssignedToUserIds(new HashSet<>());
-                    return permissionGroupRepository.save(team);
+                    return permissionGroupRepository
+                            .save(team)
+                            .onErrorMap(DuplicateKeyException.class, error -> nameTaken(name));
                 })
                 .flatMap(saved -> undoIfNameTaken(
                                 name,
@@ -105,11 +108,13 @@ public class TeamService {
                 .requireAdmin()
                 .then(appGrantService.findTeam(teamId))
                 .flatMap(team -> requireFreeName(name, teamId)
-                        .then(permissionGroupRepository.updateById(
-                                teamId,
-                                Bridge.update()
-                                        .set(PermissionGroup.Fields.name, name)
-                                        .set(PermissionGroup.Fields.description, request.description())))
+                        .then(permissionGroupRepository
+                                .updateById(
+                                        teamId,
+                                        Bridge.update()
+                                                .set(PermissionGroup.Fields.name, name)
+                                                .set(PermissionGroup.Fields.description, request.description()))
+                                .onErrorMap(DuplicateKeyException.class, error -> nameTaken(name)))
                         .then(undoIfNameTaken(
                                 name,
                                 teamId,
@@ -187,10 +192,12 @@ public class TeamService {
                 .all()
                 .filter(team -> !team.getId().equals(exceptTeamId))
                 .hasElements()
-                .flatMap(taken -> taken
-                        ? Mono.error(new AppsmithException(
-                                AppsmithError.DUPLICATE_KEY_USER_ERROR, "Team " + name, FieldName.NAME))
-                        : Mono.empty());
+                .flatMap(taken -> taken ? Mono.error(nameTaken(name)) : Mono.empty());
+    }
+
+    // Fork: also when a database with a unique index on team names (PostgreSQL, V7) refuses the write.
+    private static AppsmithException nameTaken(String name) {
+        return new AppsmithException(AppsmithError.DUPLICATE_KEY_USER_ERROR, "Team " + name, FieldName.NAME);
     }
 
     /**

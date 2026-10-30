@@ -8,10 +8,12 @@ set -o pipefail
 set -o nounset
 set -o noglob
 
-mode=mongo
-if [[ "$APPSMITH_DB_URL" = postgresql://* ]]; then
-  mode=pg
+# Fork: the server only runs on PostgreSQL (entrypoint.sh already refuses any other APPSMITH_DB_URL).
+if [[ "$APPSMITH_DB_URL" != postgresql://* ]]; then
+  tlog "APPSMITH_DB_URL must be a postgresql:// URL; this image does not support MongoDB." >&2
+  exit 2
 fi
+mode=pg
 
 tlog "Running with $mode."
 cd "/opt/appsmith/server/$mode"

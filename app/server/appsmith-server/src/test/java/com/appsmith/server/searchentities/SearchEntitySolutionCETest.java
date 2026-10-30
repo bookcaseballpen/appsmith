@@ -140,12 +140,16 @@ class SearchEntitySolutionCETest {
                 .block();
         assertNotNull(application, "Application should not be null");
         applicationIds.add(application.getId());
+        final String applicationId = application.getId();
         Mono<SearchEntityDTO> searchEntityDTOMono =
                 searchEntitySolution.searchEntity(new String[] {}, null, 0, 10, true);
 
         StepVerifier.create(searchEntityDTOMono)
                 .assertNext(searchEntityDTO -> {
-                    assertThat(searchEntityDTO.getApplications()).hasSize(1);
+                    // Fork: apps that earlier test classes left in the shared default workspace are visible too; the
+                    // newest (this one) comes first.
+                    assertThat(searchEntityDTO.getApplications()).hasSizeBetween(1, 10);
+                    assertThat(searchEntityDTO.getApplications().get(0).getId()).isEqualTo(applicationId);
                     // Fork: api_user is also a member of the default "Apps" workspace (SeedTestUserRoles).
                     assertThat(searchEntityDTO.getWorkspaces())
                             .extracting(Workspace::getId)

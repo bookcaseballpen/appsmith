@@ -13,16 +13,7 @@ import com.appsmith.server.repositories.BaseAppsmithRepositoryImpl;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.ReactiveMongoOperations;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
-import org.springframework.data.mongodb.core.aggregation.Fields;
-import org.springframework.data.mongodb.core.aggregation.GroupOperation;
-import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
-import org.springframework.data.mongodb.core.query.Criteria;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -32,18 +23,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.group;
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.match;
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.newAggregation;
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.project;
-import static org.springframework.data.mongodb.core.query.Criteria.where;
-
 @Slf4j
 @RequiredArgsConstructor
 public class CustomNewActionRepositoryCEImpl extends BaseAppsmithRepositoryImpl<NewAction>
         implements CustomNewActionRepositoryCE {
-
-    private final ReactiveMongoOperations mongoOperations;
 
     private final ObservationRegistry observationRegistry;
 
@@ -274,8 +257,8 @@ public class CustomNewActionRepositoryCEImpl extends BaseAppsmithRepositoryImpl<
     @Override
     public Mono<Long> countByDatasourceId(String datasourceId) {
         BridgeQuery<NewAction> q = Bridge.or(
-                Bridge.equal(NewAction.Fields.unpublishedAction + ".datasource._id", new ObjectId(datasourceId)),
-                Bridge.equal(NewAction.Fields.publishedAction + ".datasource._id", new ObjectId(datasourceId)));
+                Bridge.equal(NewAction.Fields.unpublishedAction + ".datasource.id", datasourceId),
+                Bridge.equal(NewAction.Fields.publishedAction + ".datasource.id", datasourceId));
 
         return queryBuilder().criteria(q).count();
     }
@@ -369,29 +352,16 @@ public class CustomNewActionRepositoryCEImpl extends BaseAppsmithRepositoryImpl<
 
     protected Mono<Void> copyUnpublishedActionToPublishedAction(
             BridgeQuery<NewAction> criteria, AclPermission permission) {
-        Mono<Set<String>> permissionGroupsMono = getCurrentUserPermissionGroupsIfRequired(permission);
-
-        return permissionGroupsMono
-                .flatMapMany(permissionGroups -> {
-                    AggregationOperation matchAggregationWithPermission;
-                    if (permission == null) {
-                        matchAggregationWithPermission = Aggregation.match(new Criteria().andOperator(notDeleted()));
-                    } else {
-                        matchAggregationWithPermission = Aggregation.match(
-                                new Criteria().andOperator(notDeleted(), userAcl(permissionGroups, permission)));
-                    }
-                    AggregationOperation matchAggregation = Aggregation.match(criteria);
-                    AggregationOperation wholeProjection = Aggregation.project(NewAction.class);
-                    AggregationOperation addFieldsOperation = Aggregation.addFields()
-                            .addField(NewAction.Fields.publishedAction)
-                            .withValueOf(Fields.field(NewAction.Fields.unpublishedAction))
-                            .build();
-                    Aggregation combinedAggregation = Aggregation.newAggregation(
-                            matchAggregation, matchAggregationWithPermission, wholeProjection, addFieldsOperation);
-                    return mongoOperations.aggregate(combinedAggregation, NewAction.class, NewAction.class);
-                })
-                .collectList()
-                .flatMap(this::bulkUpdate);
+        // Fork: one UPDATE that copies the unpublished action over the published one (Mongo used an aggregation and a
+        // bulk write).
+        final BridgeUpdate update = Bridge.update()
+                .setToValueFromField(NewAction.Fields.publishedAction, NewAction.Fields.unpublishedAction)
+                .set(NewAction.Fields.updatedAt, Instant.now());
+        return queryBuilder()
+                .criteria(criteria)
+                .permission(permission)
+                .updateAll(update)
+                .then();
     }
 
     @Override
@@ -399,22 +369,26 @@ public class CustomNewActionRepositoryCEImpl extends BaseAppsmithRepositoryImpl<
         final BridgeQuery<NewAction> q = getCriterionForFindByApplicationId(applicationId)
                 .isNotNull(NewAction.Fields.unpublishedAction_deletedAt);
 
+        // Fork: the deprecated `deleted` flag is not stored on PostgreSQL; deletedAt is what marks a row as deleted.
         BridgeUpdate update = Bridge.update();
-        update.set(NewAction.Fields.deleted, true);
         update.set(NewAction.Fields.deletedAt, Instant.now());
         return queryBuilder().criteria(q).permission(permission).updateAll(update);
     }
 
     @Override
     public Flux<PluginTypeAndCountDTO> countActionsByPluginType(String applicationId) {
-        GroupOperation countByPluginType =
-                group(NewAction.Fields.pluginType).count().as("count");
-        MatchOperation filterStates =
-                match(where(NewAction.Fields.applicationId).is(applicationId).andOperator(notDeleted()));
-        ProjectionOperation projectionOperation = project("count").and("_id").as("pluginType");
-        Aggregation aggregation = newAggregation(filterStates, countByPluginType, projectionOperation);
-        return mongoOperations.aggregate(
-                aggregation, mongoOperations.getCollectionName(NewAction.class), PluginTypeAndCountDTO.class);
+        // Fork: a GROUP BY on PostgreSQL (Mongo used an aggregation).
+        return getPostgresOperations().readMany(em -> {
+            @SuppressWarnings("unchecked")
+            final List<Object[]> rows = em.createNativeQuery("SELECT plugin_type, count(*) FROM new_action"
+                            + " WHERE application_id = ?1 AND deleted_at IS NULL GROUP BY plugin_type")
+                    .setParameter(1, applicationId)
+                    .getResultList();
+            return rows.stream()
+                    .map(row -> new PluginTypeAndCountDTO(
+                            row[0] == null ? null : PluginType.valueOf((String) row[0]), ((Number) row[1]).intValue()))
+                    .toList();
+        });
     }
 
     @Override

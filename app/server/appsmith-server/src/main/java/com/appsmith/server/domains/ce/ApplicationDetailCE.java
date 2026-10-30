@@ -1,13 +1,16 @@
 package com.appsmith.server.domains.ce;
 
+import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
 import com.appsmith.server.domains.Application;
 import com.fasterxml.jackson.annotation.JsonView;
+import jakarta.persistence.Column;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.Type;
 
 import java.util.regex.Pattern;
 
@@ -21,12 +24,18 @@ public class ApplicationDetailCE {
     private static final Pattern HTML_LANG_PATTERN = Pattern.compile("^[a-z]{2,3}(-[a-z0-9]+)*$");
     private static final int HTML_LANG_MAX_LENGTH = 35;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     Application.AppPositioning appPositioning;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     Application.NavigationSetting navigationSetting;
 
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
     @JsonView({Views.Public.class, Git.class})
     Application.ThemeSetting themeSetting;
 

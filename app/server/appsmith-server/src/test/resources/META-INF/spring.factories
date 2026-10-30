@@ -1,0 +1,3 @@
+# Fork: every Spring test context gets a PostgreSQL database (Testcontainers); see PostgresTestContainerInitializer.
+org.springframework.context.ApplicationContextInitializer=\
+com.appsmith.server.configurations.PostgresTestContainerInitializer

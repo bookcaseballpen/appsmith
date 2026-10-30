@@ -2,34 +2,47 @@ package com.appsmith.server.helpers.ce.bridge;
 
 import com.appsmith.external.models.BaseDomain;
 import lombok.NonNull;
-import org.bson.Document;
-import org.bson.types.ObjectId;
-import org.springframework.data.mongodb.core.query.Criteria;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
-import java.util.regex.Pattern;
 
+/**
+ * Fork: a database-neutral query, made of {@link Check}s that are all ANDed. It no longer extends Mongo's
+ * {@code Criteria}; the PostgreSQL repositories render it to SQL. Keys are field names as in the domain classes, with
+ * dots for nested fields (stored as JSON).
+ */
 @SuppressWarnings("UnusedReturnValue")
-public final class BridgeQuery<T extends BaseDomain> extends Criteria {
-    final List<Criteria> checks = new ArrayList<>();
+public final class BridgeQuery<T extends BaseDomain> {
+    final List<Check> checks = new ArrayList<>();
 
     BridgeQuery() {}
 
-    public BridgeQuery<T> equal(@NonNull String key, @NonNull String value) {
-        checks.add(Criteria.where(key).is(value));
+    public List<Check> getChecks() {
+        return Collections.unmodifiableList(checks);
+    }
+
+    private BridgeQuery<T> add(Op op, String key, Object value) {
+        checks.add(new Check.Unit(op, key, value));
         return this;
+    }
+
+    public BridgeQuery<T> equal(@NonNull String key, @NonNull String value) {
+        return add(Op.EQUAL, key, value);
     }
 
     public BridgeQuery<T> equal(@NonNull String key, int value) {
-        checks.add(Criteria.where(key).is(value));
-        return this;
+        return add(Op.EQUAL, key, value);
     }
 
     public BridgeQuery<T> notEqual(@NonNull String key, @NonNull String value) {
-        checks.add(Criteria.where(key).ne(value));
-        return this;
+        return add(Op.NOT_EQUAL, key, value);
+    }
+
+    public BridgeQuery<T> notEqual(@NonNull String key, boolean value) {
+        return add(Op.NOT_EQUAL, key, value);
     }
 
     public BridgeQuery<T> equal(@NonNull String key, @NonNull Enum<?> value) {
@@ -41,107 +54,100 @@ public final class BridgeQuery<T extends BaseDomain> extends Criteria {
     }
 
     public BridgeQuery<T> equalIgnoreCase(@NonNull String key, @NonNull String value) {
-        checks.add(Criteria.where(key).regex("^" + Pattern.quote(value) + "$", "i"));
-        return this;
-    }
-
-    public BridgeQuery<T> equal(@NonNull String key, @NonNull ObjectId value) {
-        checks.add(Criteria.where(key).is(value));
-        return this;
+        return add(Op.EQ_IGNORE_CASE, key, value);
     }
 
     /**
      * Prefer using `.isTrue()` or `.isFalse()` instead of this method **if possible**.
      */
     public BridgeQuery<T> equal(@NonNull String key, boolean value) {
-        checks.add(Criteria.where(key).is(value));
-        return this;
+        return add(Op.EQUAL, key, value);
     }
 
     public BridgeQuery<T> searchIgnoreCase(@NonNull String key, @NonNull String needle) {
         if (key.contains(".")) {
             throw new UnsupportedOperationException("Search-ignore-case is not supported for nested fields");
         }
-
-        checks.add(Criteria.where(key).regex(".*" + Pattern.quote(needle) + ".*", "i"));
-        return this;
+        return add(Op.SEARCH_IGNORE_CASE, key, needle);
     }
 
     public BridgeQuery<T> in(@NonNull String key, @NonNull Collection<String> value) {
-        checks.add(Criteria.where(key).in(value));
-        return this;
+        return add(Op.IN, key, List.copyOf(value));
     }
 
     public BridgeQuery<T> notIn(@NonNull String needle, @NonNull Collection<String> haystack) {
-        checks.add(Criteria.where(needle).not().in(haystack));
-        return this;
+        return add(Op.NOT_IN, needle, List.copyOf(haystack));
     }
 
     // Filtering for enums does not work with hibernate even if the field is annotated with @Enumerated(String.class)
     public BridgeQuery<T> enumIn(@NonNull String key, @NonNull Collection<Enum<?>> value) {
-        checks.add(Criteria.where(key).in(value));
-        return this;
+        return add(Op.IN, key, value.stream().map(Enum::name).toList());
     }
 
     public BridgeQuery<T> exists(@NonNull String key) {
-        checks.add(Criteria.where(key).exists(true));
-        return this;
+        return add(Op.EXISTS, key, null);
     }
 
     public BridgeQuery<T> notExists(@NonNull String key) {
-        checks.add(Criteria.where(key).exists(false));
-        return this;
+        return add(Op.NOT_EXISTS, key, null);
     }
 
     public BridgeQuery<T> isNull(@NonNull String key) {
-        checks.add(Criteria.where(key).isNull());
-        return this;
+        return add(Op.IS_NULL, key, null);
     }
 
     public BridgeQuery<T> isNotNull(@NonNull String key) {
-        checks.add(Criteria.where(key).ne(null));
-        return this;
+        return add(Op.IS_NOT_NULL, key, null);
     }
 
     public BridgeQuery<T> isTrue(@NonNull String key) {
-        checks.add(Criteria.where(key).is(true));
-        return this;
+        return add(Op.IS_TRUE, key, null);
     }
 
     public BridgeQuery<T> isFalse(@NonNull String key) {
-        checks.add(Criteria.where(key).is(false));
+        return add(Op.IS_FALSE, key, null);
+    }
+
+    public BridgeQuery<T> greaterThan(@NonNull String key, @NonNull Instant value) {
+        return add(Op.GREATER_THAN, key, value);
+    }
+
+    public BridgeQuery<T> lessThan(@NonNull String key, @NonNull Instant value) {
+        return add(Op.LESS_THAN, key, value);
+    }
+
+    /**
+     * Fork: the array at {@code key} has fewer than {@code size} elements (replaces Mongo's "key.N does not exist").
+     */
+    public BridgeQuery<T> sizeLessThan(@NonNull String key, int size) {
+        return add(Op.SIZE_LESS_THAN, key, size);
+    }
+
+    /**
+     * Fork: a check with any operator and value, for the derived-query engine of the repositories.
+     */
+    public BridgeQuery<T> check(@NonNull Op op, @NonNull String key, Object value) {
+        return add(op, key, value);
+    }
+
+    /**
+     * Check that the string `needle` is present in the JSON array at `key`.
+     */
+    public BridgeQuery<T> jsonIn(@NonNull String needle, @NonNull String key) {
+        return add(Op.EQUAL, key, needle);
+    }
+
+    /**
+     * Fork: the ACL check, true when any of {@code permissionGroups} is granted {@code permission} in the policy map.
+     */
+    public BridgeQuery<T> hasPermission(@NonNull String permission, @NonNull Collection<String> permissionGroups) {
+        checks.add(new Check.Permission(permission, List.copyOf(permissionGroups)));
         return this;
     }
 
     public BridgeQuery<T> and(BridgeQuery<T> item) {
-        checks.add(new Criteria().andOperator(item));
+        checks.add(new Check.And<>(List.of(item)));
         return this;
-    }
-
-    /**
-     * Explicitly disable the `where()` API to prevent its usage. This is because querying with this API will work here,
-     * but won't work in the Postgres version.
-     */
-    public static Bridge where() {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    /**
-     * Explicitly disable the `and()` API to prevent its usage. This is because querying with this API will work here,
-     * but won't work in the Postgres version.
-     */
-    public static Bridge and() {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    @Override
-    public Document getCriteriaObject() {
-        if (checks.isEmpty()) {
-            throw new UnsupportedOperationException(
-                    "Empty bridge criteria leads to subtle bugs. Just don't call `.criteria()` in such cases.");
-        }
-
-        return new Criteria().andOperator(checks.toArray(new Criteria[0])).getCriteriaObject();
     }
 
     public boolean isEmpty() {
