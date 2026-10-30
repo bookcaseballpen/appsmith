@@ -1,11 +1,27 @@
 {
-  "short_name": "Appsmith App",
-  "name": "Appsmith Client Web UI",
+  "short_name": "App Builder",
+  "name": "CreativeAppBuilder",
+  "description": "Internal dashboards and reports at Creative.",
   "icons": [
     {
-      "src": "static/img/favicon-orange.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "src": "brand/favicon.ico",
+      "sizes": "48x48 32x32 16x16",
       "type": "image/x-icon"
+    },
+    {
+      "src": "brand/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
   "start_url": ".",

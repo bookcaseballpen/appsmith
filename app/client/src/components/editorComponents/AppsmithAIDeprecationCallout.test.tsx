@@ -1,11 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "styled-components";
 import { BrowserRouter as Router } from "react-router-dom";
 import { lightTheme } from "selectors/themeSelectors";
 import AppsmithAIDeprecationCallout from "./AppsmithAIDeprecationCallout";
-import { DocsLink, openDoc } from "constants/DocumentationLinks";
+import { openDoc } from "constants/DocumentationLinks";
 import {
   APPSMITH_AI_DEPRECATION_LEARN_MORE,
   APPSMITH_AI_KILL_DATE,
@@ -39,21 +39,13 @@ describe("AppsmithAIDeprecationCallout", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the migration docs link", () => {
+  // Fork: the migration guide is on Appsmith's docs, so no link is shown (ce/utils/forkHiddenFeatures.ts).
+  it("renders no link to Appsmith's docs", () => {
     renderCallout();
 
     expect(
-      screen.getByText(createMessage(APPSMITH_AI_DEPRECATION_LEARN_MORE)),
-    ).toBeInTheDocument();
-  });
-
-  it("opens the deprecation docs when the link is clicked", () => {
-    renderCallout();
-
-    fireEvent.click(
-      screen.getByText(createMessage(APPSMITH_AI_DEPRECATION_LEARN_MORE)),
-    );
-
-    expect(openDoc).toHaveBeenCalledWith(DocsLink.APPSMITH_AI_DEPRECATION);
+      screen.queryByText(createMessage(APPSMITH_AI_DEPRECATION_LEARN_MORE)),
+    ).not.toBeInTheDocument();
+    expect(openDoc).not.toHaveBeenCalled();
   });
 });

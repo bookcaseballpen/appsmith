@@ -75,9 +75,10 @@ export const APPROVED_ERROR_MESSAGES = {
   ],
 
   // Patterns for dynamic messages that are allowed
+  // Fork: the server's messages name the product CreativeAppBuilder; Appsmith is still accepted.
   patterns: [
     // Authentication patterns
-    /^Please use [a-zA-Z0-9\s\.-]+ authentication to login to Appsmith$/,
+    /^Please use [a-zA-Z0-9\s\.-]+ authentication to login to (Appsmith|CreativeAppBuilder)$/,
     /^Authentication failed with error: [a-zA-Z0-9\s.,_\-:()'"]+$/,
     /^Invalid email domain [a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,} used for sign in\/sign up\. Please contact the administrator to configure this domain if this is unexpected\.$/,
     /^Password length should be between [0-9]+ and [0-9]+$/,
@@ -85,9 +86,9 @@ export const APPROVED_ERROR_MESSAGES = {
     /^Please enter a valid parameter [a-zA-Z][a-zA-Z0-9._-]*\.$/,
     /^There is already an account registered with this email [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\. Please sign in instead\.$/,
     /^Cannot find an outstanding reset password request for this email\. Please initiate a request via "forgot password" button to reset your password$/,
-    /^A password reset link has been sent to your email address [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,} registered with Appsmith\.$/,
+    /^A password reset link has been sent to your email address [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,} registered with (Appsmith|CreativeAppBuilder)\.$/,
     /^Password must be [0-9]+-[0-9]+ characters long and include at least one uppercase letter, one lowercase letter, one number, one symbol, and no whitespaces\.$/,
-    /^Signup is restricted on this instance of Appsmith\. Please contact the administrator to get an invite for user [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\.$/,
+    /^Signup is restricted on this instance of (Appsmith|CreativeAppBuilder)\. Please contact the administrator to get an invite for user [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\.$/,
     /^The user [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,} has already been added to the workspace with role [a-zA-Z0-9\s_-]+\. To change the role, please navigate to `Manage users` page\.$/,
   ],
 };

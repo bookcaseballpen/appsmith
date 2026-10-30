@@ -8,6 +8,7 @@ import {
   QUERY_EDITOR_FORM_NAME,
 } from "ee/constants/forms";
 import { DocsLink } from "constants/DocumentationLinks";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 const API_FORM_COMPONENTS = [
   UIComponentTypes.ApiEditorForm,
@@ -25,7 +26,8 @@ const PluginActionSettings = () => {
   ) : (
     <QuerySettings
       dataTestId="t--action-settings-trigger"
-      docsLink={DocsLink.QUERY_SETTINGS}
+      // Fork: no link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+      docsLink={areAppsmithLinksHidden() ? undefined : DocsLink.QUERY_SETTINGS}
       formName={QUERY_EDITOR_FORM_NAME}
     />
   );

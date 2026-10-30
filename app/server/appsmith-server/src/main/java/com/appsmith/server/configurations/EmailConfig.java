@@ -1,5 +1,6 @@
 package com.appsmith.server.configurations;
 
+import com.appsmith.server.constants.Brand;
 import jakarta.mail.internet.InternetAddress;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -38,12 +39,13 @@ public class EmailConfig {
             value = DEFAULT_MAIL_FROM;
         }
 
+        // Fork: emails come from the fork's product name (Brand).
         try {
-            mailFrom = new InternetAddress(value, "Appsmith");
+            mailFrom = new InternetAddress(value, Brand.PRODUCT_NAME);
         } catch (UnsupportedEncodingException e) {
             log.error("Encoding error creating Appsmith mail from address. Using default from address instead.", e);
             try {
-                mailFrom = new InternetAddress(DEFAULT_MAIL_FROM, "Appsmith");
+                mailFrom = new InternetAddress(DEFAULT_MAIL_FROM, Brand.PRODUCT_NAME);
             } catch (UnsupportedEncodingException ignored) {
                 // We shouldn't see this error here with the default address parsing.
                 log.error("Encoding error with default from address. This should've never happened.", e);

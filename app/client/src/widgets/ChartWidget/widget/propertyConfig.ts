@@ -76,7 +76,8 @@ export const contentConfig = () => {
           },
         },
         {
-          helpText: "Configure a custom ECHART see docs.appsmith.com",
+          // Fork: no pointer to Appsmith's docs.
+          helpText: "Configure a custom ECHART",
           placeholderText: `Custom ECharts Configuration`,
           propertyName: "customEChartConfig",
           label: "Custom ECharts Configuration",
@@ -101,7 +102,8 @@ export const contentConfig = () => {
           dependencies: ["chartType"],
         },
         {
-          helpText: "Configure a custom FusionChart see docs.appsmith.com",
+          // Fork: no pointer to Appsmith's docs.
+          helpText: "Configure a custom FusionChart",
           placeholderText: `Fusion Chart Config`,
           propertyName: "customFusionChartConfig",
           label: "Custom fusion chart",

@@ -571,17 +571,8 @@ class MapWidget extends BaseWidget<MapWidgetProps, WidgetState> {
             <h1>{"Map Widget disabled"}</h1>
             <mark>Key: x{this.props.googleMapsApiKey}x</mark>
             <p>{"Map widget requires a Google Maps API key"}</p>
-            <p>
-              {"See our"}
-              <a
-                href="https://docs.appsmith.com/getting-started/setup/instance-configuration/google-maps"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                {" documentation "}
-              </a>
-              {"to configure API keys"}
-            </p>
+            {/* Fork: no link to Appsmith's docs; the key is set in Admin settings. */}
+            <p>{"An admin sets it in Admin settings > Instance settings"}</p>
           </DisabledContainer>
         )}
         {this.props.googleMapsApiKey && (

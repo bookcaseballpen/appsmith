@@ -78,7 +78,8 @@ public class UpdateLayoutServiceCEImpl implements UpdateLayoutServiceCE {
     private final ContextLayoutRefactorResolver contextLayoutRefactorResolver;
 
     private final String layoutOnLoadActionErrorToastMessage =
-            "A cyclic dependency error has been encountered on current page, \nqueries on page load will not run. \n Please check debugger and Appsmith documentation for more information";
+            // Fork: no pointer to Appsmith's documentation.
+            "A cyclic dependency error has been encountered on current page, \nqueries on page load will not run. \n Please check the debugger for more information";
 
     private Mono<Boolean> sendUpdateLayoutAnalyticsEvent(
             String creatorId,

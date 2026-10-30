@@ -18,7 +18,7 @@ describe("extractExecutionErrorMessage", () => {
     });
 
     expect(extractExecutionErrorMessage(axiosError)).toBe(
-      "Network error: could not reach the Appsmith server. Check your connection.",
+      "Network error: could not reach the CreativeAppBuilder server. Check your connection.",
     );
   });
 

@@ -44,6 +44,18 @@ html {
   width: 110px;
 }
 
+/* Fork: the fork's wordmark with the product name beside it (public/brand). */
+.appsmith-logo img {
+  height: 20px;
+}
+
+.appsmith-logo span {
+  margin-left: 6px;
+  color: #182026;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .main {
   display: flex;
   align-items: center;

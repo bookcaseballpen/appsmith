@@ -2,7 +2,7 @@ import React from "react";
 import { useSelector } from "react-redux";
 
 import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import BrandLogo from "components/BrandLogo";
 import LeftSideContent from "./LeftSideContent";
 import { getAppsmithConfigs } from "ee/configs";
 import { useIsMobileDevice } from "utils/hooks/useDeviceDetect";
@@ -71,10 +71,13 @@ function Container(props: ContainerProps) {
         }`}
         isMobileView={isMobileDevice}
       >
+        {/* Fork: the fork's wordmark with the product name (components/BrandLogo). */}
         {!isMobileDevice && (
-          <img
-            className="h-8 mx-auto"
-            src={getAssetUrl(organizationConfig.brandLogoUrl)}
+          <BrandLogo
+            className="mx-auto"
+            height={32}
+            logoUrl={organizationConfig.brandLogoUrl}
+            onDark={false}
           />
         )}
         <div className={`flex flex-col gap-4`}>

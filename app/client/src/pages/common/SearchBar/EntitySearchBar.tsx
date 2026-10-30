@@ -1,4 +1,4 @@
-import { getAssetUrl } from "ee/utils/airgapHelpers";
+import BrandLogo from "components/BrandLogo";
 import { APPLICATIONS_URL, AUTH_LOGIN_URL } from "constants/routes";
 import { ANONYMOUS_USERNAME } from "constants/userConstants";
 import { Button } from "@appsmith/ads";
@@ -246,10 +246,11 @@ function EntitySearchBar(props: any) {
         <HeaderSection>
           {organizationConfig.brandLogoUrl && (
             <Link className="t--appsmith-logo" to={APPLICATIONS_URL}>
-              <img
-                alt="Logo"
-                className="h-6"
-                src={getAssetUrl(organizationConfig.brandLogoUrl)}
+              {/* Fork: the fork's wordmark with the product name. */}
+              <BrandLogo
+                height={20}
+                logoUrl={organizationConfig.brandLogoUrl}
+                onDark={false}
               />
             </Link>
           )}

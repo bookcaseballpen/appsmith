@@ -1,8 +1,10 @@
 import _ from "lodash";
+import { PRODUCT_NAME } from "constants/Brand";
 
+// Fork: the fork's product name in the tab titles (constants/Brand.ts).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const getHtmlPageTitle = (instanceName: string) => {
-  return "Appsmith";
+  return PRODUCT_NAME;
 };
 
 export const isCEMode = () => {
@@ -14,7 +16,7 @@ export const getPageTitle = (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   titleSuffix?: string,
 ) => {
-  return `${displayName ? `${displayName} | ` : ""}Appsmith`;
+  return `${displayName ? `${displayName} | ` : ""}${PRODUCT_NAME}`;
 };
 
 // TODO: Remove this function once we have a better way to handle this

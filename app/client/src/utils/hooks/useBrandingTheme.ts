@@ -3,7 +3,10 @@ import { useSelector } from "react-redux";
 import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
 import { useLayoutEffect } from "react";
 import { getAssetUrl } from "ee/utils/airgapHelpers";
-import { APPSMITH_BRAND_PRIMARY_COLOR } from "utils/BrandingUtils";
+import {
+  APPSMITH_BRAND_FAVICON_URL,
+  APPSMITH_BRAND_PRIMARY_COLOR,
+} from "utils/BrandingUtils";
 import { LightModeTheme } from "@appsmith/wds-theming";
 
 const useBrandingTheme = () => {
@@ -54,6 +57,14 @@ const useBrandingTheme = () => {
     // TODO: Fix this the next time the file is edited
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let favicon: any = document.querySelector("link[rel='shortcut icon']");
+
+    // Fork: index.html sets the default favicon, light or dark by prefers-color-scheme; a link added here would win
+    // over both, so only a custom favicon is set.
+    if (getAssetUrl(config.brandFaviconUrl) === APPSMITH_BRAND_FAVICON_URL) {
+      favicon?.remove();
+
+      return;
+    }
 
     if (!favicon) {
       favicon = document.createElement("link");

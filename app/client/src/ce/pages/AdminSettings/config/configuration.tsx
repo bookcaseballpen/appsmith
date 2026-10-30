@@ -15,13 +15,14 @@ import isUndefined from "lodash/isUndefined";
 import { AppsmithFrameAncestorsSetting } from "pages/Applications/EmbedSnippet/Constants/constants";
 import { formatEmbedSettings } from "pages/Applications/EmbedSnippet/Utils/utils";
 import { isAirgapped } from "ee/utils/airgapHelpers";
-import { APPSMITH_BASE_URL_SETUP_DOC } from "constants/ThirdPartyConstants";
+import { PRODUCT_NAME } from "constants/Brand";
 
 const isAirgappedInstance = isAirgapped();
 
+// Fork: the texts below name the product CreativeAppBuilder (constants/Brand.ts).
 const formatConnectionInfo = (value: string) =>
   value === "embedded"
-    ? "Embedded (runs inside the Appsmith container)"
+    ? `Embedded (runs inside the ${PRODUCT_NAME} container)`
     : value;
 
 export const APPSMITH_DB_CONNECTION_INFO: Setting = {
@@ -32,8 +33,7 @@ export const APPSMITH_DB_CONNECTION_INFO: Setting = {
   isReadOnly: true,
   label: "MongoDB",
   format: formatConnectionInfo,
-  subText:
-    "* The MongoDB server Appsmith persists to, configured via the APPSMITH_DB_URL environment variable on the instance.",
+  subText: `* The MongoDB server ${PRODUCT_NAME} persists to, configured via the APPSMITH_DB_URL environment variable on the instance.`,
 };
 
 export const APPSMITH_REDIS_CONNECTION_INFO: Setting = {
@@ -44,8 +44,7 @@ export const APPSMITH_REDIS_CONNECTION_INFO: Setting = {
   isReadOnly: true,
   label: "Redis",
   format: formatConnectionInfo,
-  subText:
-    "* The Redis server Appsmith uses for session storage, configured via the APPSMITH_REDIS_URL environment variable on the instance.",
+  subText: `* The Redis server ${PRODUCT_NAME} uses for session storage, configured via the APPSMITH_REDIS_URL environment variable on the instance.`,
 };
 
 export const APPSMITH_BASE_URL: Setting = {
@@ -53,11 +52,8 @@ export const APPSMITH_BASE_URL: Setting = {
   category: SettingCategories.CONFIGURATION,
   controlType: SettingTypes.TEXTINPUT,
   controlSubType: SettingSubtype.TEXT,
-  label: "Appsmith Base URL",
-  helpText: "Learn more about configuring Appsmith Base URL.",
-  helpTextLink: APPSMITH_BASE_URL_SETUP_DOC,
-  subText:
-    "* The base URL where Appsmith is accessible. This is required for password reset and email verification links to work correctly.",
+  label: "Base URL",
+  subText: `* The base URL where ${PRODUCT_NAME} is accessible. This is required for password reset and email verification links to work correctly.`,
   placeholder: "https://appsmith.example.com",
   validate: (value: string) => {
     if (!value || value.trim() === "") {
@@ -101,11 +97,10 @@ export const APPSMITH_ALLOWED_FRAME_ANCESTORS_SETTING: Setting = {
     options: [
       {
         badge: "Not recommended",
+        // Fork: no link to Appsmith's docs.
         tooltip: {
           icon: "question-line",
-          text: "Lets all domains, including malicious ones, embed your Appsmith apps. ",
-          linkText: "Find out why it's risky",
-          link: "https://docs.appsmith.com/getting-started/setup/instance-configuration/frame-ancestors#why-should-i-control-this",
+          text: `Lets all domains, including malicious ones, embed your ${PRODUCT_NAME} apps.`,
         },
         label: "Allow embedding everywhere",
         value: AppsmithFrameAncestorsSetting.ALLOW_EMBEDDING_EVERYWHERE,

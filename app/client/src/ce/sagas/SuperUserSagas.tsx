@@ -22,6 +22,7 @@ import {
 } from "ee/constants/messages";
 import { getCurrentUser } from "selectors/usersSelectors";
 import { EMAIL_SETUP_DOC } from "constants/ThirdPartyConstants";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import { toast } from "@appsmith/ads";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import {
@@ -194,10 +195,13 @@ export function* SendTestEmail(action: ReduxAction<SendTestEmailPayload>) {
         ),
         {
           kind: response.data ? "info" : "error",
-          action: {
-            text: createMessage(TEST_EMAIL_SUCCESS_TROUBLESHOOT),
-            effect: () => window.open(EMAIL_SETUP_DOC, "blank"),
-          },
+          // Fork: "Troubleshoot" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+          ...(!areAppsmithLinksHidden() && {
+            action: {
+              text: createMessage(TEST_EMAIL_SUCCESS_TROUBLESHOOT),
+              effect: () => window.open(EMAIL_SETUP_DOC, "blank"),
+            },
+          }),
         },
       );
     }

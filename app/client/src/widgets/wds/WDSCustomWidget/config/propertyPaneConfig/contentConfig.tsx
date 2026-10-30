@@ -7,6 +7,8 @@ import {
   CUSTOM_WIDGET_DEFAULT_MODEL_DOC_URL,
   CUSTOM_WIDGET_DOC_URL,
 } from "pages/Editor/CustomWidgetBuilder/constants";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
+import { PRODUCT_NAME } from "constants/Brand";
 
 import type { CustomWidgetProps } from "../../types";
 
@@ -34,14 +36,17 @@ export const propertyPaneContentConfig = [
         helperText: (
           <div className="leading-5" style={{ marginTop: "10px" }}>
             The source editor lets you add your own HTML, CSS and JS.{" "}
-            <StyledLink
-              kind="secondary"
-              rel="noopener noreferrer"
-              target="_blank"
-              to={CUSTOM_WIDGET_DOC_URL}
-            >
-              Read more
-            </StyledLink>
+            {/* Fork: "Read more" links go to Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+            {!areAppsmithLinksHidden() && (
+              <StyledLink
+                kind="secondary"
+                rel="noopener noreferrer"
+                target="_blank"
+                to={CUSTOM_WIDGET_DOC_URL}
+              >
+                Read more
+              </StyledLink>
+            )}
           </div>
         ),
       },
@@ -54,15 +59,17 @@ export const propertyPaneContentConfig = [
         propertyName: "defaultModel",
         helperText: (
           <div className="leading-5" style={{ marginTop: "10px" }}>
-            This model exposes Appsmith data to the widget editor.{" "}
-            <StyledLink
-              kind="secondary"
-              rel="noopener noreferrer"
-              target="_blank"
-              to={CUSTOM_WIDGET_DEFAULT_MODEL_DOC_URL}
-            >
-              Read more
-            </StyledLink>
+            This model exposes {PRODUCT_NAME} data to the widget editor.{" "}
+            {!areAppsmithLinksHidden() && (
+              <StyledLink
+                kind="secondary"
+                rel="noopener noreferrer"
+                target="_blank"
+                to={CUSTOM_WIDGET_DEFAULT_MODEL_DOC_URL}
+              >
+                Read more
+              </StyledLink>
+            )}
           </div>
         ),
         label: "",

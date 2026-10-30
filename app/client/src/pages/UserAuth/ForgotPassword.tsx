@@ -88,16 +88,8 @@ export const ForgotPassword = (props: ForgotPasswordProps) => {
           </Callout>
         )}
         {!mailEnabled && (
-          <Callout
-            kind="warning"
-            links={[
-              {
-                to: "https://docs.appsmith.com/getting-started/setup/instance-configuration/email#configure-email",
-                target: "_blank",
-                children: "Configure email service",
-              },
-            ]}
-          >
+          // Fork: no link to Appsmith's docs.
+          <Callout kind="warning">
             You haven’t setup any email service yet. Please configure your email
             service to receive a reset link
           </Callout>

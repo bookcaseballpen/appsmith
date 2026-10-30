@@ -322,9 +322,10 @@ class DatasourceRestAPIEditor extends React.Component<Props> {
           })}
         </FormInputContainer>
         <FormInputContainer data-location-id={btoa("isSendSessionEnabled")}>
+          {/* Fork: no Appsmith name in the label; the header is still X-APPSMITH-SIGNATURE. */}
           {this.renderCheckboxViaFormControl(
             "isSendSessionEnabled",
-            "Send Appsmith signature header",
+            "Send signature header",
             "",
             false,
           )}

@@ -4,6 +4,7 @@ import {
   GITHUB_SIGNUP_SETUP_DOC,
   GOOGLE_SIGNUP_SETUP_DOC,
 } from "constants/ThirdPartyConstants";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import type { AdminConfigType } from "ee/pages/AdminSettings/config/types";
 import {
   CategoryType,
@@ -157,6 +158,8 @@ export const SingleOrgGoogleAuthSettings: Setting[] = [
     controlType: SettingTypes.CALLOUT,
     label: "How to configure?",
     url: GOOGLE_SIGNUP_SETUP_DOC,
+    // Fork: only a link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+    isVisible: () => !areAppsmithLinksHidden(),
   },
   {
     id: "APPSMITH_OAUTH2_GOOGLE_JS_ORIGIN_URL",
@@ -230,6 +233,8 @@ export const GithubAuth: AdminConfigType = {
       controlType: SettingTypes.CALLOUT,
       label: "How to configure?",
       url: GITHUB_SIGNUP_SETUP_DOC,
+      // Fork: only a link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+      isVisible: () => !areAppsmithLinksHidden(),
     },
     {
       id: "APPSMITH_OAUTH2_GITHUB_HOMEPAGE_URL",

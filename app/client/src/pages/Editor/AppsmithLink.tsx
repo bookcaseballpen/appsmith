@@ -3,7 +3,13 @@ import { Link, Tooltip } from "@appsmith/ads";
 import styled from "styled-components";
 import { LOGO_TOOLTIP, createMessage } from "ee/constants/messages";
 import { APPLICATIONS_URL } from "constants/routes";
-import AppsmithLogo from "assets/images/appsmith_logo_square.png";
+// Fork: the fork's square brand icon (public/brand) in place of Appsmith's, light or dark by the theme mode.
+import {
+  BRAND_ICON_ON_DARK_URL,
+  BRAND_ICON_URL,
+  PRODUCT_NAME,
+} from "constants/Brand";
+import { getCurrentThemeMode, ThemeMode } from "selectors/themeSelectors";
 import history from "utils/history";
 import { useSelector } from "react-redux";
 import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
@@ -31,6 +37,7 @@ export const StyledLink = styled((props) => {
 export const AppsmithLink = () => {
   const organizationConfig = useSelector(getOrganizationConfig);
   const currentWorkspaceId = useSelector(getCurrentWorkspaceId);
+  const themeMode = useSelector(getCurrentThemeMode);
 
   const handleOnClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -53,14 +60,16 @@ export const AppsmithLink = () => {
     <Tooltip content={createMessage(LOGO_TOOLTIP)} placement="bottomLeft">
       <StyledLink onClick={handleOnClick}>
         <img
-          alt="Appsmith logo"
+          alt={`${PRODUCT_NAME} logo`}
           className="t--appsmith-logo"
           src={
             organizationConfig.brandFaviconUrl &&
             getAssetUrl(organizationConfig.brandFaviconUrl) !==
               APPSMITH_BRAND_FAVICON_URL
               ? organizationConfig.brandFaviconUrl
-              : AppsmithLogo
+              : themeMode === ThemeMode.DARK
+                ? BRAND_ICON_ON_DARK_URL
+                : BRAND_ICON_URL
           }
         />
       </StyledLink>
