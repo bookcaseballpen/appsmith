@@ -63,7 +63,10 @@ public class CustomPermissionGroupRepositoryCEImpl extends BaseAppsmithRepositor
 
     @Override
     public Mono<Void> evictPermissionGroupsUser(String email, String organizationId) {
-        return cacheableRepositoryHelper.evictPermissionGroupsUser(email, organizationId);
+        // Fork: RoleGate caches the user's grant groups next to their permission groups; clear both together.
+        return cacheableRepositoryHelper
+                .evictPermissionGroupsUser(email, organizationId)
+                .then(cacheableRepositoryHelper.evictGrantGroupsOfUser(email, organizationId));
     }
 
     @Override

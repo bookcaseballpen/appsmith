@@ -15,9 +15,11 @@ import com.appsmith.server.repositories.CacheableRepositoryHelper;
 import com.appsmith.server.repositories.ce.params.QueryAllParams;
 import com.appsmith.server.repositories.postgres.PostgresOperations;
 import com.appsmith.server.repositories.postgres.ProjectionMapper;
+import com.appsmith.server.roles.RoleGate;
 import jakarta.persistence.Transient;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.GenericTypeResolver;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.util.CollectionUtils;
@@ -75,6 +77,11 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
 
     @Autowired
     private CacheableRepositoryHelper cacheableRepositoryHelper;
+
+    // Fork: a USER never edits an app through an app grant, see RoleGate. Lazy: the gate reaches repositories.
+    @Autowired
+    @Lazy
+    private RoleGate roleGate;
 
     public static final int NO_RECORD_LIMIT = -1;
 
@@ -162,9 +169,14 @@ public abstract class BaseAppsmithRepositoryCEImpl<T extends BaseDomain> {
 
     protected Mono<Set<String>> getCurrentUserPermissionGroupsIfRequired(
             AclPermission permission, boolean includeAnonymousUserPermissions) {
-        return permission == null
-                ? Mono.just(Set.of())
-                : getCurrentUserPermissionGroups(includeAnonymousUserPermissions);
+        if (permission == null) {
+            return Mono.just(Set.of());
+        }
+        Mono<Set<String>> permissionGroups = getCurrentUserPermissionGroups(includeAnonymousUserPermissions);
+        // Fork: see RoleGate.
+        return roleGate == null
+                ? permissionGroups
+                : permissionGroups.flatMap(groups -> roleGate.groupsFor(groups, permission));
     }
 
     public Mono<Set<String>> getCurrentUserPermissionGroups() {

@@ -15,7 +15,8 @@ cab-sync submit <app-dir> [--note ..]  submit the app for approval; an Approver 
 Workflow: `pull` → edit the files → `push` → test in the editor's preview → `submit` → a human approves in the app.
 A push replaces only the app's edit copy: users keep seeing the approved version until the next release is approved,
 and any pending request is cancelled (submit again). A push of a folder that matches the edit copy (`diff` finds
-nothing) imports nothing, so it leaves an approved or submitted app as it is.
+nothing) imports nothing, so it leaves an approved or submitted app as it is. A push that changes only the app's tags
+(`exportedApplication.tags` in `application.json`) writes just the tags, so it too keeps the approval state.
 
 ## Running it
 
@@ -44,7 +45,7 @@ is not an MCP tool: a person approves in the app.
 
 | File | Holds |
 | --- | --- |
-| `application.json` | The app (edit copy): name, page order, layout, navigation and theme settings, schema versions |
+| `application.json` | The app (edit copy): name, tags, page order, layout, navigation and theme settings, schema versions |
 | `theme.json` | The edit-mode theme |
 | `datasources.json` | The datasources the app uses, by `name` and `pluginId` only |
 | `js-libraries.json` | Custom JS libraries (only if any) |
@@ -62,6 +63,10 @@ git format does the same). Entities keep their `gitSyncId`, which the import use
 existing pages, queries and JS objects. Names become file names with characters other than letters, digits, space,
 `_ - . ( )` percent-encoded; names that differ only in letter case are refused (they would clash on Windows and
 macOS). On push, a query's or JS object's page is the folder it is in.
+
+Tags: an app without tags has no `tags` key (an empty list is written the same way), and a push of an
+`application.json` without the key sends an empty list, so deleting the key clears the app's tags. The instance
+lower-cases and trims them and keeps at most 10 of at most 30 characters.
 
 `push` refuses files that are not part of this layout, a widget no parent lists, and two body files for one query, so
 a typo fails loudly instead of being dropped.

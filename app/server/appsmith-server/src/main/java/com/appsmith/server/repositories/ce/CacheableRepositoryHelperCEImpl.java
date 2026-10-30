@@ -12,6 +12,7 @@ import com.appsmith.server.domains.User;
 import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
+import com.appsmith.server.grants.GrantGroups;
 import com.appsmith.server.helpers.InMemoryCacheableRepositoryHelper;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.helpers.ce.bridge.BridgeQuery;
@@ -75,6 +76,8 @@ public class CacheableRepositoryHelperCEImpl implements CacheableRepositoryHelpe
                     BridgeQuery<PermissionGroup> ceSupportedRolesCriteria = Bridge.or(
                             Bridge.equal(PermissionGroup.Fields.defaultDomainType, Workspace.class.getSimpleName()),
                             Bridge.equal(PermissionGroup.Fields.defaultDomainType, User.class.getSimpleName()),
+                            // Fork: teams and personal app-grant groups, see com.appsmith.server.grants.
+                            Bridge.in(PermissionGroup.Fields.defaultDomainType, GrantGroups.TYPES),
                             Bridge.equal(PermissionGroup.Fields.id, organizationAdminPermissionGroupId));
 
                     return Bridge.and(assignedToUserIdsCriteria, notDeletedCriteria, ceSupportedRolesCriteria);
@@ -150,6 +153,26 @@ public class CacheableRepositoryHelperCEImpl implements CacheableRepositoryHelpe
     @CacheEvict(cacheName = "permissionGroupsForUser", key = "{#email + #organizationId}")
     @Override
     public Mono<Void> evictPermissionGroupsUser(String email, String organizationId) {
+        return Mono.empty();
+    }
+
+    // Fork: RoleGate leaves these out of a USER's app permission checks; cleared with permissionGroupsForUser by
+    // CustomPermissionGroupRepositoryCEImpl.evictPermissionGroupsUser.
+    @Cache(cacheName = "grantGroupsForUser", key = "{#user.email + #user.organizationId}")
+    @Override
+    public Mono<Set<String>> getGrantGroupsOfUser(User user) {
+        BridgeQuery<PermissionGroup> criteria = Bridge.and(
+                Bridge.equal(PermissionGroup.Fields.assignedToUserIds, user.getId()),
+                notDeleted(),
+                Bridge.in(PermissionGroup.Fields.defaultDomainType, GrantGroups.TYPES));
+        return find(PermissionGroup.class, criteria, 0)
+                .map(PermissionGroup::getId)
+                .collect(Collectors.toSet());
+    }
+
+    @CacheEvict(cacheName = "grantGroupsForUser", key = "{#email + #organizationId}")
+    @Override
+    public Mono<Void> evictGrantGroupsOfUser(String email, String organizationId) {
         return Mono.empty();
     }
 

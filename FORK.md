@@ -157,15 +157,21 @@ The roles work on a **fresh install only**. Nothing is migrated:
   gets a role from them, and the server logs a warning at startup.
 - Old apps are re-imported one by one into "Apps" (export from the old instance, import into the new one).
 - Every startup logs a line saying the fork supports fresh installs only.
+- When the role definitions change in a new server version (`InstanceRole`), the next start brings an instance that
+  already runs this fork in line (`RoleGroupReconciler`, idempotent): if a role group stores other permissions than
+  its role defines, each role group first loses, on every app of "Apps" and its pages, queries, JS objects and custom
+  themes, the permissions its role no longer gives; then the workspace's policies are rebuilt and last the groups store
+  their new permissions (so a start that stops halfway does it all again). App grants and other groups are left alone,
+  nothing is added, datasources are not touched.
 
 ### The four roles
 
 | Role | Can |
 | --- | --- |
-| Admin | Everything: apps, datasources, users and roles. Instance administrator. |
-| Dev | Create and edit apps, edit mode, AI and MCP, and use existing datasources in queries. Cannot create, edit, test or delete datasources (sees only name and plugin), publish, or delete apps. |
-| Approver | Open the editor or preview read-only, run queries, and publish. Nothing else. |
-| User | Published apps only. Never edit mode or preview, and never an app that was never published. |
+| Admin | Everything: apps, datasources, users, roles, teams and app grants. Instance administrator. |
+| Dev | Create apps; see and edit only the apps they hold a grant on (Edit to edit, View to see and run; every app they create, duplicate or import as a new app gives them Edit). Edit mode, AI and MCP, and use existing datasources in queries. Cannot create, edit, test or delete datasources (sees only name and plugin), publish, or delete apps. |
+| Approver | Every app: open the editor or preview read-only, run queries, and publish. Nothing else. |
+| User | Only the published apps they hold a grant on. Never edit mode or preview (an Edit grant counts as View), and never an app that was never published. |
 
 - New users join "Apps" as User. Nobody gets a personal workspace.
 - An Admin changes roles (`GET /api/v1/admin/users`, `PUT /api/v1/admin/users/{userId}/role`, and the "User roles"
@@ -215,6 +221,54 @@ It also refuses the GET endpoints that change state: git pull, git status, git f
 `pruneRefs=true`, git commit history (it checks out a branch), deploy key generation, and the datasource OAuth
 callback. It fails closed when the caller's role cannot be resolved.
 
+### Teams and app grants
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/grants/`.
+
+Dev and User see no app through their role. An Admin gives access per app: a **grant** goes to a **team** or a
+**single user**, at level **View** (see the app, run its queries and JS objects) or **Edit** (View plus change the
+app, its pages, queries and JS objects). Edit never includes publishing: an app goes live only through Submit ->
+Approve. Approver and Admin keep every app through their role.
+
+**After upgrading to this version, Devs and Users see none of the existing apps until an Admin grants them.** No
+creator is recorded for apps made before it, so nobody gets an automatic Edit grant on them; give each team or user
+their apps (`PUT /api/v1/applications/{applicationId}/grants`, below).
+
+- **Teams** are permission groups with `defaultDomainType` `Team`; their members are the group's `assignedToUserIds`.
+  A team holds no permission of its own.
+- **A grant to a single user** goes to the user's hidden personal group (`defaultDomainType` `UserGrant`,
+  `defaultDomainId` = the user id, the user its only member), created on their first grant, because document
+  policies only name permission groups.
+- Both kinds count among a user's permission groups (`CacheableRepositoryHelperCEImpl.getPermissionGroupsOfUser`),
+  and are also cached apart for `RoleGate` (`getGrantGroupsOfUser`). Adding or removing a member, and creating a
+  personal group, clear both of that user's caches, so access changes on their next request.
+- **How a grant is stored** (`AppGrantService`): like CE's "make public", in the policies of the app and of its pages,
+  queries, JS objects and custom themes, for the grantee's group. View = `read:applications` (pages: read, queries:
+  execute); Edit = `manage:applications` (pages and queries: manage). Pages, queries and JS objects created later
+  inherit the app's policies, so they inherit its grants; an import over the app keeps the app's policies and grants.
+  Datasources are not part of a grant: Dev and User execute every datasource through their role.
+- **Creator gets Edit:** a Dev who creates an app, duplicates one or imports a file as a new app (in the editor or
+  through MCP / cab-sync) gets an Edit grant on it before it is saved (`ApplicationPageServiceImpl.setApplicationPolicies`).
+- **A User never edits** (`roles/RoleGate`): for a User, team and personal grants count only for reading and executing
+  apps, pages, queries, JS objects and themes; every other permission check on them leaves those groups out. A User
+  also sees only live apps of "Apps", whatever grant they hold (`CustomApplicationRepositoryImpl`).
+- App names stay unique in the workspace even across apps a Dev cannot see, so an import picks a free name suffix
+  (`ApplicationServiceImpl.isApplicationNameTaken`).
+- Git-connected apps: a grant is written on the branch app it is set on; built-in Git is off by default.
+
+| Endpoint | What |
+| --- | --- |
+| `GET /api/v1/teams`, `GET /api/v1/teams/{teamId}` | Teams with their members (`id`, `email`, `name`) |
+| `POST /api/v1/teams` (body `{"name", "description"}`) | Create; names are unique (ignoring case), at most 100 characters |
+| `PUT /api/v1/teams/{teamId}` (same body) | Rename and replace the description |
+| `DELETE /api/v1/teams/{teamId}` | Delete the team, then revoke every grant it holds; a retry after a failure partway revokes what is left, and deleting a team that is already gone succeeds |
+| `PUT` / `DELETE /api/v1/teams/{teamId}/members/{userId}` | Add / remove a member |
+| `GET /api/v1/applications/{applicationId}/grants` | The app's grants: `[{grantee: {type: TEAM\|USER, id}, name, level}]` (`name` is the team name or the user's email) |
+| `PUT /api/v1/applications/{applicationId}/grants` (body `{"grantee": {"type": "TEAM"\|"USER", "id"}, "level": "VIEW"\|"EDIT"\|"NONE"}`) | Set one grantee's level (`NONE` revokes); answers the app's grants |
+
+All of them are Admin only (403 otherwise); the Approver filter refuses the non-GET ones for Approvers anyway, and
+they are not on the MCP allowlist.
+
 ## Release approvals
 
 Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/approvals/` and the domain
@@ -243,7 +297,7 @@ id is the application id). Client: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/ap
 | Endpoint | Who |
 | --- | --- |
 | `GET /api/v1/approvals/applications/{applicationId}` | Anyone who can open the app in the editor |
-| `POST /api/v1/approvals/applications/{applicationId}/submit` (optional body `{"note": "..."}`, at most 500 characters, kept as the SUBMITTED event's comment and shown in the history) | Dev, Admin, Approver |
+| `POST /api/v1/approvals/applications/{applicationId}/submit` (optional body `{"note": "..."}`, at most 500 characters, kept as the SUBMITTED event's comment and shown in the history) | Dev (with an Edit grant on the app), Admin, Approver |
 | `POST /api/v1/approvals/applications/{applicationId}/approve` | Approver, Admin; never an MCP token |
 | `POST /api/v1/approvals/applications/{applicationId}/reject` (body `{"comment": "..."}`, required) | Approver, Admin; never an MCP token |
 | `GET /api/v1/approvals/pending` | Approver, Admin |
@@ -304,7 +358,8 @@ editor is read-only.":
   (`POST /api/v1/applications/import/partial/block`) and template merge.
 
 Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
-import, and the projects repo's `/api/v1/projects-repo/...`), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
+import, and the projects repo's `/api/v1/projects-repo/...`), app tags (`/api/v1/app-tags/...`, metadata, see "App
+tags and catalog"), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
 app create, clone, fork, delete and snapshots, and user and admin settings. The Approver filter still applies on top.
 This filter does not refuse `POST /api/v1/applications/publish/{id}`, but the publish service does, for every role:
 an app is published only by approving a submitted release (Submit -> Approve, see "Publishing").
@@ -355,8 +410,8 @@ Server (`projectsrepo/`):
 
 | Endpoint | What | Who |
 | --- | --- | --- |
-| `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev, Admin, Approver |
-| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions; the Approver filter refuses it) |
+| `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev (with an Edit grant on the app), Admin, Approver |
+| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions: over an app, a Dev needs an Edit grant on it; a new app gives the importing Dev one; the Approver filter refuses it) |
 
 `EditCopyJson` keeps every secret on the instance: the export never carries the published copy, the stored datasource
 structure, decrypted fields or modified-resources bookkeeping; each datasource is reduced to `name` and `pluginId`; a
@@ -389,6 +444,49 @@ values in any other field.
 
 The MCP server of a fork-uat instance runs from `scripts/fork-uat` (`up.ps1`, `127.0.0.1:<Port+6>`, proxied at
 `/mcp`), once MCP is enabled on the instance.
+
+A file that differs from the edit copy only in `exportedApplication.tags` is not imported: only the tags are written
+(as a Dev with Edit or an Admin, clamped like an import), so a tag change pushed through cab-sync keeps a submitted or
+approved app as it is; the import answers `tagsOnly: true`. No tags and an empty list count as the same. cab-sync
+writes no `tags` key for an app without tags and sends `tags: []` when `application.json` has none, so deleting the
+key clears them (the importer keeps stored values a file leaves out).
+
+## App tags and catalog
+
+Server code: `app/server/appsmith-server/src/main/java/com/appsmith/server/catalog/`. Data for the home page (the
+client page is a later task).
+
+**Tags** (`Application.tags`, a list) are free text. Every write normalises them (`ApplicationTags`): trimmed,
+lower-cased, inner white space collapsed to one space, empty tags and repeats dropped, first-seen order kept; at most
+10 tags of at most 30 characters (code points) each. The tags endpoint refuses a list over the limits (400); every
+other path (the domain setter, an import, a cab-sync push) clamps instead, as the description does. Tags travel with
+the app JSON (`exportedApplication.tags`; JSON views Public and Git), so they reach the projects repo and come back
+through import; a duplicated app keeps them.
+
+**Who sets them, and the read-only editor.** Tags are app metadata, not app content: a Dev with Edit on the app or an
+Admin sets them through `PUT /api/v1/app-tags/applications/{applicationId}` (body `{"tags": [...]}`, the full list;
+`[]` clears), also while the editor is read-only, and through MCP (`set_app_tags`). The route has its own family so
+the editor lock on `PUT /api/v1/applications/{id}` does not cover it and the MCP allowlist can list it as an
+extension (the core `/api/v1/applications` rules stay as they are). Approvers (their filter refuses every non-GET)
+and Users (role check, and `RoleGate`) cannot. Only `tags` and `updatedAt` are written, and the approval fingerprint
+does not read `tags`, so a tag change never cancels a pending request and never takes a live app offline. With the
+lock off, `PUT /api/v1/applications/{id}` also takes `tags` (clamped by the setter).
+
+| Endpoint | What |
+| --- | --- |
+| `GET /api/v1/applications/catalog?search=&tags=&tagMode=any\|all&sort=name\|lastDeployedAt\|updatedAt\|createdAt&order=asc\|desc&page=&size=` | One page of the apps the caller can read: `{items, total, page, size}`. Every filter, the sort and the paging are part of the repository query with the caller's read permission, so grants decide what each user sees and a User gets only live apps (`CustomApplicationRepositoryImpl`). `search` (at most 100 characters) matches name, description or a tag, case-insensitively and literally (regex characters are quoted). `tags` (`tags=a,b` or repeated, normalised, at most 10): `any` (default) or `all`. `sort` defaults to `name` ascending; the dates default to newest first; the id breaks ties. `page` starts at 0; `size` 1 to 100 (default 20). Anything else is refused (400). |
+| `GET /api/v1/applications/tags` | Every tag on an app the caller can read, sorted, for the filter chips |
+| `PUT /api/v1/app-tags/applications/{applicationId}` | Set the tags, see above; answers `{applicationId, tags}` |
+
+A catalog item: `id`, `baseId`, `workspaceId`, `name`, `description`, `slug`, `uniqueSlug` (static URL, when on),
+`icon`, `color`, `tags`, `lastDeployedAt`, `updatedAt` (ISO strings), `defaultPageId` and `defaultPageSlug` (the live
+default page of a live app, the edit copy's otherwise; the view URL is `/app/<slug>/<defaultPageSlug>-<defaultPageId>`),
+`approvalStatus` (the stored status, one query per page; a later read of the approval state may still cancel it;
+null for Users) and `canEdit` (the caller is a Dev or Admin and holds the edit permission on the app; for a Dev, an
+Edit grant). Name sort is by stored text (upper case before lower case); there is no collation in the query API.
+
+Indexes: `application_tags_deleted` (`tags`, `deletedAt`; `Migration077AddApplicationTagsIndex`); name search and
+sort use the existing `name` + `deletedAt` index (Migration037).
 
 ## Cherry-picking upstream fixes
 
@@ -1029,6 +1127,43 @@ Server plugins (`app/server/appsmith-plugins/`):
   `ReleaseControls.test.tsx`, `scripts/fork-uat/` (`up.ps1`, `down.ps1`, `README.md`: the MCP server), and the
   tests `approvals/ApplicationApprovalServiceTest`, `roles/InstanceRolePermissionsTest`,
   `filters/McpAllowlistWebFilterTest`.
+
+### Teams and app grants
+
+- New server files: `grants/` (`AppGrantService`, `AppGrantController`, `AppGrantDTO`, `GrantLevel`, `GrantGroups`,
+  `TeamService`, `TeamController`, `TeamDTO`), `roles/RoleGate.java`, `roles/RoleGroupReconciler.java`, and the tests
+  `grants/AppGrantServiceTest`, `grants/TeamServiceTest`.
+- Edited upstream files (`Fork:` comments): `repositories/ce/CacheableRepositoryHelperCEImpl.java` and
+  `CacheableRepositoryHelperCE.java` (teams and personal grant groups count among a user's groups; the user's grant
+  groups are cached for `RoleGate`), `repositories/ce/CustomPermissionGroupRepositoryCEImpl.java` (clearing a user's
+  cached groups also clears their cached grant groups), `repositories/ce/BaseAppsmithRepositoryCEImpl.java` (the `RoleGate` hook
+  where a permission check resolves the caller's groups), `applications/base/ApplicationServiceImpl.java` (app name
+  check ignores permissions), `solutions/WorkspacePermissionImpl.java` (creating an app needs the create permission
+  on the workspace, not "manage every app").
+- Edited fork files: `acl/PolicyGenerator.java` (creating apps no longer implies managing them; page and git rights
+  come from managing every app; executing the workspace's datasources executes every datasource),
+  `roles/InstanceRole.java` (DEV and USER lose the workspace app permissions), `roles/DefaultWorkspaceService.java`
+  (runs the reconciler), `repositories/CustomApplicationRepositoryImpl.java` (a User's live-only filter covers every
+  grant), `services/ApplicationPageServiceImpl.java` (creator Edit grant), and the tests
+  `acl/PolicyGeneratorTest`, `roles/InstanceRolePermissionsTest`, `roles/DefaultWorkspaceServiceTest`,
+  `approvals/ApplicationApprovalServiceTest`, `projectsrepo/ProjectsRepoServiceTest`.
+
+### App tags and catalog
+
+- New server files: `catalog/` (`ApplicationTags`, `ApplicationCatalogService`, `ApplicationCatalogController`,
+  `AppTagsController`, `ApplicationCatalogDTO`), `migrations/db/ce/Migration077AddApplicationTagsIndex.java`, and
+  the tests `catalog/ApplicationCatalogTest`, `catalog/ApplicationTagsTest`.
+- Edited upstream files (`Fork:` comments): `domains/ce/ApplicationCE.java` (`tags`, its setter, the duplicate keeps
+  them), `applications/imports/ApplicationImportServiceImpl.java` (imported tags go through the setter).
+- Edited fork files: `constants/Url.java` (`APP_TAGS_URL`), `filters/McpAllowlistExtensions.java`,
+  `projectsrepo/ProjectsRepoService.java` (tag-only push, `tagsOnly`), `repositories/CustomApplicationApprovalRepository*`
+  (`findAllByApplicationIdIn`), and the tests `projectsrepo/ProjectsRepoServiceTest`,
+  `filters/McpAllowlistWebFilterTest`, `editorlock/EditorReadOnlyWebFilterTest`.
+- MCP: `packages/mcp/src/ee/extensions/` (`api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts`: `set_app_tags`),
+  the new test `appTags.test.ts`, `projectsRepo.test.ts`, the upstream files `src/app.ts` (`list_applications` tags
+  filter, `get_application_context` tags) and `src/builder/capabilities.ts` (their summaries), and `README.md`.
+- cab-sync: `src/layout.ts` (canonical tags), `src/commands.ts` (tag-only push message), `src/template.ts`,
+  `README.md` and the tests.
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

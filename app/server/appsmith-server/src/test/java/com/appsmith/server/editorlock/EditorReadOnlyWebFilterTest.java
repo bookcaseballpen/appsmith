@@ -84,6 +84,8 @@ class EditorReadOnlyWebFilterTest {
         "POST, /api/v1/applications/import/partial/workspaceId/appId",
         "POST, /api/v1/applications/export/partial/appId/pageId",
         "POST, /api/v1/applications/publish/appId",
+        // App tags are metadata, not app content.
+        "PUT, /api/v1/app-tags/applications/appId",
         "POST, /api/v1/applications",
         "DELETE, /api/v1/applications/appId",
         "POST, /api/v1/git/applications/appId/commit",

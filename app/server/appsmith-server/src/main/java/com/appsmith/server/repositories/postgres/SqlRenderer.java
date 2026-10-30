@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * Nested keys ({@code a.b.c}) address JSON inside a jsonb column. Checks keep MongoDB's matching rules:
  * <ul>
  *   <li>a check on an array (at any level of the path) matches when any element matches, done with
- *   {@code jsonb_path_exists} in lax mode;</li>
+ *   {@code jsonb_path_exists} in lax mode, or {@code @>} for a whole column and a scalar (index-friendly);</li>
  *   <li>negated checks ({@code notEqual}, {@code notIn}, {@code notExists}) also match rows without the field;</li>
  *   <li>{@code _id} in a key means the {@code id} field.</li>
  * </ul>
@@ -120,11 +120,39 @@ public final class SqlRenderer {
 
     /** {@code jsonb_path_exists} over the value(s) at the path, with an optional filter on each value. */
     private String pathExists(KeyPath path, String filter) {
+        return "COALESCE(jsonb_path_exists(" + path.column() + ", CAST(" + param(jsonPath(path, filter))
+                + " AS jsonpath)), FALSE)";
+    }
+
+    private String notPathExists(KeyPath path, String filter) {
+        return "NOT " + pathExists(path, filter);
+    }
+
+    /**
+     * A whole JSON column equal to a scalar, or an array in it holding the scalar, as Mongo matches; with {@code @>}
+     * (a scalar on the right is contained in an array holding it), so that a GIN index on the column can serve it.
+     * Only for {@link #canContainScalar}: a nested key, or a value that is not a string, number or boolean, needs
+     * {@link #pathExists}.
+     */
+    private String containsScalar(KeyPath path, Object value) {
+        return path.column() + " @> CAST(" + param(jsonLiteral(value)) + " AS jsonb)";
+    }
+
+    private static boolean canContainScalar(KeyPath path, Object value) {
+        return path.nested().isEmpty()
+                && (value instanceof String
+                        || value instanceof Number
+                        || value instanceof Boolean
+                        || value instanceof Enum<?>);
+    }
+
+    private static String jsonPath(KeyPath path, String filter) {
         String jsonPath = jsonPathLiteral(path.nested());
-        if (filter != null) {
-            jsonPath += " ? (" + filter + ")";
-        }
-        return "COALESCE(jsonb_path_exists(" + path.column() + ", CAST(" + param(jsonPath) + " AS jsonpath)), FALSE)";
+        return filter == null ? jsonPath : jsonPath + " ? (" + filter + ")";
+    }
+
+    private static String likeContains(String value) {
+        return "%" + value.replaceAll("[\\\\_%]", "\\\\$0") + "%";
     }
 
     private String nestedValue(KeyPath path) {
@@ -211,23 +239,39 @@ public final class SqlRenderer {
         final boolean jsonish = path.isJsonish();
 
         return switch (op) {
-            case EQUAL -> jsonish ? pathExists(path, "@ == " + jsonLiteral(value)) : col + " = " + param(value);
+            case EQUAL -> {
+                if (!jsonish) {
+                    yield col + " = " + param(value);
+                }
+                yield canContainScalar(path, value)
+                        ? containsScalar(path, value)
+                        : pathExists(path, "@ == " + jsonLiteral(value));
+            }
             case NOT_EQUAL ->
                 jsonish
-                        ? "NOT " + pathExists(path, "@ == " + jsonLiteral(value))
+                        ? notPathExists(path, "@ == " + jsonLiteral(value))
                         : "(" + col + " IS NULL OR " + col + " <> " + param(value) + ")";
             case EQ_IGNORE_CASE -> "lower(" + (jsonish ? nestedText(path) : col) + ") = lower(" + param(value) + ")";
-            case SEARCH_IGNORE_CASE -> {
-                final String escaped = ((String) value).replaceAll("[\\\\_%]", "\\\\$0");
-                yield col + " ILIKE " + param("%" + escaped + "%") + " ESCAPE '\\'";
-            }
+            case SEARCH_IGNORE_CASE ->
+                // On JSON, like a Mongo regex: any string at the path (an array's elements, or the value) matches.
+                jsonish
+                        ? "EXISTS (SELECT 1 FROM jsonb_path_query(" + col + ", CAST(" + param(jsonPath(path, null))
+                                + " AS jsonpath)) AS v(e) WHERE jsonb_typeof(e) = 'string' AND (e #>> '{}') ILIKE "
+                                + param(likeContains((String) value)) + " ESCAPE '\\')"
+                        : col + " ILIKE " + param(likeContains((String) value)) + " ESCAPE '\\'";
             case IN -> {
                 final List<?> values = asList(value);
                 if (values.isEmpty()) {
                     yield "FALSE";
                 }
                 if (jsonish) {
-                    yield pathExists(path, anyOf(values));
+                    yield values.stream().allMatch(v -> canContainScalar(path, v))
+                            ? "("
+                                    + values.stream()
+                                            .map(v -> containsScalar(path, v))
+                                            .collect(Collectors.joining(" OR "))
+                                    + ")"
+                            : pathExists(path, anyOf(values));
                 }
                 yield col + " IN (" + values.stream().map(this::param).collect(Collectors.joining(", ")) + ")";
             }
@@ -237,13 +281,13 @@ public final class SqlRenderer {
                     yield "TRUE";
                 }
                 if (jsonish) {
-                    yield "NOT " + pathExists(path, anyOf(values));
+                    yield notPathExists(path, anyOf(values));
                 }
                 yield "(" + col + " IS NULL OR " + col + " NOT IN ("
                         + values.stream().map(this::param).collect(Collectors.joining(", ")) + "))";
             }
             case EXISTS -> path.nested().isEmpty() ? col + " IS NOT NULL" : pathExists(path, null);
-            case NOT_EXISTS -> path.nested().isEmpty() ? col + " IS NULL" : "NOT " + pathExists(path, null);
+            case NOT_EXISTS -> path.nested().isEmpty() ? col + " IS NULL" : notPathExists(path, null);
             case IS_NULL ->
                 path.nested().isEmpty()
                         ? col + " IS NULL"

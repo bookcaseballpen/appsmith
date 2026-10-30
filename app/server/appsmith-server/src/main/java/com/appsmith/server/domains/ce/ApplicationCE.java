@@ -4,6 +4,7 @@ import com.appsmith.external.helpers.CustomJsonType;
 import com.appsmith.external.models.BaseDomain;
 import com.appsmith.external.views.Git;
 import com.appsmith.external.views.Views;
+import com.appsmith.server.catalog.ApplicationTags;
 import com.appsmith.server.constants.ArtifactType;
 import com.appsmith.server.domains.Application;
 import com.appsmith.server.domains.Application.StaticUrlSettings;
@@ -104,6 +105,13 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
 
     @JsonView({Views.Public.class, Git.class})
     String description;
+
+    // Fork: free-text labels for the home page catalog, normalised by ApplicationTags (see setTags). Exported and
+    // imported with the app JSON, so they travel to the projects repo.
+    @Type(CustomJsonType.class)
+    @Column(columnDefinition = "jsonb")
+    @JsonView({Views.Public.class, Git.class})
+    List<String> tags;
 
     @JsonView(Views.Public.class)
     private String slug;
@@ -250,6 +258,8 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
         this.color = application.getColor();
         this.icon = application.getIcon();
         this.description = application.getDescription();
+        // Fork: a duplicate keeps the app's tags.
+        this.tags = application.getTags() == null ? null : new ArrayList<>(application.getTags());
         this.unpublishedAppLayout = application.getUnpublishedAppLayout() == null
                 ? null
                 : new Application.AppLayout(application.getUnpublishedAppLayout().type);
@@ -363,6 +373,12 @@ public class ApplicationCE extends BaseDomain implements ArtifactCE {
     // text  -> trimmed value
     public void setDescription(String description) {
         this.description = description == null ? null : description.trim();
+    }
+
+    // Fork: every tag write through the setter (a request body, an import over an existing app) is normalised and
+    // clamped. Null stays null (the sparse update leaves the stored tags untouched); an empty list clears them.
+    public void setTags(List<String> tags) {
+        this.tags = ApplicationTags.clamp(tags);
     }
 
     /**

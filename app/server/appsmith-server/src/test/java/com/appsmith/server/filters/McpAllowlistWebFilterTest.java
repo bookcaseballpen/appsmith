@@ -333,6 +333,26 @@ class McpAllowlistWebFilterTest {
     }
 
     @Test
+    void should_allowOnlySettingTags_when_mcpPrincipalCallsAppTags() {
+        // Given
+        McpAllowlistWebFilter filter = new McpAllowlistWebFilter();
+
+        // When / Then
+        assertPassesThrough(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.put("/api/v1/app-tags/applications/app1")),
+                mcpPrincipal());
+        assertForbidden(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.delete("/api/v1/app-tags/applications/app1")),
+                mcpPrincipal());
+        assertForbidden(
+                filter,
+                MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/app-tags/applications/app1")),
+                mcpPrincipal());
+    }
+
+    @Test
     void extensionRule_isAllowedAlongsideCoreRules() {
         McpAllowlistWebFilter extended = fixtureFilter(McpAllowRule.rule(HttpMethod.GET, FIXTURE_PREFIX + "/{id}"));
 

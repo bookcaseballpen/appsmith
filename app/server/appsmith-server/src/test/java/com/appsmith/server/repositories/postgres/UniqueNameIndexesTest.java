@@ -2,10 +2,13 @@ package com.appsmith.server.repositories.postgres;
 
 import com.appsmith.external.models.Datasource;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.util.DuplicateKeyExceptionUtils;
+import com.appsmith.server.grants.GrantGroups;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.repositories.DatasourceRepository;
+import com.appsmith.server.repositories.PermissionGroupRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,11 +30,21 @@ class UniqueNameIndexesTest {
     @Autowired
     DatasourceRepository datasourceRepository;
 
+    @Autowired
+    PermissionGroupRepository permissionGroupRepository;
+
     private static Application application(String workspaceId, String name) {
         final Application application = new Application();
         application.setWorkspaceId(workspaceId);
         application.setName(name);
         return application;
+    }
+
+    private static PermissionGroup group(String type, String name) {
+        final PermissionGroup group = new PermissionGroup();
+        group.setDefaultDomainType(type);
+        group.setName(name);
+        return group;
     }
 
     private static Datasource datasource(String workspaceId, String name) {
@@ -104,6 +117,41 @@ class UniqueNameIndexesTest {
                 .save(application(UUID.randomUUID().toString(), "App"))
                 .then(applicationRepository.save(deleted))
                 .thenReturn(1L);
+
+        // Then
+        StepVerifier.create(result).expectNext(1L).verifyComplete();
+    }
+
+    @Test
+    void should_failWithDuplicateKeyNamingTheIndex_when_liveTeamNameIsTakenInAnotherCase() {
+        // Given
+        final String name = "Team " + UUID.randomUUID();
+        permissionGroupRepository.save(group(GrantGroups.TEAM, name)).block();
+
+        // When
+        final Mono<PermissionGroup> result =
+                permissionGroupRepository.save(group(GrantGroups.TEAM, name.toUpperCase()));
+
+        // Then
+        StepVerifier.create(result)
+                .expectErrorSatisfies(error -> assertThat(error)
+                        .isInstanceOf(DuplicateKeyException.class)
+                        .hasMessageContaining("permission_group_team_name_uk"))
+                .verify();
+    }
+
+    @Test
+    void should_saveBoth_when_sameTeamNameIsOnDeletedTeamOrOtherGroup() {
+        // Given
+        final String name = "Team " + UUID.randomUUID();
+        final PermissionGroup deleted = group(GrantGroups.TEAM, name);
+        deleted.setDeletedAt(Instant.now());
+        permissionGroupRepository.save(deleted).block();
+        permissionGroupRepository.save(group(GrantGroups.USER_GRANT, name)).block();
+
+        // When
+        final Mono<Long> result =
+                permissionGroupRepository.save(group(GrantGroups.TEAM, name)).thenReturn(1L);
 
         // Then
         StepVerifier.create(result).expectNext(1L).verifyComplete();

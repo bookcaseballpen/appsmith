@@ -2,15 +2,17 @@ import { z } from "zod";
 import type { AppsmithApi, ToolResult } from "../../app.js";
 import type { ExtensionToolHost } from "../../ce/extensions/tools.js";
 import {
+  appTagsApi,
   approvalApi,
   projectsRepoApi,
+  type AppTagsApi,
   type ApprovalApi,
   type ProjectsRepoApi,
 } from "./api.js";
 import { EXTENSION_TOOL_CATALOG } from "./catalog.js";
 
-// Fork: the release-approval tools, submit_for_approval and get_approval_status, and the projects-repo tools,
-// export_application and import_application. Their catalog entries and annotations are in ee/extensions/catalog.ts,
+// Fork: the release-approval tools, submit_for_approval and get_approval_status, the projects-repo tools,
+// export_application and import_application, and set_app_tags. Their catalog entries and annotations are in ee/extensions/catalog.ts,
 // the API methods in ee/extensions/api.ts. The contract is in ce/extensions/tools.ts.
 // Approving and rejecting are for a human Approver in the Appsmith UI: there is no tool for either, the server's MCP
 // allowlist does not list their routes, and the server refuses them for MCP tokens.
@@ -68,10 +70,23 @@ const IMPORT_DESCRIPTION =
   "Import app JSON (from export_application, or the projects repo's files put back together) into Appsmith. With " +
   "applicationId it replaces that app's EDIT COPY only: the published version users see stays exactly as it was, " +
   "and changes only when an Approver approves a release (test the app in the editor's preview, then " +
-  "submit_for_approval when the developer asks). Any pending approval request is cancelled because the app changed. " +
+  "submit_for_approval when the developer asks). Any pending approval request is cancelled because the app changed, " +
+  "unless only exportedApplication.tags differ: then only the tags are written (tagsOnly: true). " +
   "Without applicationId it creates a new app in workspaceId, which nobody but builders sees until a release is " +
   "approved. Datasources are matched by name and plugin; an Admin configures any that do not exist yet. Returns the " +
   "applicationId, name, workspaceId and the datasources that still need a configuration.";
+
+// The server's limits (ApplicationTags.java); it refuses a list over them, after dropping repeats.
+export const MAX_APP_TAGS = 10;
+export const MAX_APP_TAG_LENGTH = 30;
+
+const SET_TAGS_DESCRIPTION =
+  "Set an application's tags: free-text labels the home page catalog filters and searches by. Pass the FULL list " +
+  "(it replaces the current tags; an empty list clears them). The server trims and lower-cases each tag and drops " +
+  `repeats; at most ${MAX_APP_TAGS} tags of at most ${MAX_APP_TAG_LENGTH} characters each. Tags are app metadata: ` +
+  "setting them does not change the edit copy, cancel a pending approval request or change what users see. Needs " +
+  "the Developer role with edit access to the app, or the Administrator role. Returns the stored tags. List the " +
+  "current tags with list_applications.";
 
 interface ApiErrorShape {
   name: "AppsmithApiError";
@@ -88,13 +103,14 @@ function isAppsmithApiError(error: unknown): error is ApiErrorShape {
   );
 }
 
-type Operation = "submit" | "status" | "export" | "import";
+type Operation = "submit" | "status" | "export" | "import" | "tags";
 
 const ERROR_CODES: Record<Operation, string> = {
   submit: "approval_submit_refused",
   status: "approval_status_unavailable",
   export: "export_refused",
   import: "import_refused",
+  tags: "set_tags_refused",
 };
 
 // Agent-legible guidance per status. The core request() never forwards the server's error body (an egress guard), so
@@ -118,6 +134,20 @@ function guidance(operation: Operation, status: number): string | undefined {
 
       if (status === 404) {
         return "No workspace or application with this id that the user can edit. Check workspaceId and applicationId.";
+      }
+
+      return undefined;
+    case "tags":
+      if (status === 400) {
+        return `Appsmith refused the tags: at most ${MAX_APP_TAGS} different tags of at most ${MAX_APP_TAG_LENGTH} characters each. Shorten the list and set it again.`;
+      }
+
+      if (status === 403) {
+        return "The user is not allowed to set tags: it needs the Developer role with edit access to the app, or the Administrator role. Tell the user; do not retry.";
+      }
+
+      if (status === 404) {
+        return "No application with this id that the user can edit. Check the applicationId; do not retry.";
       }
 
       return undefined;
@@ -170,6 +200,7 @@ const approvals = (host: ExtensionToolHost): ApprovalApi =>
   approvalApi(host.api);
 const projectsRepo = (host: ExtensionToolHost): ProjectsRepoApi =>
   projectsRepoApi(host.api);
+const appTags = (host: ExtensionToolHost): AppTagsApi => appTagsApi(host.api);
 
 // Top-level keys of an app export that carry the published copy, datasource details or server bookkeeping. The server
 // already leaves them out (EditCopyJson.java); this repeats it so no future server change can send a secret through
@@ -350,6 +381,24 @@ export const registerExtensionTools = (host: ExtensionToolHost): void => {
       async ({ workspaceId, applicationId, artifact }) =>
         call(host, "import", projectsRepo, async (api) =>
           api.importApplicationEditCopy(workspaceId, applicationId, artifact),
+        ),
+    );
+  }
+
+  if (catalogued("set_app_tags")) {
+    host.registerTool(
+      "set_app_tags",
+      SET_TAGS_DESCRIPTION,
+      {
+        applicationId: applicationIdSchema,
+        // A little room over the limit for repeats the server drops; it refuses anything over the limits after that.
+        tags: z
+          .array(z.string().max(MAX_APP_TAG_LENGTH * 2))
+          .max(MAX_APP_TAGS * 2),
+      },
+      async ({ applicationId, tags }) =>
+        call(host, "tags", appTags, async (api) =>
+          api.setApplicationTags(applicationId, tags),
         ),
     );
   }

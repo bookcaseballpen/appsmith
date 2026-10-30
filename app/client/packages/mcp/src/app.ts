@@ -1928,6 +1928,37 @@ function actionPromptFacts(action: unknown): {
   };
 }
 
+// Fork: an application's tags (ApplicationCE.tags), stored trimmed and lower-cased by the server; [] when it has none.
+export function applicationTagsOf(application: unknown): string[] {
+  const tags = (application as { tags?: unknown } | null)?.tags;
+
+  return Array.isArray(tags)
+    ? tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+}
+
+// Fork: the /applications/home list with only the apps that have any / all of the tags, normalised as the server
+// stores them. No tags (or not a list): the response as it is.
+export function filterApplicationsByTags(
+  listed: unknown,
+  tags: string[] | undefined,
+  mode: "any" | "all",
+): unknown {
+  const wanted = (tags ?? [])
+    .map((tag) => tag.trim().replace(/\s+/g, " ").toLowerCase())
+    .filter((tag) => tag.length > 0);
+
+  if (wanted.length === 0 || !Array.isArray(listed)) return listed;
+
+  return listed.filter((application) => {
+    const have = new Set(applicationTagsOf(application));
+
+    return mode === "all"
+      ? wanted.every((tag) => have.has(tag))
+      : wanted.some((tag) => have.has(tag));
+  });
+}
+
 // Fetches the application and returns its git state. Fails safe to "not connected" on a read error so a transient
 // failure never blocks a legitimate read; the M7 branch GATE never uses this (it fails closed instead), and
 // confirm_publish re-reads explicitly before the high-impact deploy.
@@ -3326,9 +3357,20 @@ export function buildMcpServer(
 
   registerTool(
     "list_applications",
-    "List applications in a workspace accessible to the authenticated Appsmith user. Pass a workspaceId (resolve a workspace name to its id with resolve_workspace / list_workspaces first).",
-    { workspaceId: idSchema },
-    async ({ workspaceId }) => result(await api.listApplications(workspaceId)),
+    'List applications in a workspace accessible to the authenticated Appsmith user, each with its tags. Pass a workspaceId (resolve a workspace name to its id with resolve_workspace / list_workspaces first). Optionally pass tags to list only the apps that have any of them (tagMode "any", the default) or all of them (tagMode "all"); tags compare ignoring case and surrounding spaces.',
+    {
+      workspaceId: idSchema,
+      tags: z.array(z.string().max(60)).max(20).optional(),
+      tagMode: z.enum(["any", "all"]).optional(),
+    },
+    async ({ tagMode, tags, workspaceId }) =>
+      result(
+        filterApplicationsByTags(
+          await api.listApplications(workspaceId),
+          tags,
+          tagMode ?? "any",
+        ),
+      ),
   );
 
   registerTool(
@@ -3342,7 +3384,14 @@ export function buildMcpServer(
       ]);
 
       // Surface git state so an agent knows up front that edits will be uncommitted and publish is disabled here.
-      return result({ ...(context as Record<string, unknown>), git });
+      return result({
+        ...(context as Record<string, unknown>),
+        tags: applicationTagsOf(
+          (context as { pages?: { application?: unknown } } | null)?.pages
+            ?.application,
+        ),
+        git,
+      });
     },
   );
 

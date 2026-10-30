@@ -300,6 +300,7 @@ async function push(args: ParsedArgs, env: NodeJS.ProcessEnv, io: Io, factory: C
       name: string;
       unconfiguredDatasources?: string[];
       unchanged?: boolean;
+      tagsOnly?: boolean;
     }>("import_application", {
       workspaceId: workspace.id,
       ...(existing !== undefined ? { applicationId: existing.id } : {}),
@@ -308,6 +309,13 @@ async function push(args: ParsedArgs, env: NodeJS.ProcessEnv, io: Io, factory: C
 
     if (result.unchanged === true) {
       io.out(`Nothing to push: ${dir} matches the edit copy of "${result.name}".`);
+
+      return 0;
+    }
+
+    // Tags are metadata: the instance writes them without an import, so an approved or submitted app stays so.
+    if (result.tagsOnly === true) {
+      io.out(`Pushed the tags of "${result.name}" (${result.applicationId}); nothing else changed, the approval state is kept.`);
 
       return 0;
     }

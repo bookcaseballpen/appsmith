@@ -1,13 +1,11 @@
 package com.appsmith.server.roles;
 
 import com.appsmith.external.models.Policy;
-import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.Config;
 import com.appsmith.server.domains.PermissionGroup;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.domains.Workspace;
 import com.appsmith.server.domains.WorkspacePlugin;
-import com.appsmith.server.dtos.Permission;
 import com.appsmith.server.dtos.WorkspacePluginStatus;
 import com.appsmith.server.helpers.TextUtils;
 import com.appsmith.server.helpers.ce.bridge.Bridge;
@@ -43,7 +41,9 @@ import static com.appsmith.server.helpers.TextUtils.generateDefaultRoleNameForRe
  * Owns the single default workspace of this fork and its four role groups ({@link InstanceRole}).
  *
  * <p>On a fresh instance the workspace and the groups are created on first start; their ids are stored in the
- * {@value #CONFIG_NAME} config document, so a restart finds and reuses them instead of creating new ones.
+ * {@value #CONFIG_NAME} config document, so a restart finds and reuses them instead of creating new ones. After that,
+ * every start brings the groups in line with {@link InstanceRole} when the role definitions changed (see
+ * {@link RoleGroupReconciler}).
  *
  * <p>Fresh installs only: workspaces that exist before the first start are not migrated. They keep their CE groups and
  * members, nobody gets a role from them, and their apps are re-imported one by one into the default workspace.
@@ -60,6 +60,8 @@ public class DefaultWorkspaceService {
     static final String CONFIG_NAME = "fork.defaultWorkspace";
     static final String WORKSPACE_ID_KEY = "workspaceId";
     static final String DEFAULT_WORKSPACE_NAME = "Apps";
+    static final String RECONCILE_FAILED_MESSAGE = "ROLES RECONCILE FAILED: the permissions of the role groups and"
+            + " apps may be out of date; the reconcile will retry on the next start.";
 
     private final ConfigRepository configRepository;
     private final WorkspaceRepository workspaceRepository;
@@ -67,6 +69,7 @@ public class DefaultWorkspaceService {
     private final PluginRepository pluginRepository;
     private final PolicySolution policySolution;
     private final CacheableRepositoryHelper cacheableRepositoryHelper;
+    private final RoleGroupReconciler roleGroupReconciler;
 
     // The bootstrap result, shared by concurrent callers so the workspace is created at most once per process.
     private final AtomicReference<Mono<DefaultWorkspaceIds>> idsMono = new AtomicReference<>();
@@ -80,13 +83,15 @@ public class DefaultWorkspaceService {
             PermissionGroupRepository permissionGroupRepository,
             PluginRepository pluginRepository,
             PolicySolution policySolution,
-            CacheableRepositoryHelper cacheableRepositoryHelper) {
+            CacheableRepositoryHelper cacheableRepositoryHelper,
+            RoleGroupReconciler roleGroupReconciler) {
         this.configRepository = configRepository;
         this.workspaceRepository = workspaceRepository;
         this.permissionGroupRepository = permissionGroupRepository;
         this.pluginRepository = pluginRepository;
         this.policySolution = policySolution;
         this.cacheableRepositoryHelper = cacheableRepositoryHelper;
+        this.roleGroupReconciler = roleGroupReconciler;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -95,11 +100,20 @@ public class DefaultWorkspaceService {
                 "Roles: this fork supports fresh installs only. Workspaces created before its first start are not"
                         + " migrated; re-import their apps one by one into the \"{}\" workspace.",
                 DEFAULT_WORKSPACE_NAME);
+        DefaultWorkspaceIds ids;
         try {
-            DefaultWorkspaceIds ids = getIds().block();
+            ids = getIds().block();
             log.info("Default workspace is {}", ids == null ? null : ids.workspaceId());
         } catch (Exception e) {
             log.error("Could not create the default workspace and its role groups", e);
+            return;
+        }
+        try {
+            if (ids != null) {
+                roleGroupReconciler.reconcile(ids).block();
+            }
+        } catch (Exception e) {
+            log.error(RECONCILE_FAILED_MESSAGE, e);
         }
     }
 
@@ -241,21 +255,10 @@ public class DefaultWorkspaceService {
     private Mono<Map<InstanceRole, PermissionGroup>> applyPolicies(
             Workspace workspace, Map<InstanceRole, PermissionGroup> groups) {
         List<PermissionGroup> allGroups = List.copyOf(groups.values());
-        groups.forEach((role, group) -> {
-            Set<Permission> permissions = new HashSet<>();
-            role.getWorkspacePermissions().stream()
-                    .filter(permission -> permission.getEntity().equals(Workspace.class))
-                    .forEach(permission -> permissions.add(new Permission(workspace.getId(), permission)));
-            // As in a CE workspace: every member reads the role groups, the administrators assign and unassign them.
-            allGroups.forEach(other -> {
-                permissions.add(new Permission(other.getId(), AclPermission.READ_PERMISSION_GROUP_MEMBERS));
-                if (role == InstanceRole.ADMIN) {
-                    permissions.add(new Permission(other.getId(), AclPermission.ASSIGN_PERMISSION_GROUPS));
-                    permissions.add(new Permission(other.getId(), AclPermission.UNASSIGN_PERMISSION_GROUPS));
-                }
-            });
-            group.setPermissions(permissions);
-        });
+        List<String> allGroupIds =
+                allGroups.stream().map(PermissionGroup::getId).toList();
+        groups.forEach((role, group) ->
+                group.setPermissions(RoleGroupReconciler.groupPermissions(role, workspace.getId(), allGroupIds)));
 
         Workspace withPolicies = workspace;
         for (PermissionGroup group : allGroups) {

@@ -9,8 +9,8 @@ import java.util.Set;
 import static com.appsmith.server.filters.McpAllowRule.rule;
 
 /**
- * Fork: the MCP tools submit_for_approval and get_approval_status, and export_application and import_application (the
- * projects repo's app JSON, edit copy only). Approving and rejecting are for people only, so their routes are never
+ * Fork: the MCP tools submit_for_approval and get_approval_status, export_application and import_application (the
+ * projects repo's app JSON, edit copy only), and set_app_tags. Approving and rejecting are for people only, so their routes are never
  * listed here (and the service refuses MCP tokens for them too).
  */
 public class McpAllowlistExtensions extends McpAllowlistExtensionsCE {
@@ -21,12 +21,13 @@ public class McpAllowlistExtensions extends McpAllowlistExtensionsCE {
                 rule(HttpMethod.GET, "/api/v1/approvals/applications/{applicationId}"),
                 rule(HttpMethod.POST, "/api/v1/approvals/applications/{applicationId}/submit"),
                 rule(HttpMethod.GET, "/api/v1/projects-repo/applications/{applicationId}"),
-                rule(HttpMethod.POST, "/api/v1/projects-repo/applications/import/{workspaceId}"));
+                rule(HttpMethod.POST, "/api/v1/projects-repo/applications/import/{workspaceId}"),
+                rule(HttpMethod.PUT, "/api/v1/app-tags/applications/{applicationId}"));
     }
 
     @Override
     public List<String> extensionPathPrefixes() {
-        return List.of("/api/v1/approvals", "/api/v1/projects-repo");
+        return List.of("/api/v1/approvals", "/api/v1/projects-repo", "/api/v1/app-tags");
     }
 
     @Override
