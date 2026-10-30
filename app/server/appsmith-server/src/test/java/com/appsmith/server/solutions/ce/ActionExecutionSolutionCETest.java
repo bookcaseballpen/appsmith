@@ -336,7 +336,8 @@ public class ActionExecutionSolutionCETest {
                             .usingRecursiveFieldByFieldElementComparator()
                             .containsExactlyInAnyOrderElementsOf(expectedWidgets);
                     assertThat(result.getRequest().getActionId()).isEqualTo(executeActionDTO.getActionId());
-                    assertThat(result.getRequest().getRequestedAt()).isBefore(Instant.now());
+                    // Fork: or equal; Windows' clock can give both instants the same value.
+                    assertThat(result.getRequest().getRequestedAt()).isBeforeOrEqualTo(Instant.now());
                 })
                 .verifyComplete();
     }
@@ -567,7 +568,8 @@ public class ActionExecutionSolutionCETest {
                     assertThat(result.getStatusCode()).isEqualTo(pluginException.getAppErrorCode());
                     assertThat(result.getTitle()).isEqualTo(pluginException.getTitle());
                     assertThat(result.getRequest().getActionId()).isEqualTo(createdAction.getId());
-                    assertThat(result.getRequest().getRequestedAt()).isBefore(Instant.now());
+                    // Fork: or equal; Windows' clock can give both instants the same value.
+                    assertThat(result.getRequest().getRequestedAt()).isBeforeOrEqualTo(Instant.now());
                 })
                 .verifyComplete();
     }
