@@ -19,6 +19,14 @@ public interface CacheableRepositoryHelperCE {
 
     Mono<Void> evictPermissionGroupsUser(String email, String organizationId);
 
+    /**
+     * Fork: the ids of the teams and the personal app-grant group the user belongs to (see
+     * {@link com.appsmith.server.grants.GrantGroups}), cached like {@link #getPermissionGroupsOfUser(User)}.
+     */
+    Mono<Set<String>> getGrantGroupsOfUser(User user);
+
+    Mono<Void> evictGrantGroupsOfUser(String email, String organizationId);
+
     Mono<String> getCurrentUserOrganizationId();
 
     Mono<Organization> getOrganizationById(String organizationId);

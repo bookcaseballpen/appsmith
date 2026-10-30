@@ -166,6 +166,30 @@ public class CacheableRepositoryHelperCEImpl implements CacheableRepositoryHelpe
         return Mono.empty();
     }
 
+    // Fork: RoleGate leaves these out of a USER's app permission checks; cleared with permissionGroupsForUser by
+    // CustomPermissionGroupRepositoryCEImpl.evictPermissionGroupsUser.
+    @Cache(cacheName = "grantGroupsForUser", key = "{#user.email + #user.organizationId}")
+    @Override
+    public Mono<Set<String>> getGrantGroupsOfUser(User user) {
+        BridgeQuery<PermissionGroup> criteria = Bridge.and(
+                Bridge.equal(PermissionGroup.Fields.assignedToUserIds, user.getId()),
+                notDeleted(),
+                Bridge.in(PermissionGroup.Fields.defaultDomainType, GrantGroups.TYPES));
+        Query query = new Query();
+        query.addCriteria(criteria);
+        query.fields().include(PermissionGroup.Fields.id);
+        return mongoOperations
+                .find(query, PermissionGroup.class)
+                .map(PermissionGroup::getId)
+                .collect(Collectors.toSet());
+    }
+
+    @CacheEvict(cacheName = "grantGroupsForUser", key = "{#email + #organizationId}")
+    @Override
+    public Mono<Void> evictGrantGroupsOfUser(String email, String organizationId) {
+        return Mono.empty();
+    }
+
     @Override
     public Mono<String> getCurrentUserOrganizationId() {
         String defaultOrganizationId = inMemoryCacheableRepositoryHelper.getDefaultOrganizationId();
