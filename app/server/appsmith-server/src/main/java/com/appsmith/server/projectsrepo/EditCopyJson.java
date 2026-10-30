@@ -151,8 +151,13 @@ public final class EditCopyJson {
      * by name (ignoring case) and position among those of that name. Without this, the import would store the marker
      * itself: it replaces a query's header and parameter lists and URL whole.
      *
+     * <p>A value is only put back when the query still sends its requests where the stored one does (see
+     * {@link #target}): otherwise whoever edits the file could point the query at a host of their own and receive the
+     * secret there without ever reading it.
+     *
      * @return whether any value was put back
-     * @throws AppsmithException when a stripped value has no stored value (a new app or query, or a renamed header)
+     * @throws AppsmithException when a stripped value has no stored value (a new app or query, or a renamed header),
+     *     or the query's target changed
      */
     public static boolean putBackStoredValues(Object incoming, Object current) {
         Map<String, Map<String, Object>> storedQueries = new LinkedHashMap<>();
@@ -162,6 +167,7 @@ public final class EditCopyJson {
             }
         }
         List<String> missing = new ArrayList<>();
+        List<String> moved = new ArrayList<>();
         boolean putBack = false;
         for (Map<String, Object> action : actions(incoming)) {
             Map<String, Object> dto = editCopy(action);
@@ -170,6 +176,7 @@ public final class EditCopyJson {
             }
             Map<String, Object> stored =
                     action.get("gitSyncId") instanceof String gitSyncId ? storedQueries.get(gitSyncId) : null;
+            boolean sameTarget = stored != null && target(dto).equals(target(stored));
             String query = "query '" + dto.get("name") + "'";
             for (List<String> path : SECRET_PROPERTY_LISTS) {
                 if (!(valueAt(dto, path) instanceof List<?> properties)) {
@@ -186,8 +193,11 @@ public final class EditCopyJson {
                         continue;
                     }
                     Object value = storedPropertyValue(storedProperties, key, occurrence);
+                    String name = query + " " + path.get(path.size() - 1) + " '" + key + "'";
                     if (value == null) {
-                        missing.add(query + " " + path.get(path.size() - 1) + " '" + key + "'");
+                        missing.add(name);
+                    } else if (!sameTarget) {
+                        moved.add(name);
                     } else {
                         putEntry(entry, "value", value);
                         putBack = true;
@@ -217,6 +227,10 @@ public final class EditCopyJson {
                         missing.add(query + " URL parameter '" + key + "'");
                         return value;
                     }
+                    if (!sameTarget) {
+                        moved.add(query + " URL parameter '" + key + "'");
+                        return value;
+                    }
                     return storedValue;
                 });
                 if (!restored.equals(url)) {
@@ -225,14 +239,59 @@ public final class EditCopyJson {
                 }
             }
         }
+        List<String> problems = new ArrayList<>();
+        if (!moved.isEmpty()) {
+            problems.add("these values are " + STRIPPED_VALUE + " (removed on export) but their query now sends its"
+                    + " requests to another scheme, host, port or datasource, so the stored secrets are not put back: "
+                    + String.join(", ", moved)
+                    + ". To send a secret there on purpose, write its value (a literal or a {{ }} binding) in place of "
+                    + STRIPPED_VALUE + ".");
+        }
         if (!missing.isEmpty()) {
-            throw new AppsmithException(
-                    AppsmithError.GENERIC_BAD_REQUEST,
-                    "these values are " + STRIPPED_VALUE + " (removed on export) and the app has no stored value to"
-                            + " put back: " + String.join(", ", missing)
-                            + ". Write a {{ }} binding in their place.");
+            problems.add("these values are " + STRIPPED_VALUE + " (removed on export) and the app has no stored value"
+                    + " to put back: " + String.join(", ", missing)
+                    + ". Write a {{ }} binding in their place.");
+        }
+        if (!problems.isEmpty()) {
+            throw new AppsmithException(AppsmithError.GENERIC_BAD_REQUEST, String.join(" Also, ", problems));
         }
         return putBack;
+    }
+
+    /**
+     * Where a query (its action DTO) sends its requests: the saved datasource it uses, if any, and the scheme, host and
+     * port (the authority, user info included) of its URL, the embedded datasource's URL followed by the query's path.
+     * The path counts too: one starting with {@code .evil.com/} or {@code @evil.com/} moves the request to another
+     * host. Hosts compare ignoring case; when a {@code {{ }}} binding is part of the authority, it compares as written,
+     * so only the identical binding text counts as the same target.
+     */
+    private static String target(Map<String, Object> dto) {
+        String datasource = valueAt(dto, List.of("datasource", "id")) instanceof String id && !id.isBlank() ? id : "";
+        String url = valueAt(dto, List.of("datasource", "datasourceConfiguration", "url")) instanceof String text
+                ? text
+                : "";
+        String path = valueAt(dto, List.of("actionConfiguration", "path")) instanceof String text ? text : "";
+        String full = url + path;
+        int schemeEnd = full.indexOf("://");
+        int firstDelimiter = firstDelimiter(full);
+        int end = schemeEnd < 0 || (firstDelimiter >= 0 && firstDelimiter < schemeEnd) ? 0 : schemeEnd + 3;
+        while (end < full.length() && "/?#".indexOf(full.charAt(end)) < 0) {
+            // A binding is one piece: a '/' inside it does not end the authority.
+            int close = full.startsWith("{{", end) ? full.indexOf("}}", end) : -1;
+            end = close < 0 ? end + 1 : close + 2;
+        }
+        String origin = full.substring(0, end);
+        return datasource + "\n" + (origin.contains("{{") ? origin : origin.toLowerCase(Locale.ROOT));
+    }
+
+    /** Where the URL's path, query or fragment starts (-1 for none). */
+    private static int firstDelimiter(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if ("/?#".indexOf(text.charAt(i)) >= 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** Replaces the literal values of the secret headers and parameters of a query (its action DTO) by the marker. */

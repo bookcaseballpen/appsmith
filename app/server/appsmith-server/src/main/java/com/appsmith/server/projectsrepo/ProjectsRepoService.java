@@ -13,6 +13,7 @@ import com.appsmith.server.imports.internal.ImportService;
 import com.appsmith.server.repositories.ApplicationRepository;
 import com.appsmith.server.services.ArtifactCopyAudit;
 import com.google.gson.Gson;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
@@ -32,6 +33,7 @@ import java.util.Optional;
  * <p>The import is the normal app import: a new app, or the edit copy of an existing one (the published copy and its
  * live state stay as they are, see {@code ImportServiceImpl}).
  */
+@Slf4j
 @Service
 public class ProjectsRepoService {
 
@@ -95,7 +97,16 @@ public class ProjectsRepoService {
         // Any doubt about the stored edit copy (none readable) counts as a change: import it.
         return exportTree(applicationId, false)
                 .map(Optional::of)
-                .onErrorReturn(Optional.empty())
+                .onErrorResume(error -> {
+                    // Only the error's type and message: never the stored edit copy, which holds secret values.
+                    log.warn(
+                            "Projects repo import over {}: the stored edit copy could not be read ({}: {}), importing"
+                                    + " without it",
+                            applicationId,
+                            error.getClass().getSimpleName(),
+                            error.getMessage());
+                    return Mono.just(Optional.empty());
+                })
                 .defaultIfEmpty(Optional.empty())
                 .flatMap(current -> {
                     boolean putBack = EditCopyJson.putBackStoredValues(incoming, current.orElse(null));

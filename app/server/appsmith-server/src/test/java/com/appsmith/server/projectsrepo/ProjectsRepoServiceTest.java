@@ -27,6 +27,8 @@ import com.appsmith.server.services.LayoutActionService;
 import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -290,6 +292,82 @@ class ProjectsRepoServiceTest {
             assertThat(exception.getError()).isEqualTo(AppsmithError.GENERIC_BAD_REQUEST);
             assertThat(exception.getMessage()).contains("query 'SecretApi' headers 'Authorization'");
         });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://evil.example.net", "https://api.example.com:8443", "http://api.example.com"})
+    void should_refusePushAndSaveNothing_when_pulledQueryWithStrippedSecretsPointsElsewhere(String url) {
+        // Given
+        ActionDTO query = runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+        String editModeBefore = fingerprint.ofEditMode(application.getId()).block();
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        asMap(asMap(asMap(editCopyOf(exported, "SecretApi").get("datasource")).get("datasourceConfiguration")))
+                .put("url", url);
+
+        // When
+        Optional<AppsmithException> error = runAs(
+                projectsRepoService
+                        .importEditCopy(workspaceId, application.getId(), gson.toJson(exported))
+                        .map(imported -> Optional.<AppsmithException>empty())
+                        .onErrorResume(AppsmithException.class, exception -> Mono.just(Optional.of(exception))),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(error).hasValueSatisfying(exception -> {
+            assertThat(exception.getError()).isEqualTo(AppsmithError.GENERIC_BAD_REQUEST);
+            assertThat(exception.getMessage())
+                    .contains(
+                            "another scheme, host, port or datasource",
+                            "query 'SecretApi' headers 'Authorization'",
+                            "query 'SecretApi' queryParameters 'api_key'",
+                            "query 'SecretApi' headers 'Cookie'",
+                            "query 'SecretApi' URL parameter 'token'")
+                    .doesNotContain("Bearer s3cret", "k-123", "t-456", "session=abc");
+        });
+        ActionDTO stored = newActionRepository.findById(query.getId()).block().getUnpublishedAction();
+        assertThat(stored.getDatasource().getDatasourceConfiguration().getUrl()).isEqualTo("https://api.example.com");
+        assertThat(stored.getActionConfiguration().getHeaders())
+                .extracting(Property::getKey, Property::getValue)
+                .contains(tuple("Authorization", "Bearer s3cret"));
+        assertThat(fingerprint.ofEditMode(application.getId()).block()).isEqualTo(editModeBefore);
+    }
+
+    @Test
+    void should_keepStoredSecretValues_when_devPushesPulledQueryWithChangedPathOnSameHost() {
+        // Given
+        ActionDTO query = runAs(layoutActionService.createSingleAction(apiQueryWithSecrets()), InstanceRole.DEV);
+        Map<String, Object> exported =
+                asMap(runAs(projectsRepoService.exportEditCopy(application.getId()), InstanceRole.DEV));
+        Map<String, Object> actionConfiguration =
+                asMap(editCopyOf(exported, "SecretApi").get("actionConfiguration"));
+        actionConfiguration.put("path", ((String) actionConfiguration.get("path")).replace("/orders?", "/orders/all?"));
+
+        // When
+        ProjectsRepoService.ImportResult result = runAs(
+                projectsRepoService.importEditCopy(workspaceId, application.getId(), gson.toJson(exported)),
+                InstanceRole.DEV);
+
+        // Then
+        assertThat(result.unchanged()).isFalse();
+        ActionDTO stored = newActionRepository.findById(query.getId()).block().getUnpublishedAction();
+        assertThat(stored.getActionConfiguration().getPath()).isEqualTo("/orders/all?token=t-456&page=2");
+        assertThat(stored.getActionConfiguration().getHeaders())
+                .extracting(Property::getKey, Property::getValue)
+                .contains(tuple("Authorization", "Bearer s3cret"));
+        assertThat(stored.getDatasource().getDatasourceConfiguration().getHeaders())
+                .extracting(Property::getKey, Property::getValue)
+                .containsExactly(tuple("Cookie", "session=abc"));
+    }
+
+    /** The edit copy (action DTO) of the query {@code name} in an exported app JSON tree. */
+    private static Map<String, Object> editCopyOf(Map<String, Object> exported, String name) {
+        return ((List<?>) exported.get("actionList"))
+                .stream()
+                        .map(action -> asMap(asMap(action).get("unpublishedAction")))
+                        .filter(dto -> name.equals(dto.get("name")))
+                        .findFirst()
+                        .orElseThrow();
     }
 
     /** An API query with its own URL (no saved datasource) and literal secrets in its headers, parameters and URLs. */
