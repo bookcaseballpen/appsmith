@@ -243,6 +243,132 @@ class EditCopyJsonTest {
                 .hasMessageContaining("query 'GetOrders' URL parameter 'client_secret'");
     }
 
+    @ParameterizedTest
+    @CsvSource({
+        "https://api.example.com, https://api.example.com, /orders/all",
+        "https://api.example.com, https://API.Example.COM, /orders",
+        "https://{{Env.host}}, https://{{Env.host}}, /orders"
+    })
+    void should_putStoredValuesBack_when_queryTargetIsUnchanged(String storedOrigin, String pushedOrigin, String path) {
+        // Given
+        Map<String, Object> stored = withOrigin(exportWithApiQuery("query1"), storedOrigin, "/orders");
+        Object pushed =
+                withOrigin(EditCopyJson.withoutDatasourceDetails(exportWithApiQuery("query1")), pushedOrigin, path);
+
+        // When
+        boolean putBack = EditCopyJson.putBackStoredValues(pushed, stored);
+
+        // Then
+        assertThat(putBack).isTrue();
+        assertThat(firstHeader(pushed).get("value")).isEqualTo("Bearer s3cret");
+        assertThat(child(child(editCopy(pushed), "datasource"), "datasourceConfiguration")
+                        .get("headers"))
+                .isEqualTo(List.of(Map.of("key", "Cookie", "value", "session=abc")));
+        assertThat(child(editCopy(pushed), "actionConfiguration").get("path"))
+                .asString()
+                .contains("token=t-456");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "https://api.example.com, https://evil.example.net",
+        "https://api.example.com, https://api.example.com.evil.net",
+        "https://api.example.com, https://api.example.com:8443",
+        "https://api.example.com, http://api.example.com",
+        "https://api.example.com, https://user@api.example.com",
+        "https://api.example.com, https://{{Env.host}}",
+        "https://{{Env.host}}, https://{{Env.otherHost}}"
+    })
+    void should_refusePush_when_queryUrlPointsElsewhere(String storedOrigin, String pushedOrigin) {
+        // Given
+        Map<String, Object> stored = withOrigin(exportWithApiQuery("query1"), storedOrigin, "/orders");
+        Object pushed = withOrigin(
+                EditCopyJson.withoutDatasourceDetails(exportWithApiQuery("query1")), pushedOrigin, "/orders");
+
+        // When / Then
+        assertThatThrownBy(() -> EditCopyJson.putBackStoredValues(pushed, stored))
+                .isInstanceOf(AppsmithException.class)
+                .satisfies(error ->
+                        assertThat(((AppsmithException) error).getError()).isEqualTo(AppsmithError.GENERIC_BAD_REQUEST))
+                .hasMessageContaining("another scheme, host, port or datasource")
+                .hasMessageContaining("query 'GetOrders' headers 'Authorization'")
+                .hasMessageContaining("query 'GetOrders' queryParameters 'api_key'")
+                .hasMessageContaining("query 'GetOrders' headers 'Cookie'")
+                .hasMessageContaining("query 'GetOrders' URL parameter 'token'")
+                .hasMessageContaining("query 'GetOrders' URL parameter 'client_secret'")
+                .hasMessageNotContaining("s3cret")
+                .hasMessageNotContaining("no stored value");
+        assertThat(firstHeader(pushed).get("value")).isEqualTo(STRIPPED);
+    }
+
+    @Test
+    void should_putStoredValueBack_when_savedDatasourceQueryOnlyChangesPath() {
+        // Given
+        Map<String, Object> stored = exportWithSavedDatasource("Orders API", "/orders");
+        Object pushed =
+                EditCopyJson.withoutDatasourceDetails(exportWithSavedDatasource("Orders API", "/orders/{{page}}"));
+
+        // When
+        boolean putBack = EditCopyJson.putBackStoredValues(pushed, stored);
+
+        // Then
+        assertThat(putBack).isTrue();
+        assertThat(firstHeader(pushed).get("value")).isEqualTo("Bearer s3cret");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "Other API, /orders",
+        "Orders API, .evil.net/orders",
+        "Orders API, @evil.net/orders",
+        "Orders API, :8443/orders",
+        "Orders API, https://evil.net/orders",
+        "Orders API, {{Env.host}}/orders"
+    })
+    void should_refusePush_when_savedDatasourceQueryPointsElsewhere(String datasourceId, String path) {
+        // Given
+        Map<String, Object> stored = exportWithSavedDatasource("Orders API", "/orders");
+        Object pushed = EditCopyJson.withoutDatasourceDetails(exportWithSavedDatasource(datasourceId, path));
+
+        // When / Then
+        assertThatThrownBy(() -> EditCopyJson.putBackStoredValues(pushed, stored))
+                .isInstanceOf(AppsmithException.class)
+                .hasMessageContaining("another scheme, host, port or datasource")
+                .hasMessageContaining("query 'GetOrders' headers 'Authorization'");
+        assertThat(firstHeader(pushed).get("value")).isEqualTo(STRIPPED);
+    }
+
+    /** The export with its query's embedded datasource URL on {@code origin} and the query's path starting {@code path}. */
+    private static <T> T withOrigin(T exported, String origin, String path) {
+        Map<String, Object> dto = editCopy(exported);
+        child(child(dto, "datasource"), "datasourceConfiguration")
+                .put("url", origin + "/v1?client_secret=" + valueOf(dto, "client_secret") + "&region=eu");
+        Map<String, Object> actionConfiguration = child(dto, "actionConfiguration");
+        String storedPath = (String) actionConfiguration.get("path");
+        actionConfiguration.put("path", path + storedPath.substring(storedPath.indexOf('?')));
+        return exported;
+    }
+
+    /** The value of the URL parameter {@code name} in the query's embedded datasource URL. */
+    private static String valueOf(Map<String, Object> dto, String name) {
+        String url = (String)
+                child(child(dto, "datasource"), "datasourceConfiguration").get("url");
+        String rest = url.substring(url.indexOf(name + "=") + name.length() + 1);
+        return rest.contains("&") ? rest.substring(0, rest.indexOf('&')) : rest;
+    }
+
+    /** An exported app with one API query on the saved datasource {@code datasourceId}, with a secret header. */
+    private static Map<String, Object> exportWithSavedDatasource(String datasourceId, String path) {
+        Map<String, Object> actionConfiguration = new HashMap<>();
+        actionConfiguration.put("path", path);
+        actionConfiguration.put("headers", List.of(property("Authorization", "Bearer s3cret")));
+        Map<String, Object> exported = exportWith("query1", actionConfiguration, new HashMap<>());
+        Map<String, Object> datasource = child(editCopy(exported), "datasource");
+        datasource.put("id", datasourceId);
+        datasource.put("name", datasourceId);
+        return exported;
+    }
+
     /** An exported app with one API query that has its own URL and secrets in its headers, parameters and URLs. */
     private static Map<String, Object> exportWithApiQuery(String gitSyncId) {
         Map<String, Object> actionConfiguration = new HashMap<>();

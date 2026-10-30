@@ -74,8 +74,9 @@ name inside the file is what counts.
   both the datasource's name). A new datasource name you invent will not work until an Admin creates it.
 - A query's secret header and parameter values (Authorization, Cookie, API keys, tokens, passwords, also in its URL)
   arrive as \`__secret_kept_on_server__\`. Leave that value as it is: the push puts the stored value back. It only works
-  in a query the app already has (same \`gitSyncId\`) under the same name; anywhere else the push is refused, so write a
-  \`{{ }}\` binding there instead (never the secret itself).
+  in a query the app already has (same \`gitSyncId\`) under the same name, still on the same datasource, scheme, host
+  and port (changing the path after the host is fine); anywhere else the push is refused, so write a \`{{ }}\` binding
+  there instead (never the secret itself).
 - Keep every \`gitSyncId\`: it is how the instance matches files with its pages, queries and JS objects. For a new
   page, query or JS object, copy an existing file and give it a new, unique \`gitSyncId\` (any unique string, e.g.
   \`<app>_<uuid>\`), a new name, and for a widget a new unique \`widgetId\`.

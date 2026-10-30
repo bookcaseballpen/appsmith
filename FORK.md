@@ -245,7 +245,14 @@ importer copies only non-null fields), so the marker itself would be stored. `Pr
 therefore first puts the stored value back (`EditCopyJson.putBackStoredValues`) for every marker, matching the query by
 `gitSyncId` and the header or parameter by name (case-insensitive) and position among those of that name, and compares
 for "unchanged" with the secrets in place. A marker with no stored value (a new or copied query, a renamed header, a
-new app) refuses the import (400) with the list of those values. Only this route does it: a marker in a file imported
+new app) refuses the import (400) with the list of those values. A stored value is only put back when the query still
+sends its requests where the stored one does (`EditCopyJson.target`): the same saved datasource (its `id`, the name
+in the file) and the same scheme, host and port (the authority, user info included, letter case ignored) of the own
+datasource's `url` followed by `.path`, so a path starting `.evil.net/`, `@evil.net/` or `:8443/` counts as moved.
+An authority with a `{{ }}` binding is the same only when its text is identical. Otherwise the import is refused (400)
+with the query and header/parameter names, and nothing is saved: whoever edits the file (a Dev, who can't read the
+secrets) could otherwise point the query at their own host and receive them. The fix is to write the value again (a
+literal or a binding) on purpose. Only this route does it: a marker in a file imported
 through `/api/v1/applications/import` is stored as it is. Not stripped: request bodies and form data, and secret
 values in any other field.
 

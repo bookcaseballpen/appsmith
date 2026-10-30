@@ -85,6 +85,12 @@ pull -> push round trip keeps the secrets. A marker it cannot match (a new or co
 refuses the push with the list of values; write a `{{ }}` binding there instead. A real value written in the file
 replaces the stored one (and then sits in the repo), so don't.
 
+The stored value only goes back while the query still points where it did: the same saved datasource, and the same
+scheme, host and port in its URL (the own datasource's `url` followed by `.path`; a `{{ }}` binding there must be
+unchanged). Changing the path after the host is fine. If you move a query with markers to another host, port, scheme
+or datasource, the push is refused with the query and header/parameter names: the secret is not sent to the new
+target unless you write its value (a binding, or a literal) there on purpose.
+
 ## Development
 
 ```sh
