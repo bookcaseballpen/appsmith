@@ -33,8 +33,10 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// A context of its own: a cached context keeps the ids it bootstrapped with, and another class's context may have
+// replaced the stored workspace since then in the shared database.
 @SpringBootTest
-@DirtiesContext
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 class DefaultWorkspaceServiceTest {
 
     @Autowired

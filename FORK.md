@@ -93,19 +93,25 @@ package. Classes, not test methods:
 | 6a | `services.ce` | 26 | 0 | 0 |
 | 6b | `services` (the rest) | 31 | 4 | 0 |
 
-Failed, not from the port: `DefaultWorkspaceServiceTest` (1 test) and `SearchEntitySolutionCETest` (1 test) pass when run
-alone. In a batch they read what earlier classes left in the shared database (other apps visible to `api_user`; the
-default-workspace config of another context). `ActionExecutionSolutionCETest` (1 test,
-`executeAction_actionOnMockDatasource_success`) needs the cloud's mock datasources, which tests point at
-`127.0.0.1:1`; it fails on MongoDB too. `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the
-client DSL migration) also fail when run alone: the app read back from the test's git repository has no pages, so
-nothing is committed. Their path is the git file system, Redis and mocks, with no database, and no git code differs
-from `release`; not yet checked against MongoDB on this PC. `MockDataServiceTest` (4 tests) needs the cloud's mock
-datasources. `UserWorkspaceServiceUnitTest` (2 tests) expects exactly the workspaces it creates, but `api_user` also
-sees the fork's default "Apps" workspace; `UserServiceWithDisabledSignupTest` (2 tests alone, 3 in the batch) expects a
-new admin's own "'s apps" workspace, which the fork no longer creates (both from the roles work, not the port). That
-class's `@AfterAll` (upstream) never turns signup back on, so in a batch `WorkspaceServiceTest` (1 test, passes alone)
-gets "Signup is restricted"; the organization is also cached in Redis, so flush the test Redis between runs.
+Fixed in the tests after the first run (none came from the port):
+- `UserWorkspaceServiceUnitTest` leaves out the fork's default "Apps" workspace, which `api_user` also sees.
+- `UserServiceWithDisabledSignupTest` checks that a new admin joins the default workspace's administrator group (the
+  fork creates no "'s apps" workspace). Its `@AfterAll` now really turns signup back on; upstream's never did, so
+  `WorkspaceServiceTest` later in a batch got "Signup is restricted".
+- `DefaultWorkspaceServiceTest` gets a context of its own: a cached context keeps the ids it bootstrapped with, while
+  another context may have replaced the stored default workspace since.
+- `SearchEntitySolutionCETest` (no search string) expects its app first, not alone: apps other classes left in the
+  shared default workspace are visible too.
+- `MockDataServiceTest` and `ActionExecutionSolutionCETest.executeAction_actionOnMockDatasource_success` are
+  `@Disabled`: they need the cloud's mock datasources, which are off by design ("Sample databases" below).
+
+Failed, not from the port: `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the client DSL
+migration) fail on Windows (from reading the code; not run on Linux here). Upstream's `FileUtilsCEImpl.getExistingFilesInRepo` / `isWhiteListedPath` and
+`getGitResourceIdentity` split the repository's relative paths on `/`, but on Windows they come as `pages\Page1\...`,
+so no page file is read back and nothing is committed. On Linux (CI, the Docker image) the paths use `/`.
+`ActionExecutionSolutionCETest.testWidgetSuggestionAfterExecutionWithJsonObjectData` can fail on Windows when two
+`Instant.now()` calls return the same value ("strictly before"); it passes on a rerun.
+The organization is cached in Redis, so flush the test Redis between runs.
 
 Adapted from the suite: tests that read the encrypted password from the saved object
 (`DatasourceServiceTest`, `DatasourceContextServiceTest`) now read the stored one (`StoredValues`, as upstream's `pg`
@@ -118,7 +124,7 @@ V2 now names the seed's columns with `SnakeCaseNamingStrategy`; its own function
 and `isDependentOnCS` into columns that do not exist, so the plugins lost them and "generate CRUD page" was refused.
 `V6__plugin_seed_acronym_columns.sql` fills them in on databases seeded before the fix.
 
-Skipped: `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
+Skipped: `MockDataServiceTest` (above). `WorkspaceIdentityAuthGuardTest` is `@Disabled` by the fork (creating a workspace over HTTP is a hidden
 endpoint). `GitBranchesWithCentralServiceIT` was left out: it starts the `appsmith/test-event-driver` git server image,
 which is not on this PC, and the Testcontainers pull hung for 25 minutes.
 Classes whose tests are all `@Nested` (`FSGitHandlerTest`, 31 tests) show 0 tests in surefire's text summary; they are

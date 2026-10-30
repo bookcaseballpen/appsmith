@@ -5,7 +5,6 @@ import com.appsmith.server.configurations.CommonConfig;
 import com.appsmith.server.configurations.WithMockAppsmithUser;
 import com.appsmith.server.domains.LoginSource;
 import com.appsmith.server.domains.Organization;
-import com.appsmith.server.domains.OrganizationConfiguration;
 import com.appsmith.server.domains.User;
 import com.appsmith.server.exceptions.AppsmithError;
 import com.appsmith.server.exceptions.AppsmithException;
@@ -13,6 +12,8 @@ import com.appsmith.server.helpers.UserOrganizationHelper;
 import com.appsmith.server.repositories.PermissionGroupRepository;
 import com.appsmith.server.repositories.UserRepository;
 import com.appsmith.server.repositories.WorkspaceRepository;
+import com.appsmith.server.roles.DefaultWorkspaceService;
+import com.appsmith.server.roles.InstanceRole;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,6 @@ import reactor.test.StepVerifier;
 
 import java.util.Set;
 
-import static com.appsmith.server.constants.FieldName.ADMINISTRATOR;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
@@ -60,6 +60,9 @@ public class UserServiceWithDisabledSignupTest {
     @Autowired
     OrganizationService organizationService;
 
+    @Autowired
+    DefaultWorkspaceService defaultWorkspaceService;
+
     Mono<User> userMono;
 
     @BeforeEach
@@ -76,11 +79,21 @@ public class UserServiceWithDisabledSignupTest {
 
     @AfterAll
     public static void cleanup(@Autowired OrganizationService organizationService) {
-        OrganizationConfiguration organizationConfiguration = new OrganizationConfiguration();
-        organizationConfiguration.setIsSignupDisabled(false);
+        // Fork: upstream built a configuration with signup enabled but never set it, so signup stayed disabled for
+        // the test classes after this one that share the database.
         Organization organization =
                 organizationService.getCurrentUserOrganization().block();
+        assert organization != null;
+        organization.getOrganizationConfiguration().setIsSignupDisabled(false);
         organizationService.save(organization).block();
+    }
+
+    // Fork: an administrator gets no workspace of their own; they join the default workspace's administrator group.
+    private Mono<Set<String>> defaultWorkspaceAdministrators() {
+        return defaultWorkspaceService
+                .getIds()
+                .flatMap(ids -> permissionGroupRepository.findById(ids.groupId(InstanceRole.ADMIN)))
+                .map(permissionGroup -> permissionGroup.getAssignedToUserIds());
     }
 
     @Test
@@ -110,14 +123,7 @@ public class UserServiceWithDisabledSignupTest {
 
         Mono<User> userMono = userService.create(newUser).cache();
 
-        Mono<Set<String>> assignedToUsersMono = userMono.flatMap(user -> {
-                    String workspaceName = user.computeFirstName() + "'s apps";
-                    return workspaceRepository.findByName(workspaceName);
-                })
-                .flatMapMany(workspace -> permissionGroupRepository.findAllById(workspace.getDefaultPermissionGroups()))
-                .filter(permissionGroup -> permissionGroup.getName().startsWith(ADMINISTRATOR))
-                .single()
-                .map(permissionGroup -> permissionGroup.getAssignedToUserIds());
+        Mono<Set<String>> assignedToUsersMono = userMono.then(defaultWorkspaceAdministrators());
 
         StepVerifier.create(Mono.zip(userMono, assignedToUsersMono))
                 .assertNext(tuple -> {
@@ -142,14 +148,7 @@ public class UserServiceWithDisabledSignupTest {
 
         Mono<User> userMono = userService.create(newUser).cache();
 
-        Mono<Set<String>> assignedToUsersMono = userMono.flatMap(user -> {
-                    String workspaceName = user.computeFirstName() + "'s apps";
-                    return workspaceRepository.findByName(workspaceName);
-                })
-                .flatMapMany(workspace -> permissionGroupRepository.findAllById(workspace.getDefaultPermissionGroups()))
-                .filter(permissionGroup -> permissionGroup.getName().startsWith(ADMINISTRATOR))
-                .single()
-                .map(permissionGroup -> permissionGroup.getAssignedToUserIds());
+        Mono<Set<String>> assignedToUsersMono = userMono.then(defaultWorkspaceAdministrators());
 
         StepVerifier.create(Mono.zip(userMono, assignedToUsersMono))
                 .assertNext(tuple -> {
