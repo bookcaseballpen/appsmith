@@ -57,9 +57,16 @@ The roles work on a **fresh install only**. Nothing is migrated:
   because it may copy datasources, so only an Admin forks. Duplicating an app within the workspace is open to Devs.
 - An app is **live** once an Approver or Admin has published it manually (`lastDeployedAt` is set). Users see live
   apps only, in the app list and through every API that reads an application.
-- Importing a file over a live app, or restoring a snapshot of one, needs the publish permission, and takes the app
-  offline (`PublishApproval.markNotLive`), because the file's view mode was not approved; it is live again once a
-  release is approved. Importing a new app is open to Devs; it is not live until a release is approved.
+- Importing a file over an existing app replaces its **edit copy only** (`ImportServiceImpl`): the file's published
+  side is dropped before the import (`projectsrepo/EditCopyJson.dropPublishedSide`), and the importers keep the stored
+  published copy of every page, query and JS object, the published app settings and theme, and `lastDeployedAt`. So
+  Devs (and MCP) may import over a live app, and its users keep seeing the approved version; a new version goes live
+  only through Submit -> Approve. A pending request is cancelled by the fingerprint rule, since the edit copy changed.
+  Over a live app the view-mode fingerprint is compared before and after the import; should the import have changed
+  what users see anyway, the app is taken offline (`PublishApproval.markNotLive`), as approve does.
+- Restoring a snapshot of a live app still needs the publish permission and takes the app offline, because the
+  snapshot's view mode was not approved; it is live again once a release is approved. Importing a new app is open to
+  Devs; it is not live until a release is approved.
 
 ### Approver read-only filter
 
@@ -103,7 +110,7 @@ id is the application id). Client: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/ap
 | Endpoint | Who |
 | --- | --- |
 | `GET /api/v1/approvals/applications/{applicationId}` | Anyone who can open the app in the editor |
-| `POST /api/v1/approvals/applications/{applicationId}/submit` | Dev, Admin, Approver |
+| `POST /api/v1/approvals/applications/{applicationId}/submit` (optional body `{"note": "..."}`, at most 500 characters, kept as the SUBMITTED event's comment and shown in the history) | Dev, Admin, Approver |
 | `POST /api/v1/approvals/applications/{applicationId}/approve` | Approver, Admin; never an MCP token |
 | `POST /api/v1/approvals/applications/{applicationId}/reject` (body `{"comment": "..."}`, required) | Approver, Admin; never an MCP token |
 | `GET /api/v1/approvals/pending` | Approver, Admin |
@@ -141,10 +148,10 @@ are sorted, so the same content always gives the same value. The first 12 charac
 
 ### MCP
 
-`submit_for_approval` and `get_approval_status` are MCP tools (`app/client/packages/mcp/src/ee/extensions/`), so an AI
-can submit once the Dev has finished UAT. Approve and reject are not MCP tools, the MCP allowlist
-(`filters/McpAllowlistExtensions.java`) only lets an MCP token reach the status and submit routes, and the service
-refuses approve and reject for MCP tokens as well.
+`submit_for_approval` (with an optional `note`) and `get_approval_status` are MCP tools
+(`app/client/packages/mcp/src/ee/extensions/`), so an AI can submit once the Dev has finished UAT. Approve and reject
+are not MCP tools, the MCP allowlist (`filters/McpAllowlistExtensions.java`) only lets an MCP token reach the status
+and submit routes, and the service refuses approve and reject for MCP tokens as well.
 
 ## Read-only editor
 
@@ -164,7 +171,7 @@ editor is read-only.":
   (`POST /api/v1/applications/import/partial/block`) and template merge.
 
 Still open for everyone: running queries, every GET, app import (`/api/v1/applications/import/...`, including partial
-import), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
+import, and the projects repo's `/api/v1/projects-repo/...`), export, the release approval endpoints (`/api/v1/approvals/...`: submit, approve, reject), git, datasources,
 app create, clone, fork, delete and snapshots, and user and admin settings. The Approver filter still applies on top.
 This filter does not refuse `POST /api/v1/applications/publish/{id}`, but the publish service does, for every role:
 an app is published only by approving a submitted release (Submit -> Approve, see "Publishing").
@@ -195,6 +202,38 @@ added after the cached and remote flags). Client switch: `src/ee/utils/editorRea
 
 The upstream integration tests run with `appsmith.editor.read-only=false` (`application-test.properties`), because
 they change apps over HTTP as session users; `EditorReadOnlyWebFilterTest` and `EditorReadOnlyHttpTest` cover it on.
+
+## Projects repo (cab-sync)
+
+Apps live in a separate git repository (the projects repo; a local folder for now, CodeCommit later), one folder per
+app, split into diff-friendly files. `tools/cab-sync` (TypeScript on Node 24, self-contained, see its README) moves
+them in and out: `init`, `pull`, `push`, `diff`, `submit`. The flow: pull -> edit the files -> push -> test in the
+editor's preview -> submit -> a human approves in the app. `push` first compares the folder with the app's edit copy
+(as `diff` does) and imports nothing when they match, so an unchanged push leaves an approved or submitted app as it is.
+
+**Design: the CLI is an MCP client.** It calls the instance's MCP server (`/mcp`) with the user's own `mcp_` key
+(`CAB_TOKEN`; `CAB_URL` for the instance), and uses the MCP tools `list_workspaces`, `list_applications`,
+`export_application`, `import_application` and `submit_for_approval`. The Appsmith server only treats `Bearer mcp_...`
+as MCP together with `X-Appsmith-Mcp-Internal` (`McpTokenAuthentication.isMcpPrincipal`), which only the MCP server
+knows, so the CLI never holds that secret, the rule is unchanged, and an MCP key stays confined to the MCP allowlist.
+No token is written to disk or to the repo.
+
+Server (`projectsrepo/`):
+
+| Endpoint | What | Who |
+| --- | --- | --- |
+| `GET /api/v1/projects-repo/applications/{applicationId}` | The edit copy as app JSON (`ResponseDTO`), from the version-control export, so it needs the edit permission, as Appsmith's git export does. (The file export `/api/v1/applications/export/{id}` needs the export permission, which only ADMIN has, so a Dev could not pull with it.) | Dev, Admin, Approver |
+| `POST /api/v1/projects-repo/applications/import/{workspaceId}[?applicationId=]` | App JSON (body `application/json`) as a new app, or over the edit copy of `applicationId` (see "Publishing"). Answers `applicationId`, `workspaceId`, `name`, `unconfiguredDatasources`, `unchanged`. App JSON identical to the app's current export is not imported (`unchanged: true`): an import always writes new layout ids, which the approval fingerprint counts as an edit. | Dev, Admin (the normal import permissions; the Approver filter refuses it) |
+
+`EditCopyJson` keeps every secret on the instance: the export never carries the published copy, the stored datasource
+structure, decrypted fields or modified-resources bookkeeping; each datasource is reduced to `name` and `pluginId`; a
+query that uses a saved datasource refers to it without its configuration; an API query with its own URL keeps the
+URL, headers and parameters (they are the query) but never its authentication. The MCP tool strips the same again,
+and cab-sync writes datasources as name and plugin only. `McpAllowlistExtensions` allows exactly these two routes
+(prefix `/api/v1/projects-repo`, `import` reserved as a segment).
+
+The MCP server of a fork-uat instance runs from `scripts/fork-uat` (`up.ps1`, `127.0.0.1:<Port+6>`, proxied at
+`/mcp`), once MCP is enabled on the instance.
 
 ## Cherry-picking upstream fixes
 
@@ -403,7 +442,8 @@ and the fork image is local. The hook scripts stay in the image (`/watchtower-ho
 
 Dev instances from source (`scripts/fork-uat/`, see its README): a worktree whose `app/client/package.json` and
 `yarn.lock` match the main folder's links the main folder's client `node_modules` (one junction per entry, workspace
-packages and `.cache` kept its own) instead of a 30-minute `yarn install`; `up.ps1 -NoLink` installs instead.
+packages and `.cache` kept its own) instead of a 30-minute `yarn install`; `up.ps1 -NoLink` installs instead. Once
+MCP is enabled on the instance, `up.ps1` also runs the MCP server (`127.0.0.1:<Port+6>`, proxied at `/mcp`).
 
 ## Feature flags (local defaults)
 
@@ -810,8 +850,8 @@ Server plugins (`app/server/appsmith-plugins/`):
 - Edited server files: `constants/Url.java` (`APPROVAL_URL`), `filters/McpAllowlistExtensions.java` (the MCP rules;
   an empty subclass upstream), `roles/ApproverReadOnlyWebFilter.java`, `roles/PublishApproval.java`
   (`asApprovedRelease`), `services/ApplicationPageServiceImpl.java` (direct publish refused),
-  `imports/internal/ImportServiceImpl.java` (import over a live app takes it offline), and the test
-  `roles/InstanceRolePermissionsTest`.
+  `imports/internal/ImportServiceImpl.java` (import over an existing app replaces the edit copy only; a snapshot
+  restore over a live app takes it offline), and the test `roles/InstanceRolePermissionsTest`.
 - New client files: `src/ee/api/ApprovalApi.ts`, `src/ee/utils/approvals.ts` (and `.test.ts`),
   `src/ee/components/approvals/ApprovalStatusChip.tsx`,
   `src/ee/pages/AppIDE/layouts/components/Header/ReleaseControls.tsx` (and `.test.tsx`), `useApplicationApproval.ts`,
@@ -820,6 +860,20 @@ Server plugins (`app/server/appsmith-plugins/`):
   `DeployButton`), `src/ce/pages/Applications/index.tsx` (`PendingApprovals` above the app list).
 - MCP: `packages/mcp/src/ee/extensions/api.ts`, `catalog.ts`, `tools.ts`, `routeContract.ts` (re-exports of `ce/`
   upstream, now the fork's implementation), the test `approvals.test.ts`, and `packages/mcp/README.md`.
+
+### Projects repo
+
+- New: `tools/cab-sync/` (CLI, tests, README); server `projectsrepo/` (`ProjectsRepoController`,
+  `ProjectsRepoService`, `EditCopyJson`) and the tests `projectsrepo/ProjectsRepoServiceTest`,
+  `projectsrepo/EditCopyJsonTest`; MCP test `packages/mcp/src/ee/extensions/projectsRepo.test.ts`.
+- Edited fork files: `constants/Url.java` (`PROJECTS_REPO_URL`), `filters/McpAllowlistExtensions.java`,
+  `imports/internal/ImportServiceImpl.java`, `approvals/ApprovalFingerprint.java` (a side without a copy, such as a
+  query an import added to a live app, no longer breaks the fingerprint), `approvals/ApplicationApprovalService.java`
+  and `ApplicationApprovalController.java` (submit note), the MCP `ee/extensions/` files, client
+  `src/ee/components/approvals/ApprovalStatusChip.tsx` (shows the submit note) and
+  `ReleaseControls.test.tsx`, `scripts/fork-uat/` (`up.ps1`, `down.ps1`, `README.md`: the MCP server), and the
+  tests `approvals/ApplicationApprovalServiceTest`, `roles/InstanceRolePermissionsTest`,
+  `filters/McpAllowlistWebFilterTest`.
 
 ### Hidden features (workspace UI, templates, onboarding, built-in Git)
 

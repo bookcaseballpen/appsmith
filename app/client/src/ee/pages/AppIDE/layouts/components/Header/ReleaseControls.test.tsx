@@ -59,8 +59,9 @@ describe("ReleaseControls", () => {
 
     expect(await screen.findByText("Submit for approval")).toBeTruthy();
     expect(screen.queryByText(/deploy/i)).toBeNull();
-    expect((await screen.findByTestId("t--approval-status-chip")).textContent)
-      .toBe("Draft");
+    expect(
+      (await screen.findByTestId("t--approval-status-chip")).textContent,
+    ).toBe("Draft");
   });
 
   it.each(["APPROVER", "ADMIN"])(
@@ -143,5 +144,28 @@ describe("ReleaseControls", () => {
     expect(
       (await screen.findByTestId("t--approval-reject-comment")).textContent,
     ).toBe("approver@example.com: Fix the title");
+  });
+
+  it("shows the submitter's note in the history", async () => {
+    mockedApi.fetchStatus.mockResolvedValue(
+      ok(
+        status({
+          status: "SUBMITTED",
+          history: [
+            {
+              type: "SUBMITTED",
+              by: "dev@example.com",
+              at: 1793268000,
+              comment: "New order filter",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderAs("APPROVER");
+    fireEvent.click(await screen.findByTestId("t--approval-status-chip"));
+
+    expect(await screen.findByText(/"New order filter"/)).toBeTruthy();
   });
 });

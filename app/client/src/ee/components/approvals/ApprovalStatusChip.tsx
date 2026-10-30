@@ -68,13 +68,15 @@ const History = styled.ul`
   }
 `;
 
-const EVENT_LABELS: Record<ApplicationApproval["history"][number]["type"], string> =
-  {
-    SUBMITTED: "Submitted",
-    APPROVED: "Approved and published",
-    REJECTED: "Rejected",
-    CANCELLED: "Cancelled",
-  };
+const EVENT_LABELS: Record<
+  ApplicationApproval["history"][number]["type"],
+  string
+> = {
+  SUBMITTED: "Submitted",
+  APPROVED: "Approved and published",
+  REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
+};
 
 interface Props {
   approval: ApplicationApproval;
@@ -126,7 +128,8 @@ export function ApprovalStatusChip({ approval }: Props) {
                     {EVENT_LABELS[event.type]}
                     {event.by ? ` by ${event.by}` : ""},{" "}
                     {formatApprovalTime(event.at)}
-                    {event.comment && event.type === "REJECTED"
+                    {event.comment &&
+                    (event.type === "REJECTED" || event.type === "SUBMITTED")
                       ? `: "${event.comment}"`
                       : ""}
                   </li>

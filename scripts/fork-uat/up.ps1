@@ -12,7 +12,11 @@
             127.0.0.1:<Port+2> (local Node). The first run builds every module and the
             plugins; later runs rebuild only appsmith-server and the modules it uses.
     client  Webpack dev server with hot reload on 127.0.0.1:<Port+3>, and an nginx proxy on
-            127.0.0.1:<Port> that sends /api, /login, /oauth2 to the server and /rts to RTS.
+            127.0.0.1:<Port> that sends /api, /login, /oauth2 to the server, /rts to RTS and
+            /mcp to the MCP server.
+    mcp     The MCP server (app/client/packages/mcp, local Node) on 127.0.0.1:<Port+6>, once
+            MCP is enabled on the instance (its internal secret is in docker.env); otherwise
+            it says how to enable it and is skipped.
 
   On an empty database, a dev-only admin is created (see README.md).
 
@@ -33,17 +37,18 @@
 param(
   # Repo or worktree folder to run. Default: the repo this script lives in.
   [string]$Source,
-  # Browser port. The worktree also uses Port+1 (server), +2 (RTS), +3 (webpack), +4 (Redis).
+  # Browser port. The worktree also uses Port+1 (server), +2 (RTS), +3 (webpack), +4 (Redis)
+  # and +6 (MCP); +5 is left for a PostgreSQL instance (fork/postgres).
   [int]$Port = 8080,
   # Instance name for containers, volumes and logs. Default: the worktree folder name.
   [string]$Name,
   # MongoDB database name. Default: appsmith_<Name>.
   [string]$Database,
-  # Run only these steps: db, server, client.
-  [ValidateSet("db", "server", "client")]
-  [string[]]$Only = @("db", "server", "client"),
+  # Run only these steps: db, server, client, mcp.
+  [ValidateSet("db", "server", "client", "mcp")]
+  [string[]]$Only = @("db", "server", "client", "mcp"),
   # Rebuild and restart one part of a running instance.
-  [ValidateSet("server", "client")]
+  [ValidateSet("server", "client", "mcp")]
   [string]$Restart,
   # JDK 25 folder for the server and Maven. Default: JAVA_HOME if it is a JDK 25, otherwise
   # the newest jdk-25* under Program Files. The global JAVA_HOME is never changed.
@@ -219,13 +224,14 @@ if ($Restart -and (Test-Path $instanceFile)) {
   if (-not $PSBoundParameters.ContainsKey("Database")) { $Database = $instance.db }
 }
 
-$ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4 }
+$ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4; mcp = $Port + 6 }
 $prefix = "appsmith-dev-$Name"
 $redisContainer = "$prefix-redis"
 $proxyContainer = "$prefix-proxy"
 $clientDir = Join-Path $repoRoot "app\client"
 $serverDir = Join-Path $repoRoot "app\server"
 $rtsDir = Join-Path $clientDir "packages\rts"
+$mcpDir = Join-Path $clientDir "packages\mcp"
 $node = (Get-Command node).Source
 
 # Remembered so down.ps1 and -Restart find the same instance.
@@ -235,8 +241,8 @@ $node = (Get-Command node).Source
 if ($Restart) { $Only = @($Restart) }
 
 Write-Host "Instance $Name ($branch) from $repoRoot"
-Write-Host ("Ports: browser {0}, server {1}, RTS {2}, webpack {3}, Redis {4}; MongoDB database {5}" -f `
-    $ports.ui, $ports.server, $ports.rts, $ports.client, $ports.redis, $Database)
+Write-Host ("Ports: browser {0}, server {1}, RTS {2}, webpack {3}, Redis {4}, MCP {5}; MongoDB database {6}" -f `
+    $ports.ui, $ports.server, $ports.rts, $ports.client, $ports.redis, $ports.mcp, $Database)
 
 Write-Step "Waiting for Docker"
 $dockerReady = $false
@@ -294,7 +300,7 @@ if ($Only -contains "db") {
 
 # ---- Client dependencies and the RTS bundle (needed by server and client) -----
 
-if ($Only -contains "server" -or $Only -contains "client") {
+if ($Only -contains "server" -or $Only -contains "client" -or $Only -contains "mcp") {
   # A worktree with the main folder's package.json and yarn.lock links its node_modules
   # instead of installing (client-deps.ps1). Links that no longer match are removed first,
   # so yarn never installs through them.
@@ -466,6 +472,8 @@ http {
     proxy_set_header X-Forwarded-Proto `$scheme;
     proxy_set_header Upgrade `$http_upgrade;
     proxy_set_header Connection `$connection_upgrade;
+    # As the image's Caddy does: only the MCP server itself may send the internal marker.
+    proxy_set_header X-Appsmith-Mcp-Internal "";
 
     location / {
       proxy_pass http://host.docker.internal:$($ports.client);
@@ -477,6 +485,8 @@ http {
     location /oauth2 { proxy_pass http://host.docker.internal:$($ports.server); }
     location /login { proxy_pass http://host.docker.internal:$($ports.server); }
     location /rts { proxy_pass http://host.docker.internal:$($ports.rts); }
+    # MCP answers in server-sent events; pass them through as they come.
+    location = /mcp { proxy_pass http://host.docker.internal:$($ports.mcp); proxy_buffering off; }
   }
 }
 "@
@@ -487,6 +497,42 @@ http {
     "--publish", "127.0.0.1:$($ports.ui):80",
     "--volume", "${nginxConfPath}:/etc/nginx/nginx.conf:ro",
     "nginx:alpine") | Out-Null
+}
+
+# ---- mcp: the MCP server (local Node) -----------------------------------------
+
+$mcpStarted = $false
+if ($Only -contains "mcp") {
+  $mcpPid = Join-Path $workDir "mcp.pid"
+  Stop-Detached $mcpPid
+  # The server writes the internal secret into docker.env when an admin enables MCP
+  # (PUT /api/v1/tenants {"mcpConfig":{"enabled":true}}). The MCP server sends it with every
+  # call; without it the server takes an mcp_ token for anonymous.
+  $mcpSecret = $null
+  $envFile = Join-Path $workDir "docker.env"
+  if (Test-Path $envFile) {
+    foreach ($line in Get-Content $envFile) {
+      if ($line -match '^\s*APPSMITH_MCP_INTERNAL_SECRET=(.*)$') { $mcpSecret = $Matches[1].Trim().Trim('"', "'") }
+    }
+  }
+  if (-not $mcpSecret) {
+    Write-Step "MCP server not started: MCP is not enabled on this instance"
+    Write-Host "Enable it as the admin (PUT /api/v1/tenants with {`"mcpConfig`":{`"enabled`":true}}, header X-Requested-By: Appsmith),"
+    Write-Host "then start it: .\scripts\fork-uat\up.ps1 -Restart mcp"
+  } else {
+    if (Test-PortListening $ports.mcp) { throw "Port $($ports.mcp) is in use by something else. Pick another -Port (e.g. -Port $($Port + 100))." }
+    Write-Step "Building and starting the MCP server on 127.0.0.1:$($ports.mcp)"
+    Push-Location $mcpDir
+    try { Invoke-Native $node @("build.js") | Out-Null } finally { Pop-Location }
+    $mcpEnv = @{
+      APPSMITH_MCP_PORT            = $ports.mcp
+      APPSMITH_API_BASE_URL        = "http://127.0.0.1:$($ports.server)"
+      APPSMITH_REDIS_URL           = "redis://127.0.0.1:$($ports.redis)"
+      APPSMITH_MCP_INTERNAL_SECRET = $mcpSecret
+    }
+    Start-Detached $mcpDir $mcpEnv "`"$node`" dist\bundle\server.js" (Join-Path $workDir "mcp.log") | Set-Content $mcpPid
+    $mcpStarted = $true
+  }
 }
 
 # ---- Wait, seed, report ------------------------------------------------------
@@ -505,6 +551,13 @@ if ($Only -contains "client") {
   Write-Host ("Client ready after {0:mm\:ss}." -f ((Get-Date) - $started))
 }
 
+if ($mcpStarted) {
+  Write-Step "Waiting for the MCP server"
+  $mcpAlive = { Get-Process -Id (Get-Content (Join-Path $workDir "mcp.pid")) -ErrorAction SilentlyContinue }
+  Wait-Http "http://127.0.0.1:$($ports.mcp)/health" "The MCP server ($(Join-Path $workDir 'mcp.log'))" 2 $mcpAlive | Out-Null
+  Write-Host "MCP server up: http://localhost:$($ports.ui)/mcp"
+}
+
 if ($Only -contains "server" -and -not $NoSeed) {
   # Creates the first (super) user like the setup form does. The server refuses this
   # once any user exists, so it only ever acts on an empty database.
@@ -521,7 +574,7 @@ if ($Only -contains "server" -and -not $NoSeed) {
 }
 
 Write-Host ""
-if ($Only -contains "server" -or $Only -contains "client") {
+if ($Only -contains "server" -or $Only -contains "client" -or $Only -contains "mcp") {
   Write-Host ("Appsmith ($branch) is running at http://localhost:{0}  (took {1:mm\:ss})" -f $ports.ui, ((Get-Date) - $started)) -ForegroundColor Green
   Write-Host "Logs: $workDir"
   Write-Host "Stop: .\scripts\fork-uat\down.ps1 -Source `"$repoRoot`""
