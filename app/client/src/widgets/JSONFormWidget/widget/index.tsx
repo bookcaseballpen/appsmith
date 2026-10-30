@@ -71,6 +71,7 @@ import {
   ONSUBMIT_NOT_CONFIGURED_MESSAGE,
 } from "../constants/messages";
 import { createMessage } from "ee/constants/messages";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import { endSpan, startRootSpan } from "instrumentation/generateTraces";
 import { klonaRegularWithTelemetry } from "utils/helpers";
 
@@ -725,14 +726,17 @@ class JSONFormWidget extends BaseWidget<
         createMessage(ONSUBMIT_NOT_CONFIGURED_MESSAGE, this.props.widgetName),
         {
           kind: "warning",
-          action: {
-            text: createMessage(ONSUBMIT_NOT_CONFIGURED_ACTION_TEXT),
-            effect: () =>
-              window.open(
-                createMessage(ONSUBMIT_NOT_CONFIGURED_ACTION_URL),
-                "_blank",
-              ),
-          },
+          // Fork: "Learn more" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+          ...(!areAppsmithLinksHidden() && {
+            action: {
+              text: createMessage(ONSUBMIT_NOT_CONFIGURED_ACTION_TEXT),
+              effect: () =>
+                window.open(
+                  createMessage(ONSUBMIT_NOT_CONFIGURED_ACTION_URL),
+                  "_blank",
+                ),
+            },
+          }),
         },
       );
     }

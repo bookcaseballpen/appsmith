@@ -11,6 +11,7 @@ import {
 } from "@appsmith/ads";
 import styled from "styled-components";
 import UrlPreview from "./UrlPreview";
+import { PRODUCT_NAME } from "constants/Brand";
 
 const StyledModalContent = styled(ModalContent)`
   &&& {
@@ -104,7 +105,8 @@ function StaticURLConfirmationModal({
             <StyledWarningIcon name="alert-line" size="md" />
             <Text kind="body-m">
               {isDisabling
-                ? "Disabling Static URL will revert this app to its default Appsmith URLs. These URLs are automatically generated from the app its pages names and identifiers."
+                ? // Fork: the product name (constants/Brand.ts).
+                  `Disabling Static URL will revert this app to its default ${PRODUCT_NAME} URLs. These URLs are automatically generated from the app its pages names and identifiers.`
                 : "Changing the app slug affects every page and deployed version of this app. The change applies right away and may break existing links."}
             </Text>
           </WarningContainer>

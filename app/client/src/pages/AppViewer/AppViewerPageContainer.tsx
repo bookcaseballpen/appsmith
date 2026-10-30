@@ -18,6 +18,7 @@ import { isPermitted, PERMISSION_TYPE } from "ee/utils/permissionHelpers";
 import { builderURL } from "ee/RouteBuilder";
 import { getCanvasWidgetsStructure } from "ee/selectors/entitiesSelector";
 import equal from "fast-deep-equal/es6";
+import { PRODUCT_NAME } from "constants/Brand";
 
 const Section = styled.section`
   height: 100%;
@@ -53,7 +54,8 @@ function AppViewerPageContainer() {
               basePageId: currentBasePageId,
             })}
           >
-            Appsmith Editor
+            {/* Fork: the product name (constants/Brand.ts). */}
+            {PRODUCT_NAME} Editor
           </Link>
         </p>
       );

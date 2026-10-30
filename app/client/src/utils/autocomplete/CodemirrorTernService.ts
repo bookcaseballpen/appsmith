@@ -22,6 +22,7 @@ import {
   getCodeMirrorNamespaceFromEditor,
 } from "../getCodeMirrorNamespace";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 import { findIndex, isString } from "lodash";
 import { renderTernTooltipContent } from "./ternDocTooltip";
 import { checkIfCursorInsideBinding } from "components/editorComponents/CodeEditor/codeEditorUtils";
@@ -472,8 +473,11 @@ class CodeMirrorTernService {
     // TODO: Fix this the next time the file is edited
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.showContextInfo(cm, "documentation", (data: any) => {
-      if (data.url) {
-        window.open(data.url, "_blank");
+      // Fork: never opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+      const url = withoutAppsmithLink(data.url);
+
+      if (url) {
+        window.open(url, "_blank");
       }
     });
   }
@@ -792,12 +796,15 @@ class CodeMirrorTernService {
 
       if (data.doc) tip.appendChild(document.createTextNode(" — " + data.doc));
 
-      if (data.url) {
+      // Fork: no [docs] link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+      const url = withoutAppsmithLink(data.url);
+
+      if (url) {
         tip.appendChild(document.createTextNode(" "));
         const child = tip.appendChild(this.elt("a", null, "[docs]"));
 
         // @ts-expect-error: Types are not available
-        child.href = data.url;
+        child.href = url;
 
         // @ts-expect-error: Types are not available
         child.target = "_blank";

@@ -10,6 +10,7 @@ import type { WidgetType } from "constants/WidgetConstants";
 import { integrationEditorURL } from "ee/RouteBuilder";
 import { getCurrentBasePageId } from "selectors/editorSelectors";
 import { DocsLink, openDoc } from "../../../constants/DocumentationLinks";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 import { DatasourceCreateEntryPoints } from "constants/Datasource";
 import { getCurrentBaseModuleId } from "ee/selectors/modulesSelector";
 
@@ -75,13 +76,16 @@ function ConnectDataCTA(props: ConnectDataCTAProps) {
         <Button onClick={onClick} tabIndex={0}>
           Connect data
         </Button>
-        <Button
-          kind="secondary"
-          onClick={() => openDoc(DocsLink.CONNECT_DATA)}
-          tabIndex={0}
-        >
-          Learn more
-        </Button>
+        {/* Fork: "Learn more" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+        {!areAppsmithLinksHidden() && (
+          <Button
+            kind="secondary"
+            onClick={() => openDoc(DocsLink.CONNECT_DATA)}
+            tabIndex={0}
+          >
+            Learn more
+          </Button>
+        )}
       </div>
     </Container>
   );

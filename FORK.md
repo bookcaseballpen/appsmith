@@ -473,8 +473,8 @@ refuses its endpoints. Where to look:
   `AE-APP-4030`, "{feature} is disabled on this instance."). It runs after Spring Security, so an anonymous caller still
   gets 401 first.
 - **Client:** `ce/utils/forkHiddenFeatures.ts` (`isWorkspaceUiHidden`, `areTemplatesHidden`, `isOnboardingHidden`,
-  always true) and, for Git, `ce/selectors/builtInGitSelectors.ts` (`getIsBuiltInGitEnabled`). Every hidden entry point
-  checks one of them, with a `Fork:` comment.
+  `areAppsmithLinksHidden`, always true) and, for Git, `ce/selectors/builtInGitSelectors.ts` (`getIsBuiltInGitEnabled`).
+  Every hidden entry point checks one of them, with a `Fork:` comment.
 
 ### Workspaces: one hidden workspace
 
@@ -541,6 +541,77 @@ upstream integration tests run with it on (`application-test.properties`); the d
 Two upstream HTTP tests changed with the refused workspace creation: `WorkspaceControllerTest` now expects the 403, and
 `WorkspaceIdentityAuthGuardTest` (GHSA checks of the create request body) is disabled, since the request never reaches
 the controller.
+
+## Branding
+
+Users see the product as **CreativeAppBuilder**, an internal tool for dashboards and reports at Creative. Only what
+users see is renamed: package and class names, env vars (`APPSMITH_*`), headers (`X-Appsmith-*`, `X-APPSMITH-SIGNATURE`),
+Docker images, the MCP tool names, code identifiers (`appsmith.store`, `appsmith.model`, ...), the import/export JSON
+format and the Appsmith licence notices keep the Appsmith name.
+
+### Brand assets (swap the logo by replacing files)
+
+Every brand file is in `app/client/public/brand/`, served at `/brand/...`. To change the logo, replace the files and
+keep their names; nothing else needs to change. The Creative logos come from the Premium Store project
+(`PremiumStoreRevamp/Web/...`); the square mark's PNGs were added there on 2026-10-22.
+
+| File | What | Size | Used by |
+| --- | --- | --- | --- |
+| `creative-logo-colour.svg` | "CREATIVE" wordmark, teal `#00aab5` letters, orange `#f7941e` A and bar. Made from the mono SVG's paths, coloured as the colour PNG (no colour SVG exists). | 276.4 x 50 viewBox | Light backgrounds: login, signup, home header, error pages, `404.html` |
+| `creative-logo-white.svg` | Official white wordmark (`landingpages/revamp-temp/images/logo-creative-white.svg`), copied as is. It has `width`/`height` but no `viewBox`; Chromium-based browsers scale it anyway. | 93.3 x 16.9 | Dark backgrounds (`components/BrandLogo` with `onDark`, or the theme mode `DARK`) |
+| `creative-logo-mono.svg` | Original grey `#4c4c4d` wordmark (`content2/Images/common/logo_creative.svg`), source of the colour SVG's paths | 276.4 x 50 | Not referenced |
+| `creative-logo-colour.png` | Original colour PNG (`content2/contactus/images/creative_logo.png`), the colour reference | 171 x 31 | Not referenced |
+| `favicon-lightmode.png` | Square "A" mark (triangle outline over a bar), dark grey `#3c3c3c` on transparent: **source** of the light-mode icons | 512 x 512 | `fork-brand-icons.js` |
+| `favicon-darkmode.png` | Same mark, light grey `#efefef`: **source** of the dark-mode icons | 512 x 512 | `fork-brand-icons.js` |
+| `icon.svg`, `icon-darkmode.svg` | The mark traced from the PNGs (same framing; a render differs from the PNG by 0.1 % alpha on average) | 512 viewBox | Editor header, top left (dark grey, or light grey in the `DARK` theme mode); web manifest |
+| `favicon.ico`, `favicon-darkmode.ico` | PNG-in-ICO from the two source PNGs | 16, 32, 48 px | Browser tab: `index.html` and `404.html` pick one by `prefers-color-scheme` (`<link rel="icon" media=...>`); `useBrandingTheme` adds a link only for a custom favicon |
+| `icon-192.png`, `icon-512.png` | From `favicon-lightmode.png`, transparent | 192, 512 px | Web manifest |
+| `apple-touch-icon.png` | From `favicon-lightmode.png`, on white | 180 px | `index.html` |
+
+After replacing the source PNGs, regenerate the ICO and PNG sizes with `node app/client/scripts/fork-brand-icons.js`
+(renders with the installed Microsoft Edge through the client's Playwright) and replace the two SVGs, then commit.
+
+The wordmark carries no product name, so `components/BrandLogo.tsx` shows "App Builder" beside it (the colour
+wordmark on light backgrounds, the white one on dark ones; the product UI has no dark mode today, so every current
+use is light). The client constants are in `src/constants/Brand.ts` (`PRODUCT_NAME`, the asset URLs); the server's
+in `constants/Brand.java`. `utils/BrandingUtils.ts` points the default logo and favicon (the organization config's
+`brandLogoUrl` / `brandFaviconUrl`) at these files.
+
+### What says CreativeAppBuilder
+
+- Browser tab titles (`ce/utils/index.ts`, the editor and custom widget builder titles), `index.html` title and
+  description, `manifest.json` (`name` CreativeAppBuilder, `short_name` App Builder, description, icons),
+  `404.html`.
+- Messages: `ee/constants/messages.ts` overrides every CE message that names Appsmith on a reachable screen (error
+  pages, version label, toasts, admin settings, embed settings); `ce/constants/messages.ts` is unchanged. Admin
+  settings texts in `ce/pages/AdminSettings/config/configuration.tsx`, `instanceSettings.ts`.
+- Server: the default instance name (`Appsmith.DEFAULT_INSTANCE_NAME`, used on a fresh install; an existing instance
+  keeps its stored name, editable in Admin settings), the email sender name, subjects, link texts and HTML templates,
+  the SMTP test email, and the `AppsmithError` messages users can see ("contact your administrator" instead of
+  Appsmith support). `approvedErrorMessages.ts` accepts both names. Covered by `constants/BrandTest`.
+- The app viewer shows no "Built on Appsmith" badge (`ee/selectors/organizationSelectors.ts`, `getHideWatermark`), and
+  Admin settings no longer offers the watermark switch.
+
+### No links to Appsmith
+
+`areAppsmithLinksHidden()` (`ce/utils/forkHiddenFeatures.ts`, always true) hides every link a user can see to an
+Appsmith host: docs, community, Discord, Appsmith's GitHub, the blog, support mail. `isAppsmithLink(url)` /
+`withoutAppsmithLink(url)` in the same file tell such URLs apart. Nothing is re-pointed to another site. Where:
+
+- `ce/configs/index.ts`: `disableHelpIcon` is on, so the editor Help button, the home page "?" menu (Documentation,
+  What's new, version), the editor's Help submenu and the mobile sidebar's Discord and Documentation links are gone.
+- Autocomplete: the `[docs]` link in the hint popup and Ctrl-I tooltip, and Ctrl-O (`ternDocTooltip.tsx`,
+  `CodemirrorTernService.ts`), for the ~135 `!url` entries of the widgets and `EntityDefinitions`.
+- `pluginsReducer.ts` drops plugin `documentationLink`s on Appsmith hosts (the query toolbar's "Documentation").
+- `openDoc()` (`constants/DocumentationLinks.ts`) opens nothing for an Appsmith URL; its buttons are hidden: debugger
+  "Open documentation", the property pane's "Learn more" (`ConnectDataCTA`), query settings' docs link, the Appsmith
+  AI deprecation callout.
+- Admin settings: "How to configure?" callouts (email, Google, GitHub), "Learn more" on callouts (`FormGroup/group.tsx`),
+  the Base URL, Google Maps and frame-ancestors help links (`Radio.tsx` link now optional).
+- One-offs: error pages' "Contact us on discord", the omnibar's Discord line, the security confirm modals' "Learn
+  more", widget callout links (Chart's FusionCharts blog post), the forgot-password callout, the SMTP test toast's
+  "Troubleshoot", the JSON form's "Learn more" toast, the static URL "?" button, the JS library installer's links, the
+  Map widget's docs link, the custom widget "Read more" links, builder Documentation button and console text.
 
 ## Build and deploy
 
@@ -711,10 +782,12 @@ Applies when built-in Git is switched on (`APPSMITH_GIT_ENABLED=true`; off by de
 
 ## Still referencing Appsmith hosts (left on purpose)
 
-- **Static links** (opened by the user, nothing loads them at runtime): about 290 `docs.appsmith.com` links in
-  the client and server error messages, `docs.appsmithai.com`, `community.appsmith.com`,
-  `www.appsmith.com/enterprise`, the "Built on Appsmith" badge link (`appsmith.com`), Discord and GitHub release
-  links. To be replaced or removed in a later task.
+- **Static links** (opened by the user, nothing loads them at runtime): the `docs.appsmith.com`, Discord, community
+  and GitHub URLs are still in the code, but no reachable screen shows them since the rebrand (see "Branding", "No
+  links to Appsmith"). Left: links inside hidden features (built-in Git, onboarding, templates, cloud-only signup and
+  IP whitelist texts), `www.appsmith.com/enterprise` upgrade ramps (see "Upgrade links"), the `more info - <docs URL>`
+  comment in the custom widget code templates, the Google Sheets "Learn more" in `AuthMessage.tsx` (proxied OAuth is
+  off; `openDoc` opens nothing anyway), and the server's `SCHEMA_MISMATCH_ERROR` (an upgrade-path error for operators).
 - **Upgrade links:** `index.html` no longer defaults `customerPortalUrl` to `customer.appsmith.com` or `pricingUrl`
   to `www.appsmith.com/pricing`; both are empty unless `APPSMITH_CUSTOMER_PORTAL_URL` / `APPSMITH_PRICING_URL` are
   set. `PRICING_PAGE_URL` and `CUSTOMER_PORTAL_URL_WITH_PARAMS` then return `""` instead of a relative
@@ -1108,3 +1181,39 @@ Server plugins (`app/server/appsmith-plugins/`):
   `src/pages/UserProfile/index.tsx`, `src/pages/common/ImportModal.tsx`,
   `src/pages/common/SearchBar/WorkspaceSearchItems.tsx`, `src/pages/setup/SignupSuccess.tsx` (and `.test.tsx`),
   `src/pages/workspace/AppInviteUsersForm.tsx`, `src/sagas/TemplatesSagas.ts`.
+
+### Branding (CreativeAppBuilder)
+
+- New: `app/client/public/brand/` (brand files, see "Branding"), `app/client/scripts/fork-brand-icons.js`; client
+  `src/constants/Brand.ts`, `src/components/BrandLogo.tsx` (and test), `src/ee/constants/messages.test.ts`; server
+  `constants/Brand.java`, test `constants/BrandTest`.
+- Edited fork files: `src/ee/constants/messages.ts` (overrides), `src/ee/selectors/organizationSelectors.tsx`
+  (`getHideWatermark`), `src/ce/utils/forkHiddenFeatures.ts` (`areAppsmithLinksHidden`, `isAppsmithLink`,
+  `withoutAppsmithLink`), `FORK.md`.
+- Edited upstream client files (`Fork:` comments): `public/index.html`, `404.html`, `404.css`, `manifest.json`;
+  `src/utils/BrandingUtils.ts`, `src/utils/hooks/useBrandingTheme.ts`, `src/ce/utils/index.ts`, `src/ce/configs/index.ts`
+  (and `.test.ts`), `src/ce/constants/approvedErrorMessages.ts`, `src/ce/pages/AdminSettings/config/authentication.tsx`,
+  `configuration.tsx`, `general.tsx`, `instanceSettings.ts`, `src/ce/sagas/SuperUserSagas.tsx`,
+  `src/pages/AdminSettings/config/email.ts`, `FormGroup/group.tsx`, `FormGroup/Radio.tsx`,
+  `src/pages/UserAuth/Container.tsx`, `index.tsx`, `ForgotPassword.tsx`, `src/pages/common/ErrorPageHeader.tsx`,
+  `SearchBar/EntitySearchBar.tsx`, `ErrorPages/GenericError.tsx`, `ErrorPages/ClientError.tsx`,
+  `src/pages/Editor/AppsmithLink.tsx`, `src/pages/AppIDE/AppIDE.tsx`,
+  `src/pages/AppIDE/components/AppSettings/components/GeneralSettings.tsx`, `StaticURLConfirmationModal.tsx`,
+  `src/pages/AppViewer/AppViewerPageContainer.tsx`, `src/pages/Editor/CustomWidgetBuilder/index.tsx`,
+  `Editor/References/help.tsx`, `Preview/Debugger/helpDropdown.tsx`,
+  `src/pages/Editor/DataSourceEditor/RestAPIDatasourceForm.tsx`, `src/pages/Editor/Explorer/Libraries/Installer.tsx`,
+  `src/pages/Editor/PropertyPane/ConnectDataCTA.tsx`, `helpers.tsx`,
+  `src/PluginActionEditor/components/PluginActionSettings/index.tsx`,
+  `src/components/editorComponents/AppsmithAIDeprecationCallout.tsx` (and test), `Debugger/ContextualMenu.tsx`,
+  `GlobalSearch/ResultsNotFound.tsx`, `src/components/formControls/SwitchWithConfirmationControl.tsx`,
+  `src/constants/DocumentationLinks.ts`, `src/reducers/entityReducers/pluginsReducer.ts`,
+  `src/sagas/ActionExecution/errorUtils.ts` (and test, and `src/api/__tests__/apiFailureResponseInterceptors.test.ts`),
+  `src/utils/autocomplete/CodemirrorTernService.ts`, `ternDocTooltip.tsx`, the widgets `ChartWidget`
+  (`propertyConfig.ts`), `CustomWidget`, `JSONFormWidget`, `MapWidget`, `TableWidget`, `TableWidgetV2`,
+  `wds/WDSCustomWidget` (`contentConfig.tsx`), `wds/WDSTableWidget` (`autocompleteConfig.ts`).
+- Edited upstream server files: `configurations/EmailConfig.java`, `constants/Appsmith.java`,
+  `constants/ce/EmailConstantsCE.java`, `exceptions/AppsmithError.java`, `AppsmithErrorCode.java`,
+  `helpers/ce/EmailServiceHelperCEImpl.java`, `layouts/UpdateLayoutServiceCEImpl.java`, `notifications/EmailSender.java`,
+  `solutions/ce/DatasourceStructureSolutionCEImpl.java`, `solutions/ce/EnvManagerCEImpl.java`, the email templates in
+  `resources/email/ce/`, test `helpers/ce/EmailServiceHelperCETest.java`; plugins `restApiPlugin` and `graphqlPlugin`
+  `form.json` (signature header label).

@@ -1,6 +1,7 @@
 package com.appsmith.server.notifications;
 
 import com.appsmith.server.configurations.EmailConfig;
+import com.appsmith.server.constants.Brand;
 import com.appsmith.server.helpers.TemplateUtils;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
@@ -121,7 +122,8 @@ public class EmailSender {
 
     private InternetAddress makeReplyTo() {
         try {
-            return new InternetAddress(this.emailConfig.getReplyTo(), "Appsmith");
+            // Fork: the fork's product name (Brand).
+            return new InternetAddress(this.emailConfig.getReplyTo(), Brand.PRODUCT_NAME);
         } catch (UnsupportedEncodingException e) {
             log.error("Encoding error creating Appsmith reply to address.", e);
             return null;

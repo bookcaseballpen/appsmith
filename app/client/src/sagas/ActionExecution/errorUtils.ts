@@ -17,6 +17,7 @@ import { DEBUGGER_TAB_KEYS } from "components/editorComponents/Debugger/constant
 import store from "store";
 import showToast from "sagas/ToastSagas";
 import { call, put } from "redux-saga/effects";
+import { PRODUCT_NAME } from "constants/Brand";
 
 /*
  * The base trigger error that also logs the errors in the debugger.
@@ -147,8 +148,9 @@ export function extractExecutionErrorMessage(e: unknown): string {
       return "Action execution timed out. Try increasing the timeout in the action settings.";
     }
 
+    // Fork: the product name (constants/Brand.ts).
     if (axiosLike.message === "Network Error") {
-      return "Network error: could not reach the Appsmith server. Check your connection.";
+      return `Network error: could not reach the ${PRODUCT_NAME} server. Check your connection.`;
     }
 
     return `Request failed: ${axiosLike.message || "unknown transport error"}`;

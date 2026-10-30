@@ -1,4 +1,5 @@
 import type { AppsmithUIConfigs } from "./types";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 declare global {
   interface Window {
@@ -162,8 +163,11 @@ export const getAppsmithConfigs = (): AppsmithUIConfigs => {
       ENV_CONFIG.disableIframeWidgetSandbox ||
       APPSMITH_FEATURE_CONFIGS?.disableIframeWidgetSandbox ||
       false,
+    // Fork: the help menus only lead to Appsmith's docs, Discord and release notes (ce/utils/forkHiddenFeatures.ts).
     disableHelpIcon: !!(
-      ENV_CONFIG.disableHelpIcon || APPSMITH_FEATURE_CONFIGS?.disableHelpIcon
+      areAppsmithLinksHidden() ||
+      ENV_CONFIG.disableHelpIcon ||
+      APPSMITH_FEATURE_CONFIGS?.disableHelpIcon
     ),
     defaultHtmlLang:
       ENV_CONFIG.defaultHtmlLang ||

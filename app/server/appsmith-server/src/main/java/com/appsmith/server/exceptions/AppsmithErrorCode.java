@@ -1,5 +1,6 @@
 package com.appsmith.server.exceptions;
 
+import com.appsmith.server.constants.Brand;
 import lombok.Getter;
 
 @Getter
@@ -60,7 +61,8 @@ public enum AppsmithErrorCode {
     RTS_SERVER_ERROR("AE-APP-5021", "Rts server error"),
     SCHEMA_MISMATCH_ERROR("AE-APP-5022", "Schema mismatch error"),
     SCHEMA_VERSION_NOT_FOUND_ERROR("AE-APP-5023", "Schema version not found error"),
-    SERVER_NOT_READY("AE-APP-5024", "Appsmith server is not ready"),
+    // Fork: the fork's product name (Brand).
+    SERVER_NOT_READY("AE-APP-5024", Brand.PRODUCT_NAME + " server is not ready"),
     SESSION_BAD_STATE("AE-APP-5025", "Invalid user session"),
     PLUGIN_EXECUTION_TIMEOUT("AE-APP-5040", "Plugin execution timeout"),
     GOOGLE_RECAPTCHA_TIMEOUT("AE-APP-5042", "Google recaptcha timeout"),
@@ -70,7 +72,7 @@ public enum AppsmithErrorCode {
     NAME_CLASH_NOT_ALLOWED_IN_REFACTOR("AE-AST-4009", "Name clash not allowed in refactor"),
     GENERIC_BAD_REQUEST("AE-BAD-4000", "Generic bad request"),
     MALFORMED_REQUEST("AE-BAD-4001", "Malformed request body"),
-    VERSION_MISMATCH("AE-BAD-4002", "Appsmith version mismatch"),
+    VERSION_MISMATCH("AE-BAD-4002", Brand.PRODUCT_NAME + " version mismatch"),
     GOOGLE_RECAPTCHA_FAILED("AE-CAP-4035", "Google recaptcha failed"),
     GOOGLE_RECAPTCHA_INVITE_FLOW_FAILED("AE-CAP-4100", "Google recaptcha failed"),
     INVALID_CRUD_PAGE_REQUEST("AE-CRD-4039", "Invalid crud page request"),

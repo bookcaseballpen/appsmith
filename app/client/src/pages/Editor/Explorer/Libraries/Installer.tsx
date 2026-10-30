@@ -36,6 +36,7 @@ import classNames from "classnames";
 import type { JSLibrary } from "workers/common/JSLibrary";
 import AnalyticsUtil from "ee/utils/AnalyticsUtil";
 import { EntityClassNames } from "pages/Editor/Explorer/Entity";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 
 const Wrapper = styled.div`
   display: flex;
@@ -243,6 +244,7 @@ function ProgressTracker({
         {status === InstallState.Failed && (
           <Callout
             kind="error"
+            // Fork: no links to Appsmith's GitHub or docs (ce/utils/forkHiddenFeatures.ts).
             links={[
               {
                 children: createMessage(customJSLibraryMessages.REPORT_ISSUE),
@@ -254,7 +256,7 @@ function ProgressTracker({
                 to: EXT_LINK.learnMore,
                 target: "_blank",
               },
-            ]}
+            ].filter((link) => withoutAppsmithLink(link.to))}
           >
             <Banner />
           </Callout>
@@ -399,12 +401,18 @@ export function Installer() {
             <Link kind="primary" target="_blank" to={EXT_LINK.jsDelivr}>
               jsDelivr
             </Link>
-            {". "}
-            {createMessage(customJSLibraryMessages.LEARN_MORE_DESC)}{" "}
-            <Link kind="primary" target="_blank" to={EXT_LINK.learnMore}>
-              here
-            </Link>
             {"."}
+            {/* Fork: no link to Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+            {withoutAppsmithLink(EXT_LINK.learnMore) && (
+              <>
+                {" "}
+                {createMessage(customJSLibraryMessages.LEARN_MORE_DESC)}{" "}
+                <Link kind="primary" target="_blank" to={EXT_LINK.learnMore}>
+                  here
+                </Link>
+                {"."}
+              </>
+            )}
           </span>
         </div>
         <Divider className="divider" />

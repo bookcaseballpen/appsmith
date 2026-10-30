@@ -12,6 +12,7 @@ import styles from "./styles.module.css";
 import type { DebuggerLog } from "../../types";
 import { CUSTOM_WIDGET_FEATURE, createMessage } from "ee/constants/messages";
 import { CUSTOM_WIDGET_DOC_URL } from "../../constants";
+import { areAppsmithLinksHidden } from "ee/utils/forkHiddenFeatures";
 
 export default function HelpDropdown(props: DebuggerLog) {
   const { args } = props;
@@ -19,13 +20,18 @@ export default function HelpDropdown(props: DebuggerLog) {
   const errorMessage = args?.[0]?.message;
 
   const items = [
-    {
-      startIcon: <Icon name="book" size="md" />,
-      title: "Documentation",
-      onClick: () => {
-        window.open(CUSTOM_WIDGET_DOC_URL, "_blank");
-      },
-    },
+    // Fork: "Documentation" opens Appsmith's docs (ce/utils/forkHiddenFeatures.ts).
+    ...(areAppsmithLinksHidden()
+      ? []
+      : [
+          {
+            startIcon: <Icon name="book" size="md" />,
+            title: "Documentation",
+            onClick: () => {
+              window.open(CUSTOM_WIDGET_DOC_URL, "_blank");
+            },
+          },
+        ]),
     // {
     //   startIcon: <Icon name="wand" size="md" />,
     //   title: "Troubleshoot with AI",

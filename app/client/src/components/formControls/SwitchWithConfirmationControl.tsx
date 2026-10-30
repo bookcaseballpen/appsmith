@@ -21,6 +21,7 @@ import {
   type SecurityModalType,
 } from "constants/SecurityModalConstants";
 import { createMessage } from "ee/constants/messages";
+import { withoutAppsmithLink } from "ee/utils/forkHiddenFeatures";
 
 type SwitchFieldProps = WrappedFieldProps & {
   label: string;
@@ -138,7 +139,9 @@ export class SwitchWithConfirmationField extends React.Component<
               <ModalBody>
                 <Text kind="body-m">
                   {createMessage(modalContent.description)}
-                  {modalContent.learnMore ? (
+                  {/* Fork: no "Learn more" to Appsmith's docs (ce/utils/forkHiddenFeatures.ts). */}
+                  {modalContent.learnMore &&
+                  withoutAppsmithLink(modalContent.learnMore.url) ? (
                     <>
                       {" "}
                       <Link target="_blank" to={modalContent.learnMore.url}>
