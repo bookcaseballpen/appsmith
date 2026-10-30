@@ -2,7 +2,9 @@ package com.appsmith.server.repositories;
 
 import com.appsmith.server.acl.AclPermission;
 import com.appsmith.server.domains.Application;
+import com.appsmith.server.helpers.ce.bridge.Bridge;
 import com.appsmith.server.repositories.ce.CustomApplicationRepositoryCEImpl;
+import com.appsmith.server.roles.DefaultWorkspaceIds;
 import com.appsmith.server.roles.DefaultWorkspaceService;
 import com.appsmith.server.roles.InstanceRole;
 import com.appsmith.server.solutions.ApplicationPermission;
@@ -14,7 +16,6 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -36,10 +37,10 @@ public class CustomApplicationRepositoryImpl extends CustomApplicationRepository
     }
 
     /**
-     * Users (the USER role group of the default workspace) only see apps that an approver or administrator has
-     * published at least once ({@code lastDeployedAt} is set). Every read of an application with READ_APPLICATIONS
-     * goes through here, so a never-published app is hidden from the app list and from every API that loads it.
-     * Read access through any other group (a builder role, a public app) is unchanged.
+     * Users (members of the USER role group of the default workspace) only see the default workspace's apps that an
+     * approver or administrator has published at least once ({@code lastDeployedAt} is set), whatever app grant they
+     * hold. Every read of an application with READ_APPLICATIONS goes through here, so a never-published app is hidden
+     * from the app list and from every API that loads it. Other roles, and apps in any other workspace, are unchanged.
      */
     @Override
     protected Query createQueryWithPermission(
@@ -47,30 +48,18 @@ public class CustomApplicationRepositoryImpl extends CustomApplicationRepository
             List<String> projectionFieldNames,
             Set<String> permissionGroups,
             AclPermission aclPermission) {
-        String viewerGroupId = defaultWorkspaceService
-                .getResolvedIds()
-                .map(ids -> ids.groupId(InstanceRole.USER))
-                .orElse(null);
+        DefaultWorkspaceIds ids = defaultWorkspaceService.getResolvedIds().orElse(null);
         if (aclPermission != AclPermission.READ_APPLICATIONS
-                || viewerGroupId == null
+                || ids == null
                 || permissionGroups == null
-                || !permissionGroups.contains(viewerGroupId)) {
+                || !permissionGroups.contains(ids.groupId(InstanceRole.USER))) {
             return super.createQueryWithPermission(criterias, projectionFieldNames, permissionGroups, aclPermission);
         }
 
-        Criteria readAsViewer = new Criteria()
-                .andOperator(
-                        userAcl(Set.of(viewerGroupId), aclPermission),
-                        Criteria.where(Application.Fields.lastDeployedAt).ne(null));
-        Set<String> otherGroups = new HashSet<>(permissionGroups);
-        otherGroups.remove(viewerGroupId);
-        Criteria read = otherGroups.isEmpty()
-                ? readAsViewer
-                : new Criteria().orOperator(userAcl(otherGroups, aclPermission), readAsViewer);
-
-        List<Criteria> withRead = new ArrayList<>(criterias);
-        withRead.add(read);
-        // The permission check is in withRead already.
-        return super.createQueryWithPermission(withRead, projectionFieldNames, permissionGroups, null);
+        List<Criteria> liveOnly = new ArrayList<>(criterias);
+        liveOnly.add(Bridge.<Application>or(
+                Bridge.isNotNull(Application.Fields.lastDeployedAt),
+                Bridge.<Application>query().notEqual(Application.Fields.workspaceId, ids.workspaceId())));
+        return super.createQueryWithPermission(liveOnly, projectionFieldNames, permissionGroups, aclPermission);
     }
 }
