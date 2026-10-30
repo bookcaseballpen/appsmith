@@ -61,6 +61,12 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
   Mongock's `Migration10000`): the listed users become exactly the instance and organization admins, missing users are
   created disabled, and an empty value removes every admin, as upstream did.
 - Release approvals are the `application_approval` table (`V4__application_approval.sql`).
+- App tags are a `jsonb` array column with a GIN index, and one live team per name (ignoring case) is a partial unique
+  index (`V7__app_tags_and_team_names.sql`; Mongo had Mongock `Migration077`'s tags index and only `TeamService`'s
+  check-write-recheck). A whole JSON column checked against a scalar (`equal`/`in`, as the catalog's tag filters and
+  `assignedToUserIds` do) renders as `@>`, which the GIN indexes serve; `searchIgnoreCase` on JSON matches any string
+  element. `TeamService` turns the index's refusal into its duplicate-name error. The grant code writes `policyMap`
+  only (`policies` is not a column).
 - Not ported: the EE-downgrade guard (it read Mongock's audit log). The plugins' own Mongo use is untouched (they talk
   to user databases, not the internal one).
 - `scripts/fork-uat/up.ps1 -DbType postgres` (the default in a worktree that has `db/migration/postgres`) runs the instance
@@ -116,10 +122,13 @@ Fixed in the tests after the first run (none came from the port):
 - `ActionExecutionSolutionCETest` accepts a `requestedAt` equal to `Instant.now()`: on Windows the two can be the same.
 
 Failed, not from the port: `AutoCommitServiceTest` and `AutoCommitSolutionImplTest` (1 test each, the client DSL
-migration) fail on Windows (from reading the code; not run on Linux here). Upstream's
+migration) fail on Windows only. Upstream's
 `FileUtilsCEImpl.getExistingFilesInRepo` / `isWhiteListedPath` and `getGitResourceIdentity` split the repository's
 relative paths on `/`, but on Windows they come as `pages\Page1\...`, so no page file is read back and nothing is
-committed. On Linux (CI, the Docker image) the paths use `/`.
+committed. On Linux (CI, the Docker image) the paths use `/`: run on Linux in `maven:3.9-eclipse-temurin-25` (the
+worktree copied into the container, a throwaway PostgreSQL 16 through `APPSMITH_TEST_DB_URL` instead of
+Testcontainers, a throwaway Redis), both pass (`AutoCommitServiceTest` 7, `AutoCommitSolutionImplTest` 10 with its 2
+`@Disabled` skipped).
 The organization is cached in Redis, so flush the test Redis between runs.
 
 Adapted from the suite: tests that read the encrypted password from the saved object
