@@ -50,7 +50,8 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
   whole. It commits when the publisher completes, rolls back on error or cancel; a nested `transactional` joins the
   outer one.
 - Unique violations (SQLSTATE 23505) become Spring's `DuplicateKeyException` with the constraint name in the message,
-  and a failed insert gives back the id `save` generated, as on MongoDB. Services find name clashes by Mongo index
+  and a failed insert resets the id `save` generated to null, as on MongoDB, so a retry (with a suffixed name, say)
+  inserts again instead of looking the object up. Services find name clashes by Mongo index
   name, so `V3__unique_name_indexes.sql` creates `workspace_app_deleted_gitApplicationMetadata` and
   `workspace_datasource_deleted_compound_index` under those names (`NULLS NOT DISTINCT`, PostgreSQL 15+). This keeps
   "App (1)" naming on fork and import. The "An object with the name … already exists" message takes the name from
@@ -72,7 +73,7 @@ Design (blueprint: upstream's abandoned `pg` branch, Apache 2.0; its entity anno
 - `scripts/fork-uat/up.ps1 -DbType postgres` (the default in a worktree that has `db/migration/postgres`) runs the instance
   on its own PostgreSQL 16 container, `appsmith-dev-<Name>-postgres` on `127.0.0.1:<Port+5>`.
 
-Status (milestone 2): on a `-DbType postgres` fork-uat database the server applies V1–V4 and passes an end-to-end check
+Status (milestone 1): on a `-DbType postgres` fork-uat database the server applies V1–V7 and passes an end-to-end check
 over HTTP: first-admin signup, app creation, export, import as a new app, direct publish refused, submit and approve
 publishes, an admin import onto the live app turns the approval back to draft, a Dev cannot import over the live app,
 publish or approve but can submit, the admin rejects, and the published version stays as approved. The full
@@ -105,6 +106,9 @@ package, after merging `release` (#289, #290, #294, then #291, #292, #295). Clas
 
 Each batch is from one run after the merge of #291, #292 and #295. The MCP package (`packages/mcp`, jest 1597 passed,
 5 skipped, `tsc` clean) and `tools/cab-sync` (33 passed) don't touch the database and pass unchanged.
+History note: the WIP commit `ee105d20d3` ("V5 adds Mongo's remaining unique indexes") says batch 4 still fails
+(`CreateDBTablePageSolutionTests`, `ActionExecutionSolutionCETest`) and batches 5 and 6 were not run. That was the
+state at that commit only; later commits fixed those failures and ran every batch, as the table shows.
 
 Fixed in the tests after the first run (none came from the port):
 - `UserWorkspaceServiceUnitTest` leaves out the fork's default "Apps" workspace, which `api_user` also sees.

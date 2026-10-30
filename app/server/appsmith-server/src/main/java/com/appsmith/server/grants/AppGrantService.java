@@ -300,6 +300,7 @@ public class AppGrantService {
      * {@code getPolicies()} derives it from {@code policyMap}).
      */
     public static BridgeUpdate policiesUpdate(Map<String, Policy> policyMap) {
+        // Only policyMap: policies is @Transient on PostgreSQL, so setting it fails as an unknown field.
         return Bridge.update().set(BaseDomain.Fields.policyMap, policyMap);
     }
 
