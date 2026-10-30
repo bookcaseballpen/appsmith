@@ -77,7 +77,7 @@ per worktree.
 | `-Port` | `8080` | Browser port; the instance also uses the next four, and +6 for MCP. |
 | `-Name` | worktree folder name | Instance name (containers, volumes, `.work\<Name>`). |
 | `-Database` | `appsmith_<Name>` | MongoDB or PostgreSQL database. |
-| `-DbType` | `postgres` if the worktree has `db/migration/postgres` in appsmith-server, else `mongo` | Internal database. `postgres` runs a PostgreSQL 16 container for this instance (`appsmith-dev-<Name>-postgres`, `127.0.0.1:<Port+5>`, volume of the same name, dev-only user `appsmith` / password `appsmith-dev`); the server creates its schema on first start. MongoDB is then not used. Kept for `-Restart`; `down.ps1` handles both. |
+| `-DbType` | `postgres` if the worktree has `db/migration/postgres` in appsmith-server, else `mongo` | Internal database. `postgres` runs a PostgreSQL 16 container for this instance (`appsmith-dev-<Name>-postgres`, `127.0.0.1:<Port+5>`, volume of the same name, dev-only user `appsmith` / password `appsmith-dev`); the server creates its schema on first start. MongoDB is then not used. Kept for `-Restart`; `down.ps1` handles both. In a worktree with the PostgreSQL port, `mongo` is refused, and an instance that last ran on MongoDB moves to a new, empty PostgreSQL database on its next start or `-Restart server` (Redis emptied once, MongoDB data left as it is, nothing copied; see FORK.md). |
 | `-Only` | `db, server, client, mcp` | Run only some steps, e.g. `-Only db`. |
 | `-Restart` | | `server`, `client` or `mcp`: rebuild and restart that part only. Keeps the port and database the instance was started with. |
 | `-Full` | off | With the server: rebuild every module and the plugins. |

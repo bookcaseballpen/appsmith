@@ -231,17 +231,35 @@ $branch = (& git -C $repoRoot rev-parse --abbrev-ref HEAD)
 $workDir = Join-Path $PSScriptRoot ".work\$Name"
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 $instanceFile = Join-Path $workDir "instance.json"
-# -Restart keeps the port and database the instance was started with.
-if ($Restart -and (Test-Path $instanceFile)) {
+# The database the instance last ran on. Instances started before the PostgreSQL option have no dbKind; they use MongoDB.
+$previousDbKind = $null
+$instance = $null
+if (Test-Path $instanceFile) {
   $instance = Get-Content -Raw $instanceFile | ConvertFrom-Json
+  $previousDbKind = if ($instance.PSObject.Properties["dbKind"]) { $instance.dbKind } else { "mongo" }
+}
+# -Restart keeps the port and database the instance was started with.
+if ($Restart -and $instance) {
   if (-not $PSBoundParameters.ContainsKey("Port")) { $Port = [int]$instance.port }
   if (-not $PSBoundParameters.ContainsKey("Database")) { $Database = $instance.db }
-  if (-not $PSBoundParameters.ContainsKey("DbType") -and $instance.PSObject.Properties["dbKind"]) { $DbType = $instance.dbKind }
+  if (-not $PSBoundParameters.ContainsKey("DbType")) { $DbType = $previousDbKind }
+}
+# A worktree with the PostgreSQL port (Flyway migrations in appsmith-server) has a server that refuses MongoDB.
+$flywayDir = Join-Path $repoRoot "app\server\appsmith-server\src\main\resources\db\migration\postgres"
+$postgresOnly = Test-Path $flywayDir
+if ($postgresOnly -and $DbType -eq "mongo") {
+  if ($PSBoundParameters.ContainsKey("DbType")) {
+    throw "-DbType mongo: this worktree's server runs only on PostgreSQL (it has db\migration\postgres). Leave -DbType out or use -DbType postgres."
+  }
+  Write-Warning ("Instance $Name ran on MongoDB; this worktree's server runs only on PostgreSQL. It moves to a new, empty " +
+    "PostgreSQL database (no data is copied). The MongoDB database $Database in $MongoContainer is left as it is.")
+  $DbType = "postgres"
 }
 if (-not $DbType) {
-  $flywayDir = Join-Path $repoRoot "app\server\appsmith-server\src\main\resources\db\migration\postgres"
-  $DbType = if (Test-Path $flywayDir) { "postgres" } else { "mongo" }
+  $DbType = if ($postgresOnly) { "postgres" } else { "mongo" }
 }
+# Moving from MongoDB: Redis still holds the old database's sessions and cached organization, so it is emptied once.
+$movedFromMongo = $previousDbKind -eq "mongo" -and $DbType -eq "postgres"
 
 $ports = @{ ui = $Port; server = $Port + 1; rts = $Port + 2; client = $Port + 3; redis = $Port + 4; postgres = $Port + 5; mcp = $Port + 6 }
 $prefix = "appsmith-dev-$Name"
@@ -254,11 +272,16 @@ $rtsDir = Join-Path $clientDir "packages\rts"
 $mcpDir = Join-Path $clientDir "packages\mcp"
 $node = (Get-Command node).Source
 
-# Remembered so down.ps1 and -Restart find the same instance.
-@{ source = $repoRoot; port = $Port; db = $Database; dbKind = $DbType; name = $Name } | ConvertTo-Json |
-  Set-Content -Encoding UTF8 $instanceFile
+if ($Restart) {
+  # A server restart that moves the instance to PostgreSQL also needs the database step.
+  $Only = if ($movedFromMongo -and $Restart -eq "server") { @("db", $Restart) } else { @($Restart) }
+}
 
-if ($Restart) { $Only = @($Restart) }
+# Remembered so down.ps1 and -Restart find the same instance. A move from MongoDB counts once the database step
+# has run (it empties Redis), so a run without it keeps the old kind and the next one still does the move.
+$savedDbKind = if ($movedFromMongo -and $Only -notcontains "db") { $previousDbKind } else { $DbType }
+@{ source = $repoRoot; port = $Port; db = $Database; dbKind = $savedDbKind; name = $Name } | ConvertTo-Json |
+  Set-Content -Encoding UTF8 $instanceFile
 
 Write-Host "Instance $Name ($branch) from $repoRoot"
 if ($DbType -eq "postgres") {
@@ -347,6 +370,10 @@ if ($Only -contains "db") {
     Start-Sleep -Seconds 1
   }
   if ($pong -ne "PONG") { throw "Redis is not answering. See: docker logs $redisContainer" }
+  if ($movedFromMongo) {
+    Invoke-Native docker @("exec", $redisContainer, "redis-cli", "FLUSHALL") | Out-Null
+    Write-Host "Emptied Redis: its sessions and cache belonged to the MongoDB database."
+  }
   Write-Host "Redis is up on 127.0.0.1:$($ports.redis)."
 }
 
